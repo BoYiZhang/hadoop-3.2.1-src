@@ -278,6 +278,7 @@ public class BlockTokenSecretManager extends
     return true;
   }
 
+  // 生成Token最终调用方法
   /** Generate an block token for current user */
   public Token<BlockTokenIdentifier> generateToken(ExtendedBlock block,
       EnumSet<BlockTokenIdentifier.AccessMode> modes,
@@ -291,6 +292,8 @@ public class BlockTokenSecretManager extends
   public Token<BlockTokenIdentifier> generateToken(String userId,
       ExtendedBlock block, EnumSet<BlockTokenIdentifier.AccessMode> modes,
       StorageType[] storageTypes, String[] storageIds) {
+
+    // 将块相关信息、用户信息、访问模式信息设置入BlockToken对象中，并返回
     BlockTokenIdentifier id = new BlockTokenIdentifier(userId, block
         .getBlockPoolId(), block.getBlockId(), modes, storageTypes,
         storageIds, useProto);
@@ -304,6 +307,8 @@ public class BlockTokenSecretManager extends
   }
 
   /**
+   * BlockToken的认证
+   *
    * Check if access should be allowed. userID is not checked if null. This
    * method doesn't check if token password is correct. It should be used only
    * when token password has already been verified (e.g., in the RPC layer).
@@ -347,22 +352,30 @@ public class BlockTokenSecretManager extends
       LOG.debug("Checking access for user=" + userId + ", block=" + block
           + ", access mode=" + mode + " using " + id);
     }
+
+    // 用户Id验证
     if (userId != null && !userId.equals(id.getUserId())) {
       throw new InvalidToken("Block token with " + id
           + " doesn't belong to user " + userId);
     }
+
+    // BlockPoolId验证
     if (!id.getBlockPoolId().equals(block.getBlockPoolId())) {
       throw new InvalidToken("Block token with " + id
           + " doesn't apply to block " + block);
     }
+    // 块Id验证
     if (id.getBlockId() != block.getBlockId()) {
       throw new InvalidToken("Block token with " + id
           + " doesn't apply to block " + block);
     }
+    // 过期验证
     if (isExpired(id.getExpiryDate())) {
       throw new InvalidToken("Block token with " + id
           + " is expired.");
     }
+
+    // 访问模式验证
     if (!id.getAccessModes().contains(mode)) {
       throw new InvalidToken("Block token with " + id
           + " doesn't have " + mode + " permission");
@@ -404,6 +417,8 @@ public class BlockTokenSecretManager extends
       StorageType[] storageTypes, String[] storageIds) throws InvalidToken {
     BlockTokenIdentifier id = new BlockTokenIdentifier();
     try {
+
+      // 反序列化Token
       id.readFields(new DataInputStream(new ByteArrayInputStream(token
           .getIdentifier())));
     } catch (IOException e) {
@@ -411,7 +426,10 @@ public class BlockTokenSecretManager extends
           "Unable to de-serialize block token identifier for user=" + userId
               + ", block=" + block + ", access mode=" + mode);
     }
+    // 进行相关信息的验证
     checkAccess(id, userId, block, mode, storageTypes, storageIds);
+
+    // 进行密码的验证
     if (!Arrays.equals(retrievePassword(id), token.getPassword())) {
       throw new InvalidToken("Block token with " + id
           + " doesn't have the correct token password");

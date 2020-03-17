@@ -31,25 +31,38 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ *
  * A block storage policy describes how to select the storage types
  * for the replicas of a block.
  */
+// 块存储类型选择策略对象
 @InterfaceAudience.Private
 public class BlockStoragePolicy implements BlockStoragePolicySpi {
   public static final Logger LOG = LoggerFactory.getLogger(BlockStoragePolicy
       .class);
 
+
   /** A 4-bit policy ID */
+  // 策略唯一标识Id
   private final byte id;
   /** Policy name */
+  // 策略名称
   private final String name;
 
+  // 对于一个新块，存储副本块的可选存储类型信息组
   /** The storage types to store the replicas of a new block. */
   private final StorageType[] storageTypes;
+
+  // 对于第一个创建块，fallback情况时的可选存储类型
+  // fallback 即当前 存储类型不可用的时候，退一级选择使用的存储类型。
   /** The fallback storage type for block creation. */
   private final StorageType[] creationFallbacks;
+
+  // 对于块的其余副本，fallback情况时的可选存储类型
   /** The fallback storage type for replication. */
   private final StorageType[] replicationFallbacks;
+
+  // 当创建文件的时候，是否继承祖先目录信息的策略，主要用于主动设置策略的时候
   /**
    * Whether the policy is inherited during file creation.
    * If set then the policy cannot be changed after file creation.
@@ -76,11 +89,17 @@ public class BlockStoragePolicy implements BlockStoragePolicySpi {
   }
 
   /**
+   * 选取存储类型
+   * ONE_SSD就必然只有第一个块的副本块是此类型 的，其余副本则是DISK类型存储，
+   * 而ALL_SSD则将会全部是SSD的 存储。
    * @return a list of {@link StorageType}s for storing the replicas of a block.
    */
   public List<StorageType> chooseStorageTypes(final short replication) {
     final List<StorageType> types = new LinkedList<>();
     int i = 0, j = 0;
+
+    // 从前往后依次匹配存储类型与对应的副本下标相匹配，同时要过滤掉
+    // transient属性的存储类型
 
     // Do not return transient storage types. We will not have accurate
     // usage information for transient types.
@@ -90,7 +109,7 @@ public class BlockStoragePolicy implements BlockStoragePolicySpi {
         ++i;
       }
     }
-
+    // 获取最后一个存储类型，统一作为多余副本的存储类型
     final StorageType last = storageTypes[storageTypes.length - 1];
     if (!last.isTransient()) {
       for (; i < replication; i++) {
@@ -143,11 +162,18 @@ public class BlockStoragePolicy implements BlockStoragePolicySpi {
     final List<StorageType> removed = new LinkedList<>();
     for(int i = storageTypes.size() - 1; i >= 0; i--) {
       // replace/remove unavailable storage types.
+      // 获取当前需要的存储类型
       final StorageType t = storageTypes.get(i);
+
+      // 如果当前的存储类型是在不可用的存储类型列表中，选择fallback的情况
       if (unavailables.contains(t)) {
+
+        // 根据是否为新块还是普通的副本块，选择相应的fallback的StorageType
         final StorageType fallback = isNewBlock?
             getCreationFallback(unavailables)
             : getReplicationFallback(unavailables);
+
+
         if (fallback == null) {
           removed.add(storageTypes.remove(i));
         } else {
@@ -258,9 +284,12 @@ public class BlockStoragePolicy implements BlockStoragePolicySpi {
     return this.replicationFallbacks;
   }
 
+
+  // 在getFallback方法中会选取第一个满足条件的fallback的
   private static StorageType getFallback(EnumSet<StorageType> unavailables,
       StorageType[] fallbacks) {
     for(StorageType fb : fallbacks) {
+      // 如果找到满足条件的StorageType，立即返回
       if (!unavailables.contains(fb)) {
         return fb;
       }

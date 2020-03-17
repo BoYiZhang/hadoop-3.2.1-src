@@ -36,7 +36,10 @@ import org.apache.hadoop.fs.StorageType;
  */
 public class BlockPoolTokenSecretManager extends
     SecretManager<BlockTokenIdentifier> {
-  
+
+
+  // BlockPoolTokenSecretManager包含BlockTokenSecretManager，
+  // 并且每 一个BlockPool对应一个BlockTokenSecretManager。
   private final Map<String, BlockTokenSecretManager> map = 
     new HashMap<String, BlockTokenSecretManager>();
 
@@ -128,12 +131,14 @@ public class BlockPoolTokenSecretManager extends
   }
 
   /**
+   *  Token生成方法
    * See {@link BlockTokenSecretManager#generateToken(ExtendedBlock, EnumSet,
    *  StorageType[], String[])}.
    */
   public Token<BlockTokenIdentifier> generateToken(ExtendedBlock b,
       EnumSet<AccessMode> of, StorageType[] storageTypes, String[] storageIds)
       throws IOException {
+    // 选择块所属的BlockPool去生成Token
     return get(b.getBlockPoolId()).generateToken(b, of, storageTypes,
         storageIds);
   }

@@ -29,15 +29,36 @@ import org.apache.hadoop.util.StringUtils;
 /**
  * Defines the types of supported storage media. The default storage
  * medium is assumed to be DISK.
+ *
+ *
+ * HDFS并没有自动检测识别的 功能。  默认是DISK类型
+ * 配置属性dfs.datanode.data.dir可以对本地对应存储目录进行设置，
+ * 同时带上一个存储类型标签，声明此目录用的是哪种类型的存储 介质，例子如下:
+ *
+ *   [SSD]file:///grid/dn/ssd0
+ *
+ *
  */
 @InterfaceAudience.Public
 @InterfaceStability.Unstable
 public enum StorageType {
   // sorted by the speed of the storage types, from fast to slow
+  // 根据存储的速度，从快到慢
+
+  //内存
   RAM_DISK(true),
+
+  //SSD 存储
   SSD(false),
+
+  // 磁盘存储
   DISK(false),
+
+
+  //并没有特指哪种存储介质,主要指的是高密度存储介质， 用于解决数据扩容的问题。
   ARCHIVE(false),
+
+  // 数据来自于外部存储   通过HDFS能够定位到数据的外部存储。
   PROVIDED(false);
 
   private final boolean isTransient;

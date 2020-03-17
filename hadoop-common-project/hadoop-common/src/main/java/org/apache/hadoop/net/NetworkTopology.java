@@ -471,6 +471,8 @@ public class NetworkTopology {
   }
 
   /**
+   *
+   * 从scope所示范围中随机选取一个节点，如果scope以字符“~”打头，则从非scope范围 * 节点中选取节点
    * Randomly choose one node from <i>scope</i>.
    *
    * If scope starts with ~, choose one from the all nodes except for the
@@ -481,6 +483,7 @@ public class NetworkTopology {
    * @param excludedNodes nodes to be excluded from
    * @return the chosen node
    */
+
   public Node chooseRandom(final String scope,
       final Collection<Node> excludedNodes) {
     netlock.readLock().lock();

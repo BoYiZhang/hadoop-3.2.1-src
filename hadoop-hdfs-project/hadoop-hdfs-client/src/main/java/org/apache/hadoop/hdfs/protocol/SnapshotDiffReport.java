@@ -42,6 +42,7 @@ public class SnapshotDiffReport {
    * DELETE, and RENAME respectively.
    */
   public enum DiffType {
+
     CREATE("+"),
     MODIFY("M"),
     DELETE("-"),

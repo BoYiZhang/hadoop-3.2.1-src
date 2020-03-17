@@ -31,12 +31,16 @@ import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalcul
 import org.apache.hadoop.hdfs.web.URLConnectionFactory;
 import org.apache.hadoop.http.HttpConfig;
 
+import java.util.Vector;
+
 /** 
  * This class contains constants for configuration keys and default values
  * used in hdfs.
  */
 @InterfaceAudience.Private
+
 public class DFSConfigKeys extends CommonConfigurationKeys {
+
   public static final String  DFS_BLOCK_SIZE_KEY =
       HdfsClientConfigKeys.DFS_BLOCK_SIZE_KEY;
   public static final long    DFS_BLOCK_SIZE_DEFAULT =
