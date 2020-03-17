@@ -4,7 +4,7 @@
 package org.apache.hadoop.yarn.proto;
 
 public final class LocalizationProtocol {
-    public LocalizationProtocol() {}
+    private LocalizationProtocol() {}
     public static void registerAllExtensions(
             com.google.protobuf.ExtensionRegistry registry) {
     }
