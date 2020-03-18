@@ -128,6 +128,20 @@ public interface ClientProtocol {
    * @throws org.apache.hadoop.fs.UnresolvedLinkException If <code>src</code>
    *           contains a symlink
    * @throws IOException If an I/O error occurred
+   *
+   *
+   *
+   * 客户端会调用ClientProtocol.getBlockLocations()方法
+   * 获取HDFS文件指定范围内所有数据块的位置信息。
+   *
+   * 这个方法的参数是HDFS文件的文件名以及读取范围，返回值是文件指 定范围内所有数据块的文件名以及它们的位置信息，
+   * 使用LocatedBlocks对象封装。
+   *
+   * 每个数 据块的位置信息指的是存储这个数据块副本的所有Datanode的信息，
+   * 这些Datanode会以与 当前客户端的距离远近排序。
+   *
+   * 客户端读取数据时，会首先调用getBlockLocations()方法获 取HDFS文件的所有数据块的位置信息，
+   * 然后客户端会根据这些位置信息从数据节点读取 数据块.
    */
   @Idempotent
   @ReadOnly(atimeAffected = true, isCoordinated = true)
@@ -204,6 +218,15 @@ public interface ClientProtocol {
    *           invalid
    * <p>
    * <em>Note that create with {@link CreateFlag#OVERWRITE} is idempotent.</em>
+   *
+   *create()方法用于在HDFS的文件系统目录树中创建一个新的空文件，创建的路径由src 参数指定。
+   * 这个空文件创建后对于其他的客户端是“可读”的，但是这些客户端不能删除、
+   * 重命名或者移动这个文件，直到这个文件被关闭或者租约过期。
+   *
+   * 客户端写一个新的文件 时，会首先调用create()方法在文件系统目录树中创建一个空文件，
+   * 然后调用addBlock()方 法获取存储文件数据的数据块的位置信息，
+   * 最后客户端就可以根据位置信息建立数据流管 道，向数据节点写入数据了.
+   *
    */
   @AtMostOnce
   HdfsFileStatus create(String src, FsPermission masked,
@@ -241,6 +264,16 @@ public interface ClientProtocol {
    *
    * RuntimeExceptions:
    * @throws UnsupportedOperationException if append is not supported
+   *
+   * append()方法用于打开一个已有的文件，
+   * 如果这个文件的最后一个数据块没有写满， 则返回这个数据块的位置信息(使用LocatedBlock对象封装);
+   * 如果这个文件的最后一个 数据块正好写满，则创建一个新的数据块并添加到这个文件中，
+   * 然后返回这个新添加的数 据块的位置信息。
+   *
+   * 客户端追加写一个已有文件时，会先调用append()方法获取最后一个可 写数据块的位置信息，
+   * 然后建立数据流管道，并向数据节点写入追加的数据。
+   * 如果客户端 将这个数据块写满，与create()方法一样，客户端会调用addBlock()方法获取新的数据块。
+   *
    */
   @AtMostOnce
   LastBlockWithStatus append(String src, String clientName,
@@ -383,6 +416,49 @@ public interface ClientProtocol {
    * @throws org.apache.hadoop.fs.UnresolvedLinkException If <code>src</code>
    *           contains a symlink
    * @throws IOException If an I/O error occurred
+   *
+   * abandonBlock()方法用于处理客户端建立数据流管道时数据节点出现故障的情况。
+   *
+   * 客户端调用abandonBlock()方法放弃一个新申请的数据块。
+   *
+   *
+   *
+   * 问题1: 创建数据块失败 ???????
+   *
+   * 当客 户端获取了一个新申请的数据块，发现无法建立到存储这个数据块副本的某些数据节点的连接时，
+   * 会调用abandonBlock()方法通知名字节点放弃这个数据块，
+   * 之后客户端会再次调 用addBlock()方法获取新的数据块，
+   * 并在传入参数时将无法连接的数据节点放入 excludeNodes参数列表中，
+   * 以避免Namenode将数据块的副本分配到该节点上，
+   * 造成客户端 再次无法连接这个节点的情况。
+   *
+   *
+   *
+   * 问题2:  如果客户端已经成功建立了数据流管道，
+   * 在客户端写某个数据块时，存储这个数据块副本的某个数据节点出现了错误该如何处理呢???
+   *
+   * 客户端首先会
+   * 调用getAdditionalDatanode()方法向Namenode申请一个新的Datanode来替代出现故障的 Datanode。
+   * 然后客户端会调用updateBlockForPipeline()方法向Namenode申请为这个数据块 分配新的时间戳，
+   * 这样故障节点上的没能写完整的数据块的时间戳就会过期，在后续的块 汇报操作中会被删除。
+   * 最后客户端就可以使用新的时间戳建立新的数据流管道，来执行对 数据块的写操作了。
+   * 数据流管道建立成功后，客户端还需要调用updatePipeline()方法更新
+   * Namenode中当前数据块的数据流管道信息。至此，一个完整的恢复操作结束。
+   *
+   *
+   *
+   * 问题3: 在写数据的过程中，Client节点也有可能在任 意时刻发生故障 ???
+   *
+   * 对于任意一个Client打开的文件都需要Client定期调用ClientProtocol.renewLease()
+   * 方法更新租约(关于租约请参考第3章中租约相关小节)。
+   * 如果Namenode长时间没有收到Client的租约更新消息，
+   * 就会认为Client发生故障，这时就 会触发一次租约恢复操作，
+   * 关闭文件并且同步所有数据节点上这个文件数据块的状态，确 保HDFS系统中这个文件是正确且一致保存的。
+   *
+   *
+   *
+   *
+   *
    */
   @Idempotent
   void abandonBlock(ExtendedBlock b, long fileId,
@@ -425,6 +501,20 @@ public interface ClientProtocol {
    * @throws org.apache.hadoop.fs.UnresolvedLinkException If <code>src</code>
    *           contains a symlink
    * @throws IOException If an I/O error occurred
+   *
+   * 客户端调用addBlock()方法向指定文件添加一个新的数据块，
+   * 并获取存储这个数据块 副本的所有数据节点的位置信息(使用LocatedBlock对象封装)。
+   *
+   * 要特别注意的是，调用 addBlock()方法时还要传入上一个数据块的引用。
+   * Namenode在分配新的数据块时，会顺便 提交上一个数据块，这里previous参数就是上一个数据块的引用。
+   *
+   * excludeNodes参数则是 数据节点的黑名单，保存了客户端无法连接的一些数据节点，
+   * 建议Namenode在分配保存 数据块副本的数据节点时不要考虑这些节点。
+   *
+   * favoredNodes参数则是客户端所希望的保存 数据块副本的数据节点的列表。
+   * 客户端调用addBlock()方法获取新的数据块的位置信息 后，会建立到这些数据节点的数据流管道，
+   * 并通过数据流管道将数据写入数据节点。
+   *
    */
   @Idempotent
   LocatedBlock addBlock(String src, String clientName,
@@ -494,6 +584,16 @@ public interface ClientProtocol {
    * @throws org.apache.hadoop.fs.UnresolvedLinkException If <code>src</code>
    *           contains a symlink
    * @throws IOException If an I/O error occurred
+   *
+   * 当客户端完成了整个文件的写入操作后，会调用complete()方法通知Namenode。
+   * 这个 操作会提交新写入HDFS文件的所有数据块，
+   * 当这些数据块的副本数量满足系统配置的最小副本系数(默认值为1)，
+   * 也就是该文件的所有数据块至少有一个有效副本时，
+   * complete()方法会返回true，
+   * 这时Namenode中文件的状态也会从构建中状态转换为正常状 态;
+   * 否则，complete()会返回false，客户端就需要重复调用complete()操作，直至该方法返 回true。
+   *
+   *
    */
   @Idempotent
   boolean complete(String src, String clientName,
@@ -501,6 +601,11 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   *
+   * 客户端会调用ClientProtocol.reportBadBlocks()方法向Namenode汇报错误的数据块。
+   * 当 客户端从数据节点读取数据块且发现数据块的校验和并不正确时，
+   * 就会调用这个方法向 Namenode汇报这个错误的数据块信息。
+   *
    * The client wants to report corrupted blocks (blocks with specified
    * locations on datanodes).
    * @param blocks Array of located blocks to report
@@ -526,6 +631,7 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   * 将多个已有文件拼接成一个
    * Moves blocks from srcs to trg and delete srcs.
    *
    * @param trg existing file
@@ -540,6 +646,8 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   *
+   * 更改文件/目录名称
    * Rename src to dst.
    * <ul>
    * <li>Fails if src is a file and dst is a directory.
@@ -614,6 +722,8 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   *
+   * 从文件系统中删除指定义件或者目录
    * Delete the given file or directory from the file system.
    * <p>
    * same as delete but provides a way to avoid accidentally
@@ -641,6 +751,7 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   * 以指定名称和权限在文件系统中创建目录
    * Create a directory (or hierarchy of directories) with the given
    * name and permission.
    *
@@ -676,6 +787,7 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   * 读取一个指定目录下的所有项目
    * Get a partial listing of the indicated directory.
    *
    * @param src the directory name
@@ -766,6 +878,10 @@ public interface ClientProtocol {
   int STATS_ARRAY_LENGTH = 9;
 
   /**
+   * 用于获取文件系统状态信息，
+   * 包括磁盘使用情况、复制数据块的数量、损坏数据块的数量、丢 失数据块的数量等。
+   * 对应于dfsadmin命令'-report'选项
+   *
    * Get an array of aggregated statistics combining blocks of both type
    * {@link BlockType#CONTIGUOUS} and {@link BlockType#STRIPED} in the
    * filesystem. Use public constants like {@link #GET_STATS_CAPACITY_IDX} in
@@ -804,6 +920,8 @@ public interface ClientProtocol {
   ECBlockGroupStats getECBlockGroupStats() throws IOException;
 
   /**
+   * 获取集群中存活的、死亡的或者所有的数据节点信息。对应于dfsadmin命令'-report'选项
+   *
    * Get a report on the system's current datanodes.
    * One DatanodeInfo object is returned for each DataNode.
    * Return live datanodes if type is LIVE; dead datanodes if type is DEAD;
@@ -815,6 +933,7 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   * 获取数据节点上所有存储的信息
    * Get a report on the current datanode storages.
    */
   @Idempotent
@@ -836,6 +955,9 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   * 用于进入、离开安全模式，或者获取当前安全模式的状态。
+   * 对应于dfsadmin命令'-safemode'选项
+   *
    * Enter, leave or get safe mode.
    * <p>
    * Safe mode is a name node state when it
@@ -912,6 +1034,9 @@ public interface ClientProtocol {
    * @return whether an extra checkpoint has been done
    *
    * @throws IOException if image creation failed.
+   *
+   * 将Namenode内存中的命名空间保存至新的fsimage中，并且重置editlog。
+   * 对应于dfsadmin命令'- saveNamespace'选项。注意，执行这个操作要求必须是处于安全模式中
    */
   @AtMostOnce
   boolean saveNamespace(long timeWindow, long txGap) throws IOException;
@@ -924,6 +1049,10 @@ public interface ClientProtocol {
    *           privilege is violated
    * @throws IOException if log roll fails
    * @return the txid of the new segment
+   *
+   * 重置editlog，也就是关闭当前正在写入的editlog文件，开启一个新的editlog文件。
+   * 对应于 dfsadmin命令'-rollEdits'选项。注意，执行这个操作要求必须是处于安全模式中
+   *
    */
   @Idempotent
   long rollEdits() throws IOException;
@@ -935,11 +1064,15 @@ public interface ClientProtocol {
    *
    * @throws org.apache.hadoop.security.AccessControlException if the superuser
    *           privilege is violated.
+   *
+   * 用于当失败的(failed)存储变得可用时，设置是否对这个存储上保存的副本进行恢复操作。
+   * 对 应于dfsadmin命令'-restoreFailedStorage'选项
    */
   @Idempotent
   boolean restoreFailedStorage(String arg) throws IOException;
 
   /**
+   * 触发Namenode重新读取include/exclude文件。对应于dfsadmin命令'-refreshNodes'选项
    * Tells the namenode to reread the hosts and exclude files.
    * @throws IOException
    */
@@ -947,6 +1080,7 @@ public interface ClientProtocol {
   void refreshNodes() throws IOException;
 
   /**
+   * 提交Namenode的升级操作。对应于dfsadmin命令'-finalizeUpgrade'选项
    * Finalize previous upgrade.
    * Remove file system state saved during the upgrade.
    * The upgrade will become irreversible.
@@ -976,6 +1110,7 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   * 获取文件系统中损坏文件的一部分，如果想要获取文件系统中 所有损坏的文件，则循环调用这个方法
    * @return CorruptFileBlocks, containing a list of corrupt files (with
    *         duplicates if there is more than one corrupt block in a file)
    *         and a cookie
@@ -991,6 +1126,10 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   * 将Namenode中主要的数据结构保存到指定文件中，
+   * 包括同Namenode心跳过的Datanode、等待 复制的数据块、等待删除的数据块、
+   * 当前正在复制的数据块等信息。对应于dfsadmin命令'- metasave'选项
+   *
    * Dumps namenode data structures into specified file. If the file
    * already exists, then append.
    *
@@ -1000,6 +1139,10 @@ public interface ClientProtocol {
   void metaSave(String filename) throws IOException;
 
   /**
+   * 更改Datanode在进行数据块平衡操作时所占用的带宽。
+   * 调用这个命令设置的带宽值会覆盖 dfs.balance.bandwidthPerSec配置项配置的带宽值。
+   * 对应于dfsadmin命令'-setBalancerBandwidth'选 项
+   *
    * Tell all datanodes to use a new, non-persistent bandwidth value for
    * dfs.datanode.balance.bandwidthPerSec.
    *
@@ -1010,6 +1153,7 @@ public interface ClientProtocol {
   void setBalancerBandwidth(long bandwidth) throws IOException;
 
   /**
+   * 获取文件/目录的属性
    * Get the file info for a specific file or directory.
    * @param src The string representation of the path to the file
    *
@@ -1026,6 +1170,7 @@ public interface ClientProtocol {
   HdfsFileStatus getFileInfo(String src) throws IOException;
 
   /**
+   * 判断指定文件是否关闭了
    * Get the close status of a file.
    * @param src The string representation of the path to the file
    *
@@ -1041,6 +1186,9 @@ public interface ClientProtocol {
   boolean isFileClosed(String src) throws IOException;
 
   /**
+   *
+   * 获取文件/目录的属性，如果文件指向一个符号链接，则返回这个符号链接的信息
+   *
    * Get the file info for a specific file or directory. If the path
    * refers to a symlink then the FileStatus of the symlink is returned.
    * @param src The string representation of the path to the file
@@ -1074,6 +1222,8 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   *
+   * 获取文件/目录使用的存储空间信息
    * Get {@link ContentSummary} rooted at the specified directory.
    * @param path The string representation of the path
    *
@@ -1115,6 +1265,9 @@ public interface ClientProtocol {
    *           <code>path</code> contains a symlink.
    * @throws SnapshotAccessControlException if path is in RO snapshot
    * @throws IOException If an I/O error occurred
+   *
+   * 设置目录中的文件/目录的数量配额，以及文件大小的配额。
+   * 对应于dfsadmin命令'- setQuota'、'-clrQuota'、'-setSpaceQuota'和'-clrSpaceQuota'选项，这4个选项底层都是通过 setQuota()触发Namenode操作的
    */
   @Idempotent
   void setQuota(String path, long namespaceQuota, long storagespaceQuota,
@@ -1160,6 +1313,9 @@ public interface ClientProtocol {
   void setTimes(String src, long mtime, long atime) throws IOException;
 
   /**
+   *
+   * 对于已经存在的文件创建符号链接
+   *
    * Create symlink to a file or directory.
    * @param target The path of the destination that the
    *               link points to.
@@ -1185,6 +1341,9 @@ public interface ClientProtocol {
       boolean createParent) throws IOException;
 
   /**
+   *
+   * 获取指定符号链接指向目标
+   *
    * Return the target of the given symlink. If there is an intermediate
    * symlink in the path (ie a symlink leading up to the final path component)
    * then the given path is returned with this symlink resolved.
@@ -1271,6 +1430,8 @@ public interface ClientProtocol {
   DataEncryptionKey getDataEncryptionKey() throws IOException;
 
   /**
+   * 创建快照    'hdfs dfs -createSnapshot'
+   *
    * Create a snapshot.
    * @param snapshotRoot the path that is being snapshotted
    * @param snapshotName name of the snapshot created
@@ -1282,6 +1443,7 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   * 创建快照 'hdfs dfs -createSnapshot'
    * Delete a specific snapshot of a snapshottable directory.
    * @param snapshotRoot  The snapshottable directory
    * @param snapshotName Name of the snapshot for the snapshottable directory
@@ -1292,6 +1454,9 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   * 重命名快照
+   * 'hdfs dfs -renameSnapshot <path><oldName> <newName>'
+   *
    * Rename a snapshot.
    * @param snapshotRoot the directory path where the snapshot was taken
    * @param snapshotOldName old name of the snapshot
@@ -1303,6 +1468,8 @@ public interface ClientProtocol {
       String snapshotNewName) throws IOException;
 
   /**
+   * 开启指定目录的快照功能。一个目录必须在开 'hdfs dfsadmin -allowSnapshot <path>'
+   *
    * Allow snapshot on a directory.
    * @param snapshotRoot the directory to be snapped
    * @throws IOException on error
@@ -1312,6 +1479,8 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   * 关闭指定目录的快照功能 'hdfs dfs -deleteSnapshot <path><snapshotName>'
+   *
    * Disallow snapshot on a directory.
    * @param snapshotRoot the directory to disallow snapshot
    * @throws IOException on error
@@ -1321,6 +1490,11 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   *
+   * 获取两个快照间的不同
+   * 'hafs snapshotDiff <path><fromSnapshot> <toSnapshot>'
+   *
+   *
    * Get the difference between two snapshots, or between a snapshot and the
    * current tree of a directory.
    *
@@ -1370,6 +1544,12 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   * 添加一个缓存
+   *
+   * 'hdfs cacheadmin -addDirective -path <path> -pool <pool-name>[-force][-replication <replication>][- ttl <time-to-live>]'
+   *
+   *
+   *
    * Add a CacheDirective to the CacheManager.
    *
    * @param directive A CacheDirectiveInfo to be added
@@ -1382,6 +1562,7 @@ public interface ClientProtocol {
       EnumSet<CacheFlag> flags) throws IOException;
 
   /**
+   * 修改缓存  -modifyDirective
    * Modify a CacheDirective in the CacheManager.
    *
    * @param flags {@link CacheFlag}s to use for this operation.
@@ -1392,6 +1573,7 @@ public interface ClientProtocol {
       EnumSet<CacheFlag> flags) throws IOException;
 
   /**
+   * 删除缓存  'hdfs cacheadmin -removeDirective <id>'
    * Remove a CacheDirectiveInfo from the CacheManager.
    *
    * @param id of a CacheDirectiveInfo
@@ -1401,6 +1583,9 @@ public interface ClientProtocol {
   void removeCacheDirective(long id) throws IOException;
 
   /**
+   * 列出指定路径下的所有缓存
+   * 'hdfs cacheadmin -listDirectives [-stats][-path <path>][-pool <pool>]'
+   *
    * List the set of cached paths of a cache pool. Incrementally fetches results
    * from the server.
    *
@@ -1418,6 +1603,10 @@ public interface ClientProtocol {
   /**
    * Add a new cache pool.
    *
+   * 添加一个缓存池
+   * 'hafs cacheadmin -addPool<name>[- owner<owner>][-group <group>][-mode <mode>] [-limit<limit>][-maxTtl <maxTtl>'
+   *
+   *
    * @param info Description of the new cache pool
    * @throws IOException If the request could not be completed.
    */
@@ -1425,6 +1614,9 @@ public interface ClientProtocol {
   void addCachePool(CachePoolInfo info) throws IOException;
 
   /**
+   * 修改已有缓存池的元数据
+   * 'hafs cacheadmin -modifyPool<name>[- owner<owner>][-group <group>][-mode <mode>] [-limit<limit>][-maxTtl <maxTtl>]'
+   *
    * Modify an existing cache pool.
    *
    * @param req
@@ -1436,6 +1628,9 @@ public interface ClientProtocol {
   void modifyCachePool(CachePoolInfo req) throws IOException;
 
   /**
+   * 删除缓存池
+   * 'hdfs cacheadmin removePool <name>'
+   *
    * Remove a cache pool.
    *
    * @param pool name of the cache pool to remove.
@@ -1446,6 +1641,13 @@ public interface ClientProtocol {
   void removeCachePool(String pool) throws IOException;
 
   /**
+   *
+   * 列出已有缓存池的信息，包括用户名、用户 组、权限等
+   * 对应的命令
+   * 'hdfs cacheadmin -listPools [-stats][<name>]'
+   *
+   *
+   *
    * List the set of cache pools. Incrementally fetches results from the server.
    *
    * @param prevPool name of the last pool listed, or the empty string if this

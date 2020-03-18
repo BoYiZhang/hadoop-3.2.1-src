@@ -36,6 +36,22 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ * 用来描述写入或者读出Datanode上数据的基于TCP的流式接口，
+ *     HDFS客户端与数据节点以及数据节点
+ *     与
+ *     数据节点之间的数据块传输
+ * 就是基于DataTransferProtocol接口实现的。
+ *
+ * DataTransferProtocol接口调用并没有使用Hadoop RPC框架提供的功能，
+ * 而是定义了用于发送DataTransferProtocol请求的Sender类，
+ * 以及用于响应DataTransferProtocol请求的 Receiver类，
+ *
+ *      Sender类和Receiver类都实现了DataTransferProtocol接口。
+ *      我们假设DFSClient发起了一个 DataTransferProtocol.readBlock()操作，
+ *      那么DFSClient会调用Sender将这个请求序列化，并 传输给远端的Receiver。
+ *      远端的Receiver接收到这个请求后，会反序列化请求，然后调用 代码执行读取操作。
+ *
+ *
  * Transfer data to/from datanode using a streaming protocol.
  */
 @InterfaceAudience.Private
@@ -64,6 +80,8 @@ public interface DataTransferProtocol {
    * @param sendChecksum if false, the DN should skip reading and sending
    *        checksums
    * @param cachingStrategy  The caching strategy to use.
+   *
+   * 从当前Datanode读取指定的数据块。
    */
   void readBlock(final ExtendedBlock blk,
       final Token<BlockTokenIdentifier> blockToken,
@@ -74,6 +92,7 @@ public interface DataTransferProtocol {
       final CachingStrategy cachingStrategy) throws IOException;
 
   /**
+   * 将指定数据块写入数据流管道(pipeLine)中。
    * Write a block to a datanode pipeline.
    * The receiver datanode of this call is the next datanode in the pipeline.
    * The other downstream datanodes are specified by the targets parameter.
@@ -128,6 +147,12 @@ public interface DataTransferProtocol {
       final String storageID,
       final String[] targetStorageIDs) throws IOException;
   /**
+   * 将指定数据块复制(transfer)到另一个Datanode上。
+   *
+   * 数据块复制 操作是指数据流管道中的数据节点出现故障，
+   * 需要用新的数据节点替换异常的数 据节点时，
+   * DFSClient会调用这个方法将数据流管道中异常数据节点上已经写入的数据块复制到新添加的数据节点上。
+   *
    * Transfer a block to another datanode.
    * The block stage must be
    * either {@link BlockConstructionStage#TRANSFER_RBW}
@@ -148,6 +173,8 @@ public interface DataTransferProtocol {
       final String[] targetStorageIDs) throws IOException;
 
   /**
+   *
+   * 获取一个短路(short circuit)读取数据块的文件描述符
    * Request short circuit access file descriptors from a DataNode.
    *
    * @param blk             The block to get file descriptors for.
@@ -165,6 +192,7 @@ public interface DataTransferProtocol {
         throws IOException;
 
   /**
+   * 释放一个短路读取数据块的文件描述符。
    * Release a pair of short-circuit FDs requested earlier.
    *
    * @param slotId          SlotID used by the earlier file descriptors.
@@ -172,6 +200,7 @@ public interface DataTransferProtocol {
   void releaseShortCircuitFds(final SlotId slotId) throws IOException;
 
   /**
+   * 获取保存短路读取数据块的共享内存
    * Request a short circuit shared memory area from a DataNode.
    *
    * @param clientName       The name of the client.
@@ -179,6 +208,12 @@ public interface DataTransferProtocol {
   void requestShortCircuitShm(String clientName) throws IOException;
 
   /**
+   * 将从源Datanode复制来的数据块写入本地Datanode。
+   * 写成功后通 知NameNode，并且删除源Datanode上的数据块。
+   *
+   * 这个方法主要用在数据块平衡 操作(balancing)的场景下。
+   * source datanode 和  original datanode  必须不同.
+   *
    * Receive a block from a source datanode
    * and then notifies the namenode
    * to remove the copy from the original datanode.
@@ -204,6 +239,8 @@ public interface DataTransferProtocol {
    * Copy a block.
    * It is used for balancing purpose.
    *
+   * 复制当前Datanode上的数据块。这个方法主要用在数据块平衡操作 的场景下。
+   *
    * @param blk the block being copied.
    * @param blockToken security token for accessing the block.
    */
@@ -211,6 +248,7 @@ public interface DataTransferProtocol {
       final Token<BlockTokenIdentifier> blockToken) throws IOException;
 
   /**
+   * 获取指定数据块的校验值。
    * Get block checksum (MD5 of CRC32).
    *
    * @param blk a block.

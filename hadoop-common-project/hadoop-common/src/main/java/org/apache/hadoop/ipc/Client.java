@@ -323,6 +323,13 @@ public class Client implements AutoCloseable {
     }
   }
 
+
+  /**
+   *
+   * @param rpcKind  rpcKind参数用于描述RPC请求的序列化工具类型 
+   * @param rpcRequest rpcRequest参数则用于记录序列化后的RPC请求
+   * @return
+   */
   Call createCall(RPC.RpcKind rpcKind, Writable rpcRequest) {
     return new Call(rpcKind, rpcRequest);
   }
@@ -340,6 +347,7 @@ public class Client implements AutoCloseable {
     boolean done;               // true when call is done
     private final Object externalHandler;
     private AlignmentContext alignmentContext;
+
 
     private Call(RPC.RpcKind rpcKind, Writable param) {
       this.rpcKind = rpcKind;
