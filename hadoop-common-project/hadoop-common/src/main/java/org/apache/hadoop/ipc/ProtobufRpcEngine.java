@@ -580,8 +580,11 @@ public class ProtobufRpcEngine implements RpcEngine {
 
 
 
+        //获取要调用的方法的描述信息
         MethodDescriptor methodDescriptor = service.getDescriptorForType()
             .findMethodByName(methodName);
+
+
         if (methodDescriptor == null) {
           String msg = "Unknown method " + methodName + " called on " 
                                 + connectionProtocolName + " protocol.";
