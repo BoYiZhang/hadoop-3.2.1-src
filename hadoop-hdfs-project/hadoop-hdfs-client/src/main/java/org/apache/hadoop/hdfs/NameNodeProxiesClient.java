@@ -113,6 +113,9 @@ public class NameNodeProxiesClient {
   }
 
   /**
+   * 用于创建支持HA机制的ClientProtocol代理对象 的，
+   * 它会根据配置文件判断当前HDFS集群是否处于HA模式。
+   *
    * Creates the namenode proxy with the ClientProtocol. This will handle
    * creation of either HA- or non-HA-enabled proxy objects, depending upon
    * if the provided URI is a configured logical URI.
@@ -135,12 +138,16 @@ public class NameNodeProxiesClient {
             true, fallbackToSimpleAuth);
 
     if (failoverProxyProvider == null) {
+      //非HA情况
       InetSocketAddress nnAddr = DFSUtilClient.getNNAddress(nameNodeUri);
       Text dtService = SecurityUtil.buildTokenService(nnAddr);
+
+
       ClientProtocol proxy = createNonHAProxyWithClientProtocol(nnAddr, conf,
           UserGroupInformation.getCurrentUser(), true, fallbackToSimpleAuth);
       return new ProxyAndInfo<>(proxy, dtService, nnAddr);
     } else {
+      //HA情况
       return createHAProxy(conf, nameNodeUri, ClientProtocol.class,
           failoverProxyProvider);
     }
@@ -306,6 +313,7 @@ public class NameNodeProxiesClient {
   }
 
   /**
+   *
    * Creates an explicitly HA-enabled proxy object.
    *
    * @param conf the configuration object
@@ -323,11 +331,15 @@ public class NameNodeProxiesClient {
     Preconditions.checkNotNull(failoverProxyProvider);
     // HA case
     DfsClientConf config = new DfsClientConf(conf);
+
+    //直接调用Java动态代理构造方法，返回代理对象,
+    // 跟一下,这个是干啥的  !!!!!!!!!!!!!!!
     T proxy = (T) RetryProxy.create(xface, failoverProxyProvider,
         RetryPolicies.failoverOnNetworkException(
             RetryPolicies.TRY_ONCE_THEN_FAIL, config.getMaxFailoverAttempts(),
             config.getMaxRetryAttempts(), config.getFailoverSleepBaseMillis(),
             config.getFailoverSleepMaxMillis()));
+
 
     Text dtService;
     if (failoverProxyProvider.useLogicalURI()) {
@@ -337,6 +349,8 @@ public class NameNodeProxiesClient {
       dtService = SecurityUtil.buildTokenService(
           DFSUtilClient.getNNAddress(nameNodeUri));
     }
+
+
     return new ProxyAndInfo<>(proxy, dtService,
         DFSUtilClient.getNNAddressCheckLogical(conf, nameNodeUri));
   }
@@ -349,11 +363,24 @@ public class NameNodeProxiesClient {
         fallbackToSimpleAuth, null);
   }
 
+  /**
+   *  非 HA 控制
+   * @param address
+   * @param conf
+   * @param ugi
+   * @param withRetries
+   * @param fallbackToSimpleAuth
+   * @param alignmentContext
+   * @return
+   * @throws IOException
+   */
   public static ClientProtocol createProxyWithAlignmentContext(
       InetSocketAddress address, Configuration conf, UserGroupInformation ugi,
       boolean withRetries, AtomicBoolean fallbackToSimpleAuth,
       AlignmentContext alignmentContext)
       throws IOException {
+
+    //设置protocolEngine
     RPC.setProtocolEngine(conf, ClientNamenodeProtocolPB.class,
         ProtobufRpcEngine.class);
 
@@ -367,14 +394,19 @@ public class NameNodeProxiesClient {
             SafeModeException.class.getName());
 
     final long version = RPC.getProtocolVersion(ClientNamenodeProtocolPB.class);
+
+    //构造ClientNamenodeProtocolPB代理对象
     ClientNamenodeProtocolPB proxy = RPC.getProtocolProxy(
         ClientNamenodeProtocolPB.class, version, address, ugi, conf,
         NetUtils.getDefaultSocketFactory(conf),
         org.apache.hadoop.ipc.Client.getTimeout(conf), defaultPolicy,
         fallbackToSimpleAuth, alignmentContext).getProxy();
 
+
     if (withRetries) { // create the proxy with retries
       Map<String, RetryPolicy> methodNameToPolicyMap = new HashMap<>();
+
+      //构造ClientNamenodeProtocolTranslatorPB对象并返回
       ClientProtocol translatorProxy =
           new ClientNamenodeProtocolTranslatorPB(proxy);
       return (ClientProtocol) RetryProxy.create(
@@ -384,7 +416,11 @@ public class NameNodeProxiesClient {
           methodNameToPolicyMap,
           defaultPolicy);
     } else {
+
+      //构造ClientNamenodeProtocolTranslatorPB对象并返回
+      //注意ClientNamenodeProtocolTranslatorPB会持有一个ClientNamenodeProtocolPB对象
       return new ClientNamenodeProtocolTranslatorPB(proxy);
+
     }
   }
 

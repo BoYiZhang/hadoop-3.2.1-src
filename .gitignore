@@ -19,10 +19,11 @@
 # Build targets
 /target
 */target
-
+target
 # Report directories
 /reports
 */reports
+hadoop-main.iml
 
 # Mac-specific directory that no other operating system needs.
 .DS_Store

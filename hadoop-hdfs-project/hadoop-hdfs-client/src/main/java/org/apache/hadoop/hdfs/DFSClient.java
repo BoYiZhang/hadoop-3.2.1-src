@@ -213,6 +213,8 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   private final Configuration conf;
   private final Tracer tracer;
   private final DfsClientConf dfsClientConf;
+
+  // 调用的是ClientNamenodeProtocolTranslatorPB这个实现类.
   final ClientProtocol namenode;
   /* The service used for delegation tokens */
   private Text dtService;
@@ -337,6 +339,8 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
       LOG.warn(DFS_CLIENT_TEST_DROP_NAMENODE_RESPONSE_NUM_KEY
           + " is set to " + numResponseToDrop
           + ", this hacked client will proactively drop responses");
+
+      //获取proxyInfo引用
       proxyInfo = NameNodeProxiesClient.createProxyWithLossyRetryHandler(conf,
           nameNodeUri, ClientProtocol.class, numResponseToDrop,
           nnFallbackToSimpleAuth);
@@ -344,6 +348,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
 
     if (proxyInfo != null) {
       this.dtService = proxyInfo.getDelegationTokenService();
+      //构造方法
       this.namenode = proxyInfo.getProxy();
     } else if (rpcNamenode != null) {
       // This case is used for testing.
@@ -353,6 +358,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     } else {
       Preconditions.checkArgument(nameNodeUri != null,
           "null URI");
+      //获取proxyInfo引用
       proxyInfo = NameNodeProxiesClient.createProxyWithClientProtocol(conf,
           nameNodeUri, nnFallbackToSimpleAuth);
       this.dtService = proxyInfo.getDelegationTokenService();
@@ -811,6 +817,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
             "a failover proxy provider configured.");
       }
 
+      //获取proxyInfo引用
       ProxyAndInfo<ClientProtocol> info =
           NameNodeProxiesClient.createProxyWithClientProtocol(conf, uri, null);
       assert info.getDelegationTokenService().equals(token.getService()) :
@@ -1551,6 +1558,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
       throws IOException {
     checkOpen();
     try (TraceScope ignored = newSrcDstTraceScope("rename2", src, dst)) {
+      // 重命名文件或者目录
       namenode.rename2(src, dst, options);
     } catch (RemoteException re) {
       throw re.unwrapRemoteException(AccessControlException.class,

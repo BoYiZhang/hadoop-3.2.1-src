@@ -247,6 +247,28 @@ import com.google.protobuf.ServiceException;
 import org.apache.hadoop.util.concurrent.AsyncGet;
 
 /**
+ *
+ *
+ *
+ *
+ * 作为Client侧的适配器类，实现了 ClientProtocol接口，
+ * 它将客户端的请求参数封装成可以序列化的protobuf格式，
+ * 然后通过代理类(实现ClientNamenodeProtocolPB接口)发送出去。
+ *
+ * 它内部拥有一个实现了ClientNamenodeProtocolPB接口的对象，
+ * 可以将ClientProtocol调用适配成ClientNamenodeProtocolPB调用。
+ *
+ *
+ * 以rename() 调用为例
+ *
+ * ClientNamenodeProtocolTranslatorPB将rename(String, String)
+ * 调用中 的两个String参数序列化成一个RenameRequestProto对象，
+ * 然后调用 ClientNamenode ProtocolPB对象的rename(RenameRequestProto)方法，
+ * 这样就 完成了ClientProtocol接口到ClientNamenodeProtocolPB接口的适配。
+ *
+ *
+ *
+ *
  * This class forwards NN's ClientProtocol calls as RPC calls to the NN server
  * while translating from the parameter types used in ClientProtocol to the
  * new PB types.
@@ -255,6 +277,15 @@ import org.apache.hadoop.util.concurrent.AsyncGet;
 @InterfaceStability.Stable
 public class ClientNamenodeProtocolTranslatorPB implements
     ProtocolMetaInterface, ClientProtocol, Closeable, ProtocolTranslator {
+
+  //持有一个实现ClientNamenodeProtocolPB接口的rpcProxy对象
+
+  //    这里的rpcProxy对象(实现了ClientNamenodeProtocolPB接口)，
+  // 则是使用Java动 态代理机制获取的ClientNamenodeProtocolPB接口的代理对象。
+  // 在这个对象上的调用会由 ProtobufRpcEngine.Invoker对象代理，
+  // 这个Invoker对象的invoke()方法会调用底层的 RPC.Client类提供的call()方法
+  // 将ClientNamenodeProtocolPB.
+  // rename()请求发送到远程服务 器，并等待远程服务器返回响应信息。
   final private ClientNamenodeProtocolPB rpcProxy;
 
   static final GetServerDefaultsRequestProto VOID_GET_SERVER_DEFAULT_REQUEST =
@@ -575,11 +606,14 @@ public class ClientNamenodeProtocolTranslatorPB implements
 
   @Override
   public boolean rename(String src, String dst) throws IOException {
+
+    //构建pb参数
     RenameRequestProto req = RenameRequestProto.newBuilder()
         .setSrc(src)
         .setDst(dst).build();
 
     try {
+      //调用底层impl对应方法，返回结果
       return rpcProxy.rename(null, req).getResult();
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);

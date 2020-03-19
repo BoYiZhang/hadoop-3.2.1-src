@@ -38,6 +38,32 @@ public interface RpcEngine {
 
   /** Construct a client-side proxy object. 
    * @param <T>*/
+  /**
+   * 客户端会调用RpcEngine.getProxy()方法获取一个本地接口的代理对 象，
+   * 然后在这个代理对象上调用本地接口的方法。
+   *
+   * getProxy()方法的实现采用了 Java动态代理机制，
+   * 客户端调用程序在代理对象上的调用会由一个
+   * RpcInvocationHandler(java.lang.reflect.InvocationHandler的子类，
+   * 在RpcEngine的 实现类中定义)对象处理，
+   * 这个RpcInvocationHandler会将请求序列化
+   * (使用 RpcEngine实现类定义的序列化方式)
+   * 并调用Client.call()方法将请求发送到远程 服务器。
+   * 当远程服务器发回响应信息后，RpcInvocationHandler会将响应信息反 序列化并返回给调用程序，
+   * 这一切通过Java动态代理机制对于调用程序是完全透 明的，就像本地调用一样。
+   *
+   * @param protocol
+   * @param clientVersion
+   * @param addr
+   * @param ticket
+   * @param conf
+   * @param factory
+   * @param rpcTimeout
+   * @param connectionRetryPolicy
+   * @param <T>
+   * @return
+   * @throws IOException
+   */
   <T> ProtocolProxy<T> getProxy(Class<T> protocol,
                   long clientVersion, InetSocketAddress addr,
                   UserGroupInformation ticket, Configuration conf,
@@ -53,7 +79,12 @@ public interface RpcEngine {
                   AtomicBoolean fallbackToSimpleAuth,
                   AlignmentContext alignmentContext) throws IOException;
 
-  /** 
+  /**
+   *
+   * 该方法用于产生一个RPC Server对象，服务器会启动这个Server对象 监听从客户端发来的请求。
+   * 成功从网络接收请求数据后，
+   * Server对象会调用 Rpclnvoker(在RpcEngine的实现类中定义)对象处理这个请求。
+   *
    * Construct a server for a protocol implementation instance.
    * 
    * @param protocol the class of protocol to use

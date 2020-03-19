@@ -710,6 +710,7 @@ public class NameNode extends ReconfigurableBase implements
     loadNamesystem(conf);
     startAliasMapServerIfNecessary(conf);
 
+    //创建NameNodeRpcServer对象的实例
     rpcServer = createRpcServer(conf);
 
     initReconfigurableBackoffKey();

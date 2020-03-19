@@ -210,6 +210,8 @@ public class RPC {
       Configuration conf) {
     RpcEngine engine = PROTOCOL_ENGINES.get(protocol);
     if (engine == null) {
+      //todo 这个类是在哪呢?????  rpc.engine 这个包在哪 ??
+      // 比如:  rpc.engine.ClientNamenodeProtocolPB ??
       Class<?> impl = conf.getClass(ENGINE_PROP+"."+protocol.getName(),
                                     WritableRpcEngine.class);
       engine = (RpcEngine)ReflectionUtils.newInstance(impl, conf);
@@ -400,9 +402,13 @@ public class RPC {
     IOException ioe;
     while (true) {
       try {
+
+
         return getProtocolProxy(protocol, clientVersion, addr, 
             UserGroupInformation.getCurrentUser(), conf, NetUtils
             .getDefaultSocketFactory(conf), rpcTimeout, connectionRetryPolicy);
+
+
       } catch(ConnectException se) {  // namenode has not been started
         LOG.info("Server at " + addr + " not available yet, Zzzzz...");
         ioe = se;
@@ -530,7 +536,15 @@ public class RPC {
   /**
    * Get a protocol proxy that contains a proxy connection to a remote server
    * and a set of methods that are supported by the server
-   * 
+   *
+   * 客户端会调用RPC.getProtocolProxy()方法获取某个本地接口(例如ClientProtocol)的代理 对象，
+   * 之后调用程序就可以在该代理对象上调用本地接口的方法了。
+   *
+   * 如下代码所示， RPC.getProtocolProxy()方法会首先调用getProtocolEngine()
+   * 获取当前RPC类的序列化引擎 (可能是WritableRpcEngine或者ProtobufRpcEngine)，
+   * 然后调用RpcEngine.getProxy()方法 获取代理对象。
+   * RpcEngine.getProxy()方法的具体实现我们将在客户端获取Proxy对象小节 中介绍。
+   *
    * @param protocol protocol
    * @param clientVersion client's version
    * @param addr server address
@@ -844,7 +858,13 @@ public class RPC {
       if (this.instance == null) {
         throw new HadoopIllegalArgumentException("instance is not set");
       }
-      
+
+      //调用getProtocolEngine()获取当前RPC类配置的RpcEngine对象
+      //在 NameNodeRpcServer的构造方法中已经将
+      // 当前RPC类的RpcEngine对象设置为 ProtobufRpcEngine了。
+      // 获取了ProtobufRpcEngine对象之后，build()方法会在
+      // ProtobufRpcEngine对象上调用getServer()方法获取一个RPC Server对象的引用。
+
       return getProtocolEngine(this.protocol, this.conf).getServer(
           this.protocol, this.instance, this.bindAddress, this.port,
           this.numHandlers, this.numReaders, this.queueSizePerHandler,

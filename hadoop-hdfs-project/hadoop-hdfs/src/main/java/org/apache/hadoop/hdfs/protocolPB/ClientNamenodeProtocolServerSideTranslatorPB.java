@@ -296,12 +296,29 @@ import com.google.protobuf.ServiceException;
  * This class translates the PB data types
  * to the native data types used inside the NN as specified in the generic
  * ClientProtocol.
+ *
+ * ClientNamenodeProtocolServerSideTranslatorPB类:
+ * 作为Server侧的适配器类，实 现了ClientNamenodeProtocolPB接口，
+ * 同时内部拥有一个实现了ClientProtocol接 口的对象(NameNodeRpcServer)，
+ * 可以将ClientNamenodeProtocolPB调用适配成ClientProtocol调用。
+ *
+ * 还是以rename()调用为例，
+ * ClientNamenodeProtocolServerSideTranslatorPB将rename(RenameRequestProto)
+ * 调用的RenameRequestProto对象反序列化成两个String对象，
+ * 之后调用 NameNodeRpcServer(实现了ClientProtocol)类的rename(String, String)方法
+ * 执行重命名操作。
+ *
+ *
  */
 @InterfaceAudience.Private
 @InterfaceStability.Stable
 public class ClientNamenodeProtocolServerSideTranslatorPB implements
     ClientNamenodeProtocolPB {
+
+  //底层实现类
   final private ClientProtocol server;
+
+
   static final DeleteSnapshotResponseProto VOID_DELETE_SNAPSHOT_RESPONSE =
       DeleteSnapshotResponseProto.newBuilder().build();
   static final RenameSnapshotResponseProto VOID_RENAME_SNAPSHOT_RESPONSE =

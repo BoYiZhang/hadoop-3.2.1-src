@@ -97,9 +97,15 @@ public class ProtobufRpcEngine implements RpcEngine {
       AtomicBoolean fallbackToSimpleAuth, AlignmentContext alignmentContext)
       throws IOException {
 
+
+    //构造一个实现了InvocationHandler接口的invoker 对象
+    // (动态代理机制中的InvocationHandler对象会在invoke()方法中代理所有目标接口上的 调用，
+    // 用户可以在invoke()方法中添加代理操作)
     final Invoker invoker = new Invoker(protocol, addr, ticket, conf, factory,
         rpcTimeout, connectionRetryPolicy, fallbackToSimpleAuth,
         alignmentContext);
+
+    //然后调用Proxy.newProxylnstance()获取动态代理对象，并通过ProtocolProxy返回
     return new ProtocolProxy<T>(protocol, (T) Proxy.newProxyInstance(
         protocol.getClassLoader(), new Class[]{protocol}, invoker), false);
   }
@@ -115,9 +121,15 @@ public class ProtobufRpcEngine implements RpcEngine {
                 factory)), false);
   }
 
+  /**
+   * 用于处理客户端发送RPC请求的:
+   *     RPC请求信息以及请求参数的序列化使用了protobuf工具;
+   *     使用RPCRequestWrapper类包装RPC请求(包括请求信息以及请求参数);
+   *     使用RPCResponseWrapper类包装服务器发回的RPC响应信息;
+   *     使用protobuf反 序列化远程服务器发回的RPC响应信息。
+   */
   private static class Invoker implements RpcInvocationHandler {
-    private final Map<String, Message> returnTypes = 
-        new ConcurrentHashMap<String, Message>();
+    private final Map<String, Message> returnTypes =   new ConcurrentHashMap<String, Message>();
     private boolean isClosed = false;
     private final Client.ConnectionId remoteId;
     private final Client client;
@@ -173,6 +185,17 @@ public class ProtobufRpcEngine implements RpcEngine {
     }
 
     /**
+     *
+     * ProtobufRpcEngine.Invoker.invoker() 方法主要做了三件事情:
+     *  1.构造请求头域，
+     *    使用protobuf将请求头序列化，这个请求头域 记录了当前RPC调用是什么接口的什么方法上的调用;
+     *  2.通过RPC.Client类发送请求头以 及序列化好的请求参数。
+     *    请求参数是在ClientNamenodeProtocolPB调用时就已经序列化好的，
+     *    调用Client.call()方法时，
+     *    需要将请求头以及请求参数使用一个RpcRequestWrapper对象封装;
+     *  3.获取响应信息，序列化响应信息并返回。
+     *
+     *
      * This is the client side invoker of RPC method. It only throws
      * ServiceException, since the invocation proxy expects only
      * ServiceException to be thrown by the method in case protobuf service.
@@ -197,7 +220,8 @@ public class ProtobufRpcEngine implements RpcEngine {
       if (LOG.isDebugEnabled()) {
         startTime = Time.now();
       }
-      
+
+      // pb接口的参数只有两个，即RpcController + Message
       if (args.length != 2) { // RpcController + Message
         throw new ServiceException(
             "Too many or few parameters for request. Method: ["
@@ -212,12 +236,14 @@ public class ProtobufRpcEngine implements RpcEngine {
       // if Tracing is on then start a new span for this rpc.
       // guard it in the if statement to make sure there isn't
       // any extra string manipulation.
+      // todo 这个是啥
       Tracer tracer = Tracer.curThreadTracer();
       TraceScope traceScope = null;
       if (tracer != null) {
         traceScope = tracer.newScope(RpcClientUtil.methodToTraceString(method));
       }
 
+      //构造请求头域，标明在什么接口上调用什么方法
       RequestHeaderProto rpcRequestHeader = constructRpcRequestHeader(method);
       
       if (LOG.isTraceEnabled()) {
@@ -227,9 +253,12 @@ public class ProtobufRpcEngine implements RpcEngine {
       }
 
 
+      //获取请求调用的参数，例如RenameRequestProto
       final Message theRequest = (Message) args[1];
       final RpcWritable.Buffer val;
       try {
+
+        //调用RPC.Client发送请求
         val = (RpcWritable.Buffer) client.call(RPC.RpcKind.RPC_PROTOCOL_BUFFER,
             new RpcProtobufRequest(rpcRequestHeader, theRequest), remoteId,
             fallbackToSimpleAuth, alignmentContext);
@@ -280,12 +309,14 @@ public class ProtobufRpcEngine implements RpcEngine {
         final RpcWritable.Buffer buf) throws ServiceException {
       Message prototype = null;
       try {
+        //获取返回参数类型，比如: RenameResponseProto
         prototype = getReturnProtoType(method);
       } catch (Exception e) {
         throw new ServiceException(e);
       }
       Message returnMessage;
       try {
+        // 序列化响应信息
         returnMessage = buf.getValue(prototype.getDefaultInstanceForType());
 
         if (LOG.isTraceEnabled()) {
@@ -297,6 +328,8 @@ public class ProtobufRpcEngine implements RpcEngine {
       } catch (Throwable e) {
         throw new ServiceException(e);
       }
+
+      //返回结果
       return returnMessage;
     }
 
@@ -428,37 +461,56 @@ public class ProtobufRpcEngine implements RpcEngine {
           serverNameFromClass(protocolImpl.getClass()), secretManager,
           portRangeConfig);
       setAlignmentContext(alignmentContext);
-      this.verbose = verbose;  
+      this.verbose = verbose;
+      //调用registerProtocolAndlmpl()方法
+      // 注册接口类protocolClass和实现类protocolImpl的映射关系
       registerProtocolAndImpl(RPC.RpcKind.RPC_PROTOCOL_BUFFER, protocolClass,
           protocolImpl);
     }
     
     /**
      * Protobuf invoker for {@link RpcInvoker}
+     *
+     * 当 RPC.Server类解析出来自网络的RPC请求后，
+     * 会调用ProtoBufRpcInvoker.call()方法响应这 个请求。
+     *
      */
     static class ProtoBufRpcInvoker implements RpcInvoker {
+
+
       private static ProtoClassProtoImpl getProtocolImpl(RPC.Server server,
           String protoName, long clientVersion) throws RpcServerException {
         ProtoNameVer pv = new ProtoNameVer(protoName, clientVersion);
+
+
+        //从RPC.Server的ProtocolImplMap对象中获取接口信息对应的实现类
         ProtoClassProtoImpl impl = 
             server.getProtocolImplMap(RPC.RpcKind.RPC_PROTOCOL_BUFFER).get(pv);
         if (impl == null) { // no match for Protocol AND Version
           VerProtocolImpl highest = 
               server.getHighestSupportedProtocol(RPC.RpcKind.RPC_PROTOCOL_BUFFER, 
                   protoName);
+
+          //如果不存在实现类，则抛出异常
           if (highest == null) {
             throw new RpcNoSuchProtocolException(
                 "Unknown protocol: " + protoName);
           }
+
+          //如果RPC版本不匹配，则抛出异常
           // protocol supported but not the version that client wants
           throw new RPC.VersionMismatch(protoName, clientVersion,
               highest.version);
         }
+
+        //返回实现类
         return impl;
       }
 
       @Override 
-      /**
+       /**
+        *
+        *
        * This is a server side method, which is invoked over RPC. On success
        * the return response has protobuf response payload. On failure, the
        * exception name and the stack trace are returned in the response.
@@ -475,11 +527,22 @@ public class ProtobufRpcEngine implements RpcEngine {
        * <li> Other exceptions thrown by the service. They are returned as
        * it is.</li>
        * </ol>
+        *
+        * call()方法首先会从请求头中提取出RPC 调用的接口名和方法名等信息，
+        * 然后根据调用的接口信息获取对应的BlockingService对 象，
+        * 再根据调用的方法信息在BlockingService对象上调用callBlockingMethod()方法
+        * 并将调用前转到ClientNamenodeProtocolServerSideTranslatorPB对象上，
+        * 最终这个请求会由 NameNodeRpcServer响应。
        */
       public Writable call(RPC.Server server, String connectionProtocolName,
           Writable writableRequest, long receiveTime) throws Exception {
+
+        //获取rpc调用头
         RpcProtobufRequest request = (RpcProtobufRequest) writableRequest;
+
         RequestHeaderProto rpcRequest = request.getRequestHeader();
+
+        //获得调用的接口名、方法名、版本号
         String methodName = rpcRequest.getMethodName();
 
         /** 
@@ -500,14 +563,23 @@ public class ProtobufRpcEngine implements RpcEngine {
 
         String declaringClassProtoName = 
             rpcRequest.getDeclaringClassProtocolName();
+
+
         long clientVersion = rpcRequest.getClientProtocolVersion();
         if (server.verbose)
           LOG.info("Call: connectionProtocolName=" + connectionProtocolName + 
               ", method=" + methodName);
-        
+
+
+        //获得该接口在Server侧对应的实现类
         ProtoClassProtoImpl protocolImpl = getProtocolImpl(server, 
                               declaringClassProtoName, clientVersion);
+
+
         BlockingService service = (BlockingService) protocolImpl.protocolImpl;
+
+
+
         MethodDescriptor methodDescriptor = service.getDescriptorForType()
             .findMethodByName(methodName);
         if (methodDescriptor == null) {
@@ -516,6 +588,8 @@ public class ProtobufRpcEngine implements RpcEngine {
           LOG.warn(msg);
           throw new RpcNoSuchMethodException(msg);
         }
+
+        //获取调用的方法描述符以及调用参数
         Message prototype = service.getRequestPrototype(methodDescriptor);
         Message param = request.getValue(prototype);
 
@@ -525,7 +599,10 @@ public class ProtobufRpcEngine implements RpcEngine {
           server.rpcDetailedMetrics.init(protocolImpl.protocolClass);
           currentCallInfo.set(new CallInfo(server, methodName));
           currentCall.setDetailedMetricsName(methodName);
+
+          //在实现类上调用callBlockingMethod方法，级联适配调用到NameNodeRpcServer
           result = service.callBlockingMethod(methodDescriptor, null, param);
+
           // Check if this needs to be a deferred response,
           // by checking the ThreadLocal callback being set
           if (currentCallback.get() != null) {
