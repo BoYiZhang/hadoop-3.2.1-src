@@ -47,6 +47,7 @@ public class FSDataInputStream extends DataInputStream
     extendedReadBuffers
       = new IdentityHashStore<ByteBuffer, ByteBufferPool>(0);
 
+  //构造方法对传入的InputStream进行判断是否实现了Seekable以及PositionedReadable接口
   public FSDataInputStream(InputStream in) {
     super(in);
     if( !(in instanceof Seekable) || !(in instanceof PositionedReadable) ) {
@@ -56,10 +57,15 @@ public class FSDataInputStream extends DataInputStream
   }
   
   /**
+   *
    * Seek to the given offset.
    *
    * @param desired offset to seek to
    */
+
+  //Seekable接口实现，支持定位操作，调用底层inputStream对应的方法
+  // getPos()、seekToNewSource()等方法同理
+
   @Override
   public void seek(long desired) throws IOException {
     ((Seekable)in).seek(desired);
@@ -86,6 +92,9 @@ public class FSDataInputStream extends DataInputStream
    *         if there is no more data because the end of the stream has been
    *         reached
    */
+
+  // PositionedReadable接口，支持从特定位置读取数据。调用底层inputStream对应的方法
+  // readFully()等方法同理
   @Override
   public int read(long position, byte[] buffer, int offset, int length)
     throws IOException {
@@ -141,6 +150,10 @@ public class FSDataInputStream extends DataInputStream
     return in;
   }
 
+
+  //ByteBufferReadable接口，支待将数据写入ByteBuffer，而不只是byte [] 。
+  // 调用底 层inputStream对应的方法，
+  // HasFileDescriptor、CanSetReadahead、CanSetDropBehind等接口同理
   @Override
   public int read(ByteBuffer buf) throws IOException {
     if (in instanceof ByteBufferReadable) {
@@ -184,6 +197,8 @@ public class FSDataInputStream extends DataInputStream
     }
   }
 
+  //HasEnhancedByteBufferAccess接口提供支持零拷贝的ByteBuffer读取功能，如果读取失败
+  // 则退化为正常的读取
   @Override
   public ByteBuffer read(ByteBufferPool bufferPool, int maxLength,
       EnumSet<ReadOption> opts) 
@@ -204,6 +219,9 @@ public class FSDataInputStream extends DataInputStream
 
   private static final EnumSet<ReadOption> EMPTY_READ_OPTIONS_SET =
       EnumSet.noneOf(ReadOption.class);
+
+  // 模板方法，调用HasEnhancedByteBufferAccess.read()方法，尝试进行零拷贝读取，
+  // 如果出异常，则退化成为正常的读取
 
   final public ByteBuffer read(ByteBufferPool bufferPool, int maxLength)
           throws IOException, UnsupportedOperationException {

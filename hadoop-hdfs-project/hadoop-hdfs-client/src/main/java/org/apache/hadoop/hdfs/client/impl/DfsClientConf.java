@@ -251,9 +251,18 @@ public class DfsClientConf {
 
     shortCircuitConf = new ShortCircuitConf(conf);
 
+    //hedgedReadThresholdMillis字段保存了触 发“hedged read”机制的时长。
+    // “hedged read”模式是Hadoop 2.4中引入的新特 性，
+    // 当Client发现一个数据块读取操作太慢时(读取时长超过 hedgedReadThresholdMillis)，
+    // 那么Client会启动另一个并发操作读取数据块 的另一个副本，
+    // 之后Client会返回先完成读取副本的数据。
+    // 默认值: hedged.read.threshold.millis = 500
+
     hedgedReadThresholdMillis = conf.getLong(
         HedgedRead.THRESHOLD_MILLIS_KEY,
         HedgedRead.THRESHOLD_MILLIS_DEFAULT);
+
+
     hedgedReadThreadpoolSize = conf.getInt(
         HdfsClientConfigKeys.HedgedRead.THREADPOOL_SIZE_KEY,
         HdfsClientConfigKeys.HedgedRead.THREADPOOL_SIZE_DEFAULT);

@@ -33,6 +33,24 @@ import com.google.common.base.Preconditions;
 import org.apache.hadoop.security.AccessControlException;
 
 /**
+ *
+ * INodeReference是一个抽象类，
+ * 它扩展自INode类，
+ *
+ * 所以INodeReference及其子类是可以添 加到文件系统目录树中以替代原有的INodeFile节点的。
+ * INodeReference定义了referred字 段，
+ * 这个字段非常重要，用于保存当前INodeReference类指向的INode节点。
+ *
+ * 例如，
+ * 对于INodeReference的子类WithName和DstReference来说，
+ * referred字段就指向了WithCount对象;
+ * 而对于WithCount来说referred字段则指向了文件系统目录树中真正的INode对象。
+ *
+ * INodeReference抽象类还定义了getReferredINode()方法，
+ * 在文件系统目录树的操作中，
+ * 如 果判断当前节点是一个引用节点，
+ * 则会调用getReferredINode()方法获取INodeReference类 指向的INode对象。
+ *
  * An anonymous reference to an inode.
  *
  * This class and its subclasses are used to support multiple access paths.
@@ -114,7 +132,8 @@ public abstract class INodeReference extends INode {
     }
     return Snapshot.NO_SNAPSHOT_ID;
   }
-  
+
+  //指向的INode节点
   private INode referred;
   
   public INodeReference(INode parent, INode referred) {
@@ -362,9 +381,23 @@ public abstract class INodeReference extends INode {
     return Snapshot.CURRENT_STATE_ID;
   }
   
-  /** An anonymous reference with reference count. */
+  /**
+   * WithCount类定义了一个集合字段withNameList
+   * 用于保存所有指向这个WithCount对象的WithName对象的集合。
+   *
+   * WithCount类还定义了addReference()方法，
+   * 任何指向WithCount对象的WithName对象以及DstReference对象都需要调用这个方法来添加指向关系。
+   *
+   * 对于指向 这个WithCount对象的DstReference对象，
+   *
+   * addReference()方法会将这个对象设置为自己的父INode节点(通过INode.parent字段);
+   * 而对于WithName对象，addReference()方法则将 这个对象放入withNameList集合中保存。
+   *
+   * An anonymous reference with reference count. */
   public static class WithCount extends INodeReference {
 
+
+    //保存所有指向这个WithCount对象的WithName对象的集合
     private final List<WithName> withNameList = new ArrayList<>();
 
     /**
@@ -380,8 +413,12 @@ public abstract class INodeReference extends INode {
     };
     
     public WithCount(INodeReference parent, INode referred) {
+
+      //调用父类的构造方法，指向文件系统目录树中的INode
       super(parent, referred);
       Preconditions.checkArgument(!referred.isReference());
+
+      //设置真实INode的父节点为当前WithCount对象
       referred.setParentReference(this);
     }
     
@@ -395,6 +432,8 @@ public abstract class INodeReference extends INode {
 
     /** Increment and then return the reference count. */
     public void addReference(INodeReference ref) {
+
+      //如果是WithName对象，则加入withNameList
       if (ref instanceof WithName) {
         WithName refWithName = (WithName) ref;
         int i = Collections.binarySearch(withNameList, refWithName,
@@ -402,6 +441,7 @@ public abstract class INodeReference extends INode {
         Preconditions.checkState(i < 0);
         withNameList.add(-i - 1, refWithName);
       } else if (ref instanceof DstReference) {
+        //如果是DstReference对象，则设置为父节点
         setParentReference(ref);
       }
     }
@@ -465,6 +505,8 @@ public abstract class INodeReference extends INode {
   /** A reference with a fixed name. */
   public static class WithName extends INodeReference {
 
+
+    //重命名前的文件名
     private final byte[] name;
 
     /**
@@ -477,6 +519,8 @@ public abstract class INodeReference extends INode {
     
     public WithName(INodeDirectory parent, WithCount referred, byte[] name,
         int lastSnapshotId) {
+
+      //调用父类构造方法，指向WithCount节点
       super(parent, referred);
       this.name = name;
       this.lastSnapshotId = lastSnapshotId;
@@ -638,8 +682,12 @@ public abstract class INodeReference extends INode {
     
     public DstReference(INodeDirectory parent, WithCount referred,
         final int dstSnapshotId) {
+
+      //调用父类构造方法，指向WithCount节点
       super(parent, referred);
       this.dstSnapshotId = dstSnapshotId;
+
+      //调用WithCount.addReference()
       referred.addReference(this);
     }
     

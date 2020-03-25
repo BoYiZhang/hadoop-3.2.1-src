@@ -619,11 +619,21 @@ class FSDirRenameOp {
       srcRefDstSnapshot = srcChildIsReference ?
           srcChild.asReference().getDstSnapshotId() : Snapshot.CURRENT_STATE_ID;
       oldSrcCounts = new QuotaCounts.Builder().build();
+
+      //如果源节点在快照中
       if (isSrcInSnapshot) {
+
+        //调用replaceChild4ReferenceWithName()方法构造WithName和WithCount对象
         final INodeReference.WithName withName = srcParent
             .replaceChild4ReferenceWithName(srcChild, srcLatestSnapshotId);
+
+
         withCount = (INodeReference.WithCount) withName.getReferredINode();
+
+
         srcChild = withName;
+
+
         this.srcIIP = INodesInPath.replace(srcIIP, srcIIP.length() - 1,
             srcChild);
         // get the counts before rename
@@ -633,6 +643,8 @@ class FSDirRenameOp {
         withCount = (INodeReference.WithCount) srcChild.asReference()
             .getReferredINode();
       } else {
+
+        //否则将withCount设置为null，也就是普通的重命名操作
         withCount = null;
       }
     }
@@ -687,6 +699,8 @@ class FSDirRenameOp {
         srcChild.setLocalName(dstChildName);
         toDst = srcChild;
       } else {
+
+        //要使用INodeReference机制的情况，则构造DstReference对象
         withCount.getReferredINode().setLocalName(dstChildName);
         toDst = new INodeReference.DstReference(dstParent.asDirectory(),
             withCount, dstIIP.getLatestSnapshotId());

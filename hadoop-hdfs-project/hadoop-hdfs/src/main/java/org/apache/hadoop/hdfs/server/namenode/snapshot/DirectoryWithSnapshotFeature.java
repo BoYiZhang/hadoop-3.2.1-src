@@ -35,13 +35,27 @@ import java.util.*;
 import static org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot.NO_SNAPSHOT_ID;
 
 /**
+ *
+ *
+ *
  * Feature used to store and process the snapshot diff information for a
  * directory. In particular, it contains a directory diff list recording changes
  * made to the directory and its children for each snapshot.
  */
 @InterfaceAudience.Private
 public class DirectoryWithSnapshotFeature implements INode.Feature {
+
   /**
+   * ChildrenDiff类用于描述INodeDirectory的子目录项集合children字段的当前状态与上一
+   * 个快照版本状态之间的差异。
+   *
+   * ChildrenDiff扩展自Diff类，ChildrenDiff描述的是INode集合状态间的差异，
+   * 而INodeDirectory的children字段正好是一个List<INode>类型，
+   * 也就是目录中所有子目录项(包括文件和子目录)的INode集合。
+   *
+   * ChildrenDiff的c-list(创建列表)和d-list(删除列表)
+   * 存放的就是INodeDirectory在当前状态和上一个快照状态之间新创建的子目录项以及删除的子目录项。
+   *
    * The difference between the current state and a previous snapshot
    * of the children list of an INodeDirectory.
    */
@@ -87,7 +101,7 @@ public class DirectoryWithSnapshotFeature implements INode.Feature {
       clearDeleted();
     }
 
-    /** Serialize {@link #created} */
+
     private void writeCreated(DataOutput out) throws IOException {
       final List<INode> created = getCreatedUnmodifiable();
       out.writeInt(created.size());
@@ -99,7 +113,7 @@ public class DirectoryWithSnapshotFeature implements INode.Feature {
       }
     }
 
-    /** Serialize {@link #deleted} */
+
     private void writeDeleted(DataOutput out,
         ReferenceMap referenceMap) throws IOException {
       final List<INode> deleted = getDeletedUnmodifiable();
@@ -127,13 +141,25 @@ public class DirectoryWithSnapshotFeature implements INode.Feature {
   }
 
   /**
+   *
+   * DirectoryDiff是DirectoryWithSnapshotFeature的内部类，它扩展自AbstractINodeDiff 类。
+   * AbstractINodeDiff类用于抽象INode在两个快照版本之间的状态差异，
+   * 由此可以知道 DirectoryDiff就是用于描述INodeDirectory在两个快照版本之间的状态差异的。
+   *
    * The difference of an {@link INodeDirectory} between two snapshots.
    */
   public static class DirectoryDiff extends
       AbstractINodeDiff<INodeDirectory, INodeDirectoryAttributes, DirectoryDiff> {
-    /** The size of the children list at snapshot creation time. */
+    /**
+     * 快照创建时，INodeDirectory子目录项的数目
+     *
+     * The size of the children list at snapshot creation time. */
     private final int childrenSize;
-    /** The children list diff. */
+
+
+    /**
+     * 子目录项diff
+     * The children list diff. */
     private final ChildrenDiff diff;
     private boolean isSnapshotRoot = false;
     
@@ -141,10 +167,15 @@ public class DirectoryWithSnapshotFeature implements INode.Feature {
       this(snapshotId, dir, new ChildrenDiff());
     }
 
+
     public DirectoryDiff(int snapshotId, INodeDirectory dir,
         ChildrenDiff diff) {
       super(snapshotId, null, null);
+
+      //获取快照建立时，子目录项的个数
       this.childrenSize = dir.getChildrenList(Snapshot.CURRENT_STATE_ID).size();
+
+      //构造一个新的ChildrenDiff对象，记录INodeDirectory.children字段的变化
       this.diff = diff;
     }
     /** Constructor used by FSImage loading */
@@ -294,7 +325,11 @@ public class DirectoryWithSnapshotFeature implements INode.Feature {
     }
   }
 
-  /** A list of directory diffs. */
+  /**
+   * AbstractINodeDiffList维护了一个AbstractINodeDiff的集合列表，用于保存一个INode
+   * 拥有的所有AbstractINodeDiff对象，也就是记录了INode所有快照间差异的列表。
+   *
+   * A list of directory diffs. */
   public static class DirectoryDiffList
       extends AbstractINodeDiffList<INodeDirectory, INodeDirectoryAttributes, DirectoryDiff> {
 
@@ -490,7 +525,10 @@ public class DirectoryWithSnapshotFeature implements INode.Feature {
     }
   }
 
-  /** Diff list sorted by snapshot IDs, i.e. in chronological order. */
+  /**
+   * 用于保存 当前目录以及它的子目录项在不同快照间的所有差异。
+   *
+   * Diff list sorted by snapshot IDs, i.e. in chronological order. */
   private final DirectoryDiffList diffs;
 
   public DirectoryWithSnapshotFeature(DirectoryDiffList diffs) {

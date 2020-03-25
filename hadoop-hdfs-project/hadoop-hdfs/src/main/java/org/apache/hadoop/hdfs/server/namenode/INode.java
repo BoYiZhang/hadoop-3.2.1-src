@@ -59,7 +59,12 @@ import com.google.common.base.Preconditions;
 public abstract class INode implements INodeAttributes, Diff.Element<byte[]> {
   public static final Logger LOG = LoggerFactory.getLogger(INode.class);
 
-  /** parent is either an {@link INodeDirectory} or an {@link INodeReference}.*/
+  /**
+   * INode类中只有一个字段 , 表明当前INode的父目录。
+   * HDFS中除了根目录外，其他所有的文件与目录都存在一个父目录。
+   * 注意，父目录的类型只能是 INodeDirectory类或者INodeReference类之一。
+   *
+   * parent is either an {@link INodeDirectory} or an {@link INodeReference}.*/
   private INode parent = null;
 
   INode(INode parent) {
@@ -100,9 +105,11 @@ public abstract class INode implements INodeAttributes, Diff.Element<byte[]> {
   }
 
   /** Set user */
+  //抽象方法，具体实现留给子类
   abstract void setUser(String user);
 
   /** Set user */
+  //模板方法，是final的，不可以继承，供接口调用
   final INode setUser(String user, int latestSnapshotId) {
     recordModification(latestSnapshotId);
     setUser(user);
@@ -566,6 +573,11 @@ public abstract class INode implements INodeAttributes, Diff.Element<byte[]> {
    */
   public abstract void setLocalName(byte[] name);
 
+
+  /**
+   * 文件/目录的完整路径。
+   * @return
+   */
   public String getFullPathName() {
     // Get the full path name of this inode.
     if (isRoot()) {

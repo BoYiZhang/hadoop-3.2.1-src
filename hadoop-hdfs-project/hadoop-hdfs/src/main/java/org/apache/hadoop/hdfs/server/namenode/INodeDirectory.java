@@ -47,6 +47,8 @@ import org.apache.hadoop.security.AccessControlException;
 import static org.apache.hadoop.hdfs.protocol.HdfsConstants.BLOCK_STORAGE_POLICY_ID_UNSPECIFIED;
 
 /**
+ *
+ *
  * Directory INode class.
  */
 public class INodeDirectory extends INodeWithAdditionalFields
@@ -71,6 +73,7 @@ public class INodeDirectory extends INodeWithAdditionalFields
 
   static final byte[] ROOT_NAME = DFSUtil.string2Bytes("");
 
+  //使用一个children字段保存该目录中所有孩子节点的INode对象
   private List<INode> children = null;
   
   /** constructor */
@@ -520,11 +523,14 @@ public class INodeDirectory extends INodeWithAdditionalFields
    * @return true if the child is removed; false if the child is not found.
    */
   public boolean removeChild(final INode child) {
+
+    //找到INode节点在children列表中的位置
     final int i = searchChildren(child.getLocalNameBytes());
     if (i < 0) {
       return false;
     }
 
+    //从chilren列表中删除
     final INode removed = children.remove(i);
     Preconditions.checkState(removed == child);
     return true;
@@ -542,6 +548,8 @@ public class INodeDirectory extends INodeWithAdditionalFields
    */
   public boolean addChild(INode node, final boolean setModTime,
       final int latestSnapshotId) {
+
+    //首先找到INode节点在children列表中的位置
     final int low = searchChildren(node.getLocalNameBytes());
     if (low >= 0) {
       return false;
@@ -555,6 +563,8 @@ public class INodeDirectory extends INodeWithAdditionalFields
       }
       return sf.addChild(this, node, setModTime, latestSnapshotId);
     }
+
+    //调用addChild()方法将INode节点插入到children列表的low位置
     addChild(node, low);
     if (setModTime) {
       // update modification time of the parent directory

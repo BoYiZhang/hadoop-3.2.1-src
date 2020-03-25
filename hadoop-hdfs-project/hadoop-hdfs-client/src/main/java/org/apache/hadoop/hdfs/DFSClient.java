@@ -306,9 +306,15 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     // Copy only the required DFSClient configuration
     this.tracer = FsTracer.get(conf);
     this.dfsClientConf = new DfsClientConf(conf);
+
+    //HDFS配置信息。
     this.conf = conf;
+
+    //Client状态统计信息，包括Client读、写字节数等。
     this.stats = stats;
     this.socketFactory = NetUtils.getSocketFactory(conf, ClientProtocol.class);
+
+    // 当Client读写数据时，如果Datanode出现故障，是否进行Datanode替换的策略。
     this.dtpReplaceDatanodeOnFailure = ReplaceDatanodeOnFailure.get(conf);
     this.smallBufferSize = DFSUtilClient.getSmallBufferSize(conf);
     this.dtpReplaceDatanodeOnFailureReplication = (short) conf
@@ -367,6 +373,8 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
 
     String localInterfaces[] =
         conf.getTrimmedStrings(DFS_CLIENT_LOCAL_INTERFACES);
+
+    //本地接口地址。
     localInterfaceAddrs = getLocalInterfaceAddrs(localInterfaces);
     if (LOG.isDebugEnabled() && 0 != localInterfaces.length) {
       LOG.debug("Using local interfaces [" +
@@ -374,14 +382,19 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
           Joiner.on(',').join(localInterfaceAddrs) + "]");
     }
 
+    //读取数据后，是否立即从操作系统缓冲区中删除。 默认值 false
     Boolean readDropBehind =
         (conf.get(DFS_CLIENT_CACHE_DROP_BEHIND_READS) == null) ?
             null : conf.getBoolean(DFS_CLIENT_CACHE_DROP_BEHIND_READS, false);
+
+    //预读取字节数。
     Long readahead = (conf.get(DFS_CLIENT_CACHE_READAHEAD) == null) ?
         null : conf.getLong(DFS_CLIENT_CACHE_READAHEAD, 0);
     this.serverDefaultsValidityPeriod =
             conf.getLong(DFS_CLIENT_SERVER_DEFAULTS_VALIDITY_PERIOD_MS_KEY,
       DFS_CLIENT_SERVER_DEFAULTS_VALIDITY_PERIOD_MS_DEFAULT);
+
+    //写数据后，是否立即从操作系统缓冲区中删除。
     Boolean writeDropBehind =
         (conf.get(DFS_CLIENT_CACHE_DROP_BEHIND_WRITES) == null) ?
             null : conf.getBoolean(DFS_CLIENT_CACHE_DROP_BEHIND_WRITES, false);
@@ -634,10 +647,15 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   @Override
   public synchronized void close() throws IOException {
     if(clientRunning) {
-      // lease renewal stops when all files are closed
+
+      //首先调用closeAllFilesBeingWritten()关闭所有正 在进行写操作的IO流。
+      // 接下来将clientRunning标志位置为false，停止DFSClient对外服务，
+      // 然后停止租约管理器，最后关闭与Namenode的RPC连接。
+
       closeAllFilesBeingWritten(false);
       clientRunning = false;
       // close connections to the namenode
+      // 租约管理器停止.[停止向 namenode 发送心跳]
       closeConnectionToNamenode();
     }
   }
@@ -2291,7 +2309,9 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   long rollEdits() throws IOException {
     checkOpen();
     try (TraceScope ignored = tracer.newScope("rollEdits")) {
+      //通过ClientProtocol接口触发Namenode进行rollEdits操作
       return namenode.rollEdits();
+
     } catch (RemoteException re) {
       throw re.unwrapRemoteException(AccessControlException.class);
     }
@@ -2348,6 +2368,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
    *
    * @see ClientProtocol#setBalancerBandwidth(long)
    */
+
   public void setBalancerBandwidth(long bandwidth) throws IOException {
     checkOpen();
     try (TraceScope ignored = tracer.newScope("setBalancerBandwidth")) {

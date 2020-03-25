@@ -33,8 +33,16 @@ import com.google.common.base.Preconditions;
 @InterfaceAudience.Private
 public abstract class INodeWithAdditionalFields extends INode
     implements LinkedElement {
+
+
+  // 枚举类PermissionStatusFormat就是用来解析以及处理permission字段的工具类，
+  // 提供了获取permission字段中mode、group、user部分
+  // 对应的文件模式、用户组名以及用户名的方法。
+
+
   // Note: this format is used both in-memory and on-disk.  Changes will be
   // incompatible.
+
   enum PermissionStatusFormat implements LongBitFormat.Enum {
     MODE(null, 16),
     GROUP(MODE.BITS, 24),
@@ -46,23 +54,35 @@ public abstract class INodeWithAdditionalFields extends INode
       BITS = new LongBitFormat(name(), previous, length, 0);
     }
 
+    //提取最后24个比特的user信息，并通过SerialNumberManager获取用户名
     static String getUser(long permission) {
+      //首先获取permission中最后24个比特的用户标识
       final int n = (int)USER.BITS.retrieve(permission);
+      //通过SerialNumberManager类获取用户标识对应的用户名
       String s = SerialNumberManager.USER.getString(n);
       assert s != null;
       return s;
     }
 
+    //提取中间24个比特的group信息，并通过SerialNumberManager获取用户组名
     static String getGroup(long permission) {
+
+      //首先获取permission中间24个比特的用户组标识
       final int n = (int)GROUP.BITS.retrieve(permission);
+      //使用SerialNumberManager获取用户组标识对应的用户组名
       return SerialNumberManager.GROUP.getString(n);
     }
-    
+
+    //提取前16个比特的mode信息
     static short getMode(long permission) {
+
       return (short)MODE.BITS.retrieve(permission);
     }
 
-    /** Encode the {@link PermissionStatus} to a long. */
+    /**
+     * 将一个PermissionStatus类，转换成long类型的permission信息
+     *
+     * Encode the {@link PermissionStatus} to a long. */
     static long toLong(PermissionStatus ps) {
       long permission = 0L;
       final int user = SerialNumberManager.USER.getSerialNumber(
@@ -105,11 +125,23 @@ public abstract class INodeWithAdditionalFields extends INode
    *  side should change accordingly.
    */
   private byte[] name = null;
-  /** 
+  /**
+   *
+   *
    * Permission encoded using {@link PermissionStatusFormat}.
    * Codes other than {@link #clonePermissionStatus(INodeWithAdditionalFields)}
    * and {@link #updatePermissionStatus(PermissionStatusFormat, long)}
    * should not modify it.
+   *
+   * permission字段主要包括3个部分的信息:用户信息、用户组信息和权限信息。
+   *
+   * permission字段是long类型的，
+   *
+   * 其中前16个比特用来存放文件模式标识(mode，类似 于Linux中的777)
+   * 中间25个比特用来存放用户组标识(group)，
+   * 最后23个比特用来存 放用户名标识(user)
+   *
+   *
    */
   private long permission = 0L;
   /** The last modification time*/
@@ -121,7 +153,11 @@ public abstract class INodeWithAdditionalFields extends INode
   private LinkedElement next = null;
   /** An array {@link Feature}s. */
   private static final Feature[] EMPTY_FEATURE = new Feature[0];
+
+
+  //保存当前 INode拥有哪些特性的字段，它是一个Feature类型的数组，默认值是空数组
   protected Feature[] features = EMPTY_FEATURE;
+
 
   private INodeWithAdditionalFields(INode parent, long id, byte[] name,
       long permission, long modificationTime, long accessTime) {
@@ -293,13 +329,20 @@ public abstract class INodeWithAdditionalFields extends INode
     this.accessTime = accessTime;
   }
 
+  /**
+   * addFeature()方法向features数组中添加了一个新的Feature元 素
+   * @param f
+   */
   protected void addFeature(Feature f) {
     int size = features.length;
+    //申请一个更大的数组
     Feature[] arr = new Feature[size + 1];
     if (size != 0) {
       System.arraycopy(features, 0, arr, 0, size);
     }
+    //将新的Feature对象添加到数组中
     arr[size] = f;
+    //用新数组替换features引用
     features = arr;
   }
 

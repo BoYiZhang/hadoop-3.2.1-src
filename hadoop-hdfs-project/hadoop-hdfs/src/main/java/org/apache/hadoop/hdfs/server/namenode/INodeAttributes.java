@@ -37,31 +37,46 @@ public interface INodeAttributes {
    */
   public byte[] getLocalNameBytes();
 
-  /** @return the user name. */
+  /**
+   * 文件/目录所属用户名。
+   * @return the user name. */
   public String getUserName();
 
-  /** @return the group name. */
+  /**
+   * 文件/目录所属组名。
+   * @return the group name. */
   public String getGroupName();
   
   /** @return the permission. */
   public FsPermission getFsPermission();
 
-  /** @return the permission as a short. */
+  /**
+   * 文件/目录访问权限。
+   * @return the permission as a short. */
   public short getFsPermissionShort();
   
   /** @return the permission information as a long. */
   public long getPermissionLong();
 
-  /** @return the ACL feature. */
+  /**
+   * 安全相关。
+   * @return the ACL feature. */
   public AclFeature getAclFeature();
-  
+
+  //当前文件/目录的扩展属性(ExtendedAttributes)。
   /** @return the XAttrs feature. */
   public XAttrFeature getXAttrFeature();
 
-  /** @return the modification time. */
+  /**
+   * 文件/目录上次修改时间。
+   * @return the modification time. */
   public long getModificationTime();
 
-  /** @return the access time. */
+  /**
+   * 文件/目录上次访问时间。
+   * @return the access time.
+   *
+   * */
   public long getAccessTime();
 
   /** A read-only copy of the inode attributes. */

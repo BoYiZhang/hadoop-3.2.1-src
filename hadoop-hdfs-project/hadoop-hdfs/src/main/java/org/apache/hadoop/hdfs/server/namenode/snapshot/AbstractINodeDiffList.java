@@ -26,6 +26,10 @@ import org.apache.hadoop.hdfs.server.namenode.INodeAttributes;
 import org.apache.hadoop.hdfs.server.namenode.INodeDirectory;
 
 /**
+ *
+ * AbstractINodeDiffList维护了一个AbstractINodeDiff的集合列表，用于保存一个INode
+ * 拥有的所有AbstractINodeDiff对象，也就是记录了INode所有快照间差异的列表。
+ *
  * A list of snapshot diffs for storing snapshot data.
  *
  * @param <N> The {@link INode} type.
@@ -36,8 +40,16 @@ abstract class AbstractINodeDiffList<N extends INode,
                                      D extends AbstractINodeDiff<N, A, D>> 
     implements Iterable<D> {
 
-  /** Diff list sorted by snapshot IDs, i.e. in chronological order.
+  /**
+   *
+   * diffs保存了INode所有快照间的AbstractINodeDiff对象，
+   * 所有AbstractINodeDiff对象是按照快照ID排序的。
+   * AbstractINodeDiffList的方法主要用于维护diffs这个数据结构。
+   *
+   * Diff list sorted by snapshot IDs, i.e. in chronological order.
     * Created lazily to avoid wasting memory by empty lists. */
+
+  ///快照的Diff列表，这个列表按照快照ID排序
   private DiffList<D> diffs;
 
   /** @return this list as a unmodifiable {@link List}. */

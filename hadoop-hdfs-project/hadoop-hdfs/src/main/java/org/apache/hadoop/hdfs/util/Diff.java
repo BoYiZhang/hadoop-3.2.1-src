@@ -25,6 +25,20 @@ import java.util.List;
 import com.google.common.base.Preconditions;
 
 /**
+ *
+ * Diff类用来描述一个集合的当前状态和上一 个状态之间的不同。
+ * Diff类中有两个列表:c-list记录了集合在两个状态之间新创建的元 素;
+ * d-list记录了集合在两个状态之间删除的元素。
+ *
+ * 使用这两个列表，Diff类可以记录集合 上一个状态与当前状态之间所有新创建、删除与修改的元素。
+ *
+ *
+ * Diff类的算法很简单:
+ * 对于新创建的元素，放入c-list中;
+ * 对于新删除的元素，放入d- list中;
+ * 对于修改的元素，则同时放入c-list和d-list中。
+ *
+ *
  * The difference between the current state and a previous state of a list.
  * 
  * Given a previous state of a set and a sequence of create, delete and modify

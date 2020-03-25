@@ -28,6 +28,10 @@ import org.apache.hadoop.hdfs.server.common.StorageInfo;
 import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 
 /**
+ * JournalManager类是负责在特定存储目录上持久化editlog文件的类，它的format()方法 负责格式化底层存储，
+ * startLogSegment()方法负责从指定事务id开始记录一个操作的段落，
+ * finalizeLogSegment()方法负责完成指定事务id区间的写操作。
+ *
  * A JournalManager is responsible for managing a single place of storing
  * edit logs. It may correspond to multiple files, a backup node, etc.
  * Even when the actual underlying storage is rolled, or failed and restored,

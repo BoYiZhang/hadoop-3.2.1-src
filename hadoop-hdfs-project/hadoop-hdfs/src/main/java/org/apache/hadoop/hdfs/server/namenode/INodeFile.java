@@ -60,7 +60,10 @@ import static org.apache.hadoop.io.erasurecode.ErasureCodeConstants.REPLICATION_
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
-/** I-node for closed file. */
+/**
+ * I-node for closed file.
+ *
+ * */
 @InterfaceAudience.Private
 public class INodeFile extends INodeWithAdditionalFields
     implements INodeFileAttributes, BlockCollection {
@@ -92,7 +95,15 @@ public class INodeFile extends INodeWithAdditionalFields
     return inode.asFile();
   }
 
-  /** 
+  /**
+   *
+   * 它的实现很简单，
+   * 就是从header这个long类型字段中提取
+   *      出前4个比特的存储策略信息、
+   *      中间12个比特的文件备份系数信息，
+   *      以及后48个比特的数据块大小信息。
+   *
+   *
    * Bit format:
    * [4-bit storagePolicyID][12-bit BLOCK_LAYOUT_AND_REDUNDANCY]
    * [48-bit preferredBlockSize]
@@ -122,8 +133,11 @@ public class INodeFile extends INodeWithAdditionalFields
    */
   enum HeaderFormat {
     PREFERRED_BLOCK_SIZE(null, 48, 1),
+
+
     BLOCK_LAYOUT_AND_REDUNDANCY(PREFERRED_BLOCK_SIZE.BITS,
         HeaderFormat.LAYOUT_BIT_WIDTH + 11, 0),
+
     STORAGE_POLICY_ID(BLOCK_LAYOUT_AND_REDUNDANCY.BITS,
         BlockStoragePolicySuite.ID_BIT_LENGTH, 0);
 
@@ -248,8 +262,20 @@ public class INodeFile extends INodeWithAdditionalFields
 
   }
 
+  //文件头信息
+
+  // header字段保存了当前文件有多少个副本，
+  // 以及文件数据块的大小
+  // (header字段的处理类似于INode中的permission字段，
+  // 前4个比特用于保存存储策略，
+  // 中间12个比特用于保存文件备份系数，
+  // 后48个比特用于保存数据块大小。
+  // 使用内部类HeaderFormat处理);
   private long header = 0L;
 
+
+  //文件数据块信息
+  //文件对应的 数据块信息blocks字段
   private BlockInfo[] blocks;
 
   INodeFile(long id, byte[] name, PermissionStatus permissions, long mtime,
