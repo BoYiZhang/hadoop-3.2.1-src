@@ -1229,7 +1229,7 @@ function hadoop_add_classpath
 ## @return       1 = failure (doesn't exist or some other reason)
 function hadoop_add_colonpath
 {
-  # this is CLASSPATH, JLP, etc but with dedupe but no
+  # This is CLASSPATH, JLP, etc but with dedupe but no
   # other checking
   if [[ -d "${2}" ]] && [[ ":${!1}:" != *":$2:"* ]]; then
     if [[ -z "${!1}" ]]; then
@@ -1714,7 +1714,7 @@ function hadoop_status_daemon
   # 2 = (not used by us)
   # 3 = not running
   #
-  # 1 - this is not an endorsement of the LSB
+  # 1 - This is not an endorsement of the LSB
   #
   # 2 - technically, the specification says /var/run/pid, so
   #     we should never return this value, but we're giving
@@ -1731,7 +1731,7 @@ function hadoop_status_daemon
   if [[ -f "${pidfile}" ]]; then
     pid=$(cat "${pidfile}")
     if pspid=$(ps -o args= -p"${pid}" 2>/dev/null); then
-      # this is to check that the running process we found is actually the same
+      # This is to check that the running process we found is actually the same
       # daemon that we're interested in
       if [[ ${pspid} =~ -Dproc_${daemonname} ]]; then
         return 0
@@ -1752,7 +1752,7 @@ function hadoop_status_daemon
 ## @param        [options]
 function hadoop_java_exec
 {
-  # run a java command.  this is used for
+  # run a java command.  This is used for
   # non-daemons
 
   local command=$1
@@ -1767,8 +1767,19 @@ function hadoop_java_exec
   hadoop_debug "Command line options: $*"
 
   export CLASSPATH
+
+  hadoop_java_exec
+
+  echo "********************   hadoop-functions.sh#hadoop_java_exec  start ******************** "
+
+  echo "${JAVA}" "-Dproc_${command}" ${HADOOP_OPTS} "${class}" "$@"
+
+  echo "********************   hadoop-functions.sh#hadoop_java_exec end ******************** "
+
+
   #shellcheck disable=SC2086
   exec "${JAVA}" "-Dproc_${command}" ${HADOOP_OPTS} "${class}" "$@"
+
 }
 
 ## @description  Start a non-privileged daemon in the foreground.
@@ -1781,13 +1792,17 @@ function hadoop_java_exec
 ## @param        [options]
 function hadoop_start_daemon
 {
-  # this is our non-privileged daemon starter
+  # This is our non-privileged daemon starter
   # that fires up a daemon in the *foreground*
   # so complex! so wow! much java!
   local command=$1
   local class=$2
   local pidfile=$3
   shift 3
+
+  echo "This is hadoop-functions.sh#hadoop_start_daemon ...."
+
+
 
   hadoop_debug "Final CLASSPATH: ${CLASSPATH}"
   hadoop_debug "Final HADOOP_OPTS: ${HADOOP_OPTS}"
@@ -1796,7 +1811,7 @@ function hadoop_start_daemon
   hadoop_debug "Class name: ${class}"
   hadoop_debug "Command line options: $*"
 
-  # this is for the non-daemon pid creation
+  # This is for the non-daemon pid creation
   #shellcheck disable=SC2086
   echo $$ > "${pidfile}" 2>/dev/null
   if [[ $? -gt 0 ]]; then
@@ -1804,6 +1819,16 @@ function hadoop_start_daemon
   fi
 
   export CLASSPATH
+
+  echo "********************   hadoop-functions.sh#hadoop_start_daemon  start ******************** "
+
+  echo "${JAVA}" "-Dproc_${command}" ${HADOOP_OPTS} "${class}" "$@"
+
+  echo "********************   hadoop-functions.sh#hadoop_start_daemon end ******************** "
+
+
+
+
   #shellcheck disable=SC2086
   exec "${JAVA}" "-Dproc_${command}" ${HADOOP_OPTS} "${class}" "$@"
 }
@@ -1825,9 +1850,16 @@ function hadoop_start_daemon_wrapper
   local outfile=$4
   shift 4
 
+  echo "This is hadoop-functions.sh#hadoop_start_daemon_wrapper ...."
+
   local counter
 
   hadoop_rotate_log "${outfile}"
+
+  echo "This is hadoop-functions.sh#hadoop_start_daemon_wrapper ==> hadoop_start_daemon "${daemonname}" \
+    "$class" \
+    "${pidfile}" \
+    "$@" >> "${outfile}" 2>&1 < /dev/null"
 
   hadoop_start_daemon "${daemonname}" \
     "$class" \
@@ -1843,7 +1875,7 @@ function hadoop_start_daemon_wrapper
     (( counter++ ))
   done
 
-  # this is for daemon pid creation
+  # This is for daemon pid creation
   #shellcheck disable=SC2086
   echo $! > "${pidfile}" 2>/dev/null
   if [[ $? -gt 0 ]]; then
@@ -1886,7 +1918,7 @@ function hadoop_start_daemon_wrapper
 ## @param        [options]
 function hadoop_start_secure_daemon
 {
-  # this is used to launch a secure daemon in the *foreground*
+  # This is used to launch a secure daemon in the *foreground*
   #
   local daemonname=$1
   local class=$2
@@ -1933,6 +1965,27 @@ function hadoop_start_secure_daemon
   if [[ $? -gt 0 ]]; then
     hadoop_error "ERROR:  Cannot write ${daemonname} pid ${privpidfile}."
   fi
+
+
+
+
+
+  echo "********************   hadoop-functions.sh#hadoop_start_secure_daemon  start ******************** "
+
+  echo "${jsvc}" \
+    "-Dproc_${daemonname}" \
+    ${HADOOP_DAEMON_JSVC_EXTRA_OPTS} \
+    -outfile "${daemonoutfile}" \
+    -errfile "${daemonerrfile}" \
+    -pidfile "${daemonpidfile}" \
+    -nodetach \
+    -user "${HADOOP_SECURE_USER}" \
+    -cp "${CLASSPATH}" \
+    ${HADOOP_OPTS} \
+    "${class}" "$@"
+
+  echo "********************   hadoop-functions.sh#hadoop_start_secure_daemon end ******************** "
+
 
   # shellcheck disable=SC2086
   exec "${jsvc}" \
@@ -2170,6 +2223,10 @@ function hadoop_daemon_handler
   local class=$3
   local daemon_pidfile=$4
   local daemon_outfile=$5
+
+  echo "This is hadoop-functions.sh#hadoop_daemon_handler ...."
+
+
   shift 5
 
   case ${daemonmode} in
@@ -2222,6 +2279,9 @@ function hadoop_daemon_handler
 ## @param        [options]
 function hadoop_secure_daemon_handler
 {
+
+  echo "This is hadoop-functions.sh#hadoop_secure_daemon_handler ...."
+
   local daemonmode=$1
   local daemonname=$2
   local classname=$3
@@ -2272,7 +2332,7 @@ function hadoop_secure_daemon_handler
   esac
 }
 
-## @description autodetect whether this is a priv subcmd
+## @description autodetect whether This is a priv subcmd
 ## @description by whether or not a priv user var exists
 ## @description and if HADOOP_SECURE_CLASSNAME is defined
 ## @audience     public
@@ -2630,6 +2690,9 @@ function hadoop_generic_java_subcmd_handler
   declare daemon_outfile
   declare daemon_pidfile
   declare secureuser
+
+  echo "This is hadoop-functions.sh#hadoop_generic_java_subcmd_handler ..... "
+
 
   # The default/expected way to determine if a daemon is going to run in secure
   # mode is defined by hadoop_detect_priv_subcmd.  If this returns true

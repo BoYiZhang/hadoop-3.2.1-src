@@ -55,5 +55,14 @@ fi
 hadoop_error "WARNING: Use of this script to ${daemonmode} HDFS daemons is deprecated."
 hadoop_error "WARNING: Attempting to execute replacement \"hdfs --daemon ${daemonmode}\" instead."
 
+
+echo "********************   hadoop-daemon.sh  start ******************** "
+
+echo "$hdfsscript" --config "${HADOOP_CONF_DIR}" --daemon "${daemonmode}" "$@"
+
+echo "********************   hadoop-daemon.sh end ******************** "
+
+# /Users/sysadmin/tools/hadoop-3.2.1/bin/hdfs --config /Users/sysadmin/tools/hadoop-3.2.1/etc/hadoop --daemon start namenode
+
 exec "$hdfsscript" --config "${HADOOP_CONF_DIR}" --daemon "${daemonmode}" "$@"
 
