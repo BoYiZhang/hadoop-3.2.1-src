@@ -60,7 +60,6 @@ src/target/
 *.log
 tools/target/
 *.class
-*pom.xml
 # Log file
 *.log
 .fbprefs

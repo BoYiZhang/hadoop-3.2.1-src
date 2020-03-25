@@ -79,4 +79,5 @@ docker run --rm=true $DOCKER_INTERACTIVE_RUN \
   -w "/home/${USER_NAME}/hadoop" \
   -v "${HOME}/.m2:/home/${USER_NAME}/.m2${V_OPTS:-}" \
   -u "${USER_NAME}" \
+  -m 4G \
   "hadoop-build-${USER_ID}" "$@"
