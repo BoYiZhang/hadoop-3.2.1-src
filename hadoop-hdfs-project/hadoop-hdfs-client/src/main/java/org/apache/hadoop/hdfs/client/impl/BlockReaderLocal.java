@@ -46,6 +46,12 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
+ *
+ * 进行本地短路读取（ 请参考短路读取相关小节） 的
+ * BlockReader。 当客户端与Datanode在同一台物理机器上时， 客户端可以直接从
+ * 本地磁盘读取数据， 绕过Datanode进程， 从而提高了读取性能
+ *
+ *
  * BlockReaderLocal enables local short circuited reads. If the DFS client is on
  * the same machine as the datanode, then the client can read files directly
  * from the local file system rather than going through the datanode for better
@@ -316,6 +322,7 @@ class BlockReaderLocal implements BlockReader {
     }
   }
 
+  //将dataBuf缓冲区中的数据拉取到buf中， 然后返回读取的字节数
   private synchronized int drainDataBuf(ByteBuffer buf) {
     if (dataBuf == null) return -1;
     int oldLimit = dataBuf.limit();
@@ -333,6 +340,9 @@ class BlockReaderLocal implements BlockReader {
   }
 
   /**
+   *
+   * 将数据从输入流读入指定buf中， 并将校验和读入checksumBuf中进行校验操作
+   *
    * Read from the block file into a buffer.
    *
    * This function overwrites checksumBuf.  It will increment dataPos.
@@ -391,6 +401,17 @@ class BlockReaderLocal implements BlockReader {
     return total;
   }
 
+
+  //createNoChecksumContext()会判断如果verifyChecksum字段为false， 也就是当前配置
+  //本来就不需要进行校验， 则直接返回true， 创建免校验上下文成功。 如果当前配置需要进
+  //行校验， 那么尝试在Datanode和Client共享内存中副本的Slot上添加一个免校验的锚
+
+  //当且仅当Datanode已经缓存了这个副本
+  //时， 才可以添加一个锚。 因为当Datanode尝试缓存一个数据块副本时， 会验证数据块的校
+  //验和， 然后通过mmap以及mlock将数据块缓存到内存中。 也就是说， 当前Datanode上缓存
+  //的数据块是经过校验的、 是正确的， 不用再次进行校验
+
+
   private boolean createNoChecksumContext() {
     return !verifyChecksum ||
         // Checksums are not stored for replicas on transient storage.  We do
@@ -408,8 +429,14 @@ class BlockReaderLocal implements BlockReader {
     }
   }
 
+  // read(ByteBuffer buf)方法的代码可以切分为三块：
+  // ①判断能否通过createNoChecksumContext()方法创建一个免校验上下文；
+  // ②如果可以免校验， 并且无预读取请求， 则调用readWithoutBounceBuffer()方法读取数据；
+  // ③如果不可以免校验， 并且开启了预读取， 则调用readWithBounceBuffer()方法读取数据。
   @Override
   public synchronized int read(ByteBuffer buf) throws IOException {
+
+    //能否跳过数据校验
     boolean canSkipChecksum = createNoChecksumContext();
     try {
       String traceFormatStr = "read(buf.remaining={}, block={}, filename={}, "
@@ -418,9 +445,11 @@ class BlockReaderLocal implements BlockReader {
           buf.remaining(), block, filename, canSkipChecksum);
       int nRead;
       try {
+        //可以跳过数据校验， 以及不需要预读取时， 调用readWithoutBounceBuffer()方法
         if (canSkipChecksum && zeroReadaheadRequested) {
           nRead = readWithoutBounceBuffer(buf);
         } else {
+          //需要校验， 以及开启了预读取时， 调用readWithBounceBuffer()方法
           nRead = readWithBounceBuffer(buf, canSkipChecksum);
         }
       } catch (IOException e) {
@@ -436,11 +465,19 @@ class BlockReaderLocal implements BlockReader {
     }
   }
 
+  //它不使用额外的数据以及校验和缓冲区预
+  //读取数据以及校验和， 而是直接从数据流中将数据读取到缓冲区。
   private synchronized int readWithoutBounceBuffer(ByteBuffer buf)
       throws IOException {
+
+    //释放dataBuffer
     freeDataBufIfExists();
+    //释放checksumBuffer
     freeChecksumBufIfExists();
+
     int total = 0;
+
+    //直接从输入流中将数据读取到buf
     while (buf.hasRemaining()) {
       int nRead = blockReaderIoProvider.read(dataIn, buf, dataPos);
       if (nRead <= 0) break;
@@ -451,6 +488,11 @@ class BlockReaderLocal implements BlockReader {
   }
 
   /**
+   *
+   * 调用fillBuffer()方法将数据读入dataBuf缓冲区中， 将校验和读入
+   * checksumBuf缓冲区中。 这里要注意， dataBuf缓冲区中的数据始终是chunk（一
+   * 个校验值对应的数据长度） 的整数倍。
+   *
    * Fill the data buffer.  If necessary, validate the data against the
    * checksums.
    *
@@ -503,10 +545,27 @@ class BlockReaderLocal implements BlockReader {
    *
    * @param buf              The buffer to read into.
    * @param canSkipChecksum  True if we can skip checksums.
+   *
+   *
+   * readWithBounceBuffer()方法在BlockReaderLocal对象上申请了两个缓冲区：
+   *          dataBuf，数据缓冲区；
+   *          checksumBuf； 校验和缓冲区。
+   *
+   * dataBuf缓冲区的大小为maxReadaheadLength，
+   * 这个长度始终是校验块（chunk， 一个校验值对应的数据长度） 的
+   * 整数倍， 这样设计是为了进行校验操作时比较方便， 能够以校验块为单位读取数据。
+   * dataBuf和checksumBuf的构造使用了direct byte buffer， 也就是堆外内存上的缓冲区
+   *
+   * dataBuf以及checksumBuf都是通过调用java.nio.ByteBuffer.allocateDirect()方
+   * 法分配的堆外内存。 这里值得我们积累， 对于比较大的缓冲区， 可以通过调用
+   * java.nio提供的方法， 将缓冲区分配在堆外， 节省宝贵的堆内存空间。
+   *
    */
   private synchronized int readWithBounceBuffer(ByteBuffer buf,
         boolean canSkipChecksum) throws IOException {
     int total = 0;
+
+    //调用drainDataBuf()， 将dataBuf缓冲区中的数据写入buf
     int bb = drainDataBuf(buf); // drain bounce buffer if possible
     if (bb >= 0) {
       total += bb;
@@ -514,6 +573,8 @@ class BlockReaderLocal implements BlockReader {
     }
     boolean eof = true, done = false;
     do {
+
+      //如果buf的空间足够大， 并且输入流游标在chunk边界上， 则直接从IO流中将数据写入buf
       if (buf.isDirect() && (buf.remaining() >= maxReadaheadLength)
             && ((dataPos % bytesPerChecksum) == 0)) {
         // Fast lane: try to read directly into user-supplied buffer, bypassing
@@ -534,10 +595,14 @@ class BlockReaderLocal implements BlockReader {
         }
         total += nRead;
       } else {
+
+        //否则， 将数据读入dataBuf缓存
         // Slow lane: refill bounce buffer.
         if (fillDataBuf(canSkipChecksum)) {
           done = true;
         }
+
+        //然后将dataBuf中的数据导入buf
         bb = drainDataBuf(buf); // drain bounce buffer if possible
         if (bb >= 0) {
           eof = false;
@@ -658,6 +723,8 @@ class BlockReaderLocal implements BlockReader {
   }
 
   /**
+   *
+   *
    * Get or create a memory map for this replica.
    *
    * There are two kinds of ClientMmap objects we could fetch here: one that
@@ -687,6 +754,7 @@ class BlockReaderLocal implements BlockReader {
     }
     ClientMmap clientMmap = null;
     try {
+      //获取映射对象
       clientMmap = replica.getOrCreateClientMmap(anchor);
     } finally {
       if ((clientMmap == null) && anchor) {

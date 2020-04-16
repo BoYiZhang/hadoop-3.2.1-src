@@ -295,6 +295,7 @@ When you import the project to eclipse, install hadoop-maven-plugins at first.
 Then, generate eclipse project files.
 
   $ mvn eclipse:eclipse -DskipTests
+  $ mvn eclipse:eclipse -Dmaven.test.skip=true
 
 At last, import to eclipse by specifying the root directory of the project via
 [File] > [Import] > [Existing Projects into Workspace].

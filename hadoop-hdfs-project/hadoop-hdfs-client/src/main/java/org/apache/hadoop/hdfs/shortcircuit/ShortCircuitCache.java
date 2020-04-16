@@ -62,6 +62,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ *
+ * ShortCircuitCache是DFSClient短路读取操作中最重要的类， 负责对DFSClient的所有
+ * ShortCircuitReplica对象进行缓存以及生命周期管理等操作
+ *
+ *
  * The ShortCircuitCache tracks things which the client needs to access
  * HDFS block files via short-circuit.
  *
@@ -88,7 +93,8 @@ public class ShortCircuitCache implements Closeable {
      * when another thread requests a ShortCircuitReplica object for the same
      * block.  So in that sense, there is no maximum size to the cache.
      *
-     * However, when a ShortCircuitReplica object is unreferenced by the
+     * However, when a ShortCircui
+     * tReplica object is unreferenced by the
      * thread(s) that are using it, it becomes evictable.  There are two
      * separate eviction lists-- one for mmaped objects, and another for
      * non-mmaped objects.  We do this in order to avoid having the regular
@@ -106,14 +112,18 @@ public class ShortCircuitCache implements Closeable {
 
         LOG.debug("{}: cache cleaner running at {}", this, curMs);
 
+        //将evictableMmapped队列中的元素放入evictable队列中
         int numDemoted = demoteOldEvictableMmaped(curMs);
         int numPurged = 0;
         Long evictionTimeNs;
         while (!evictable.isEmpty()) {
+
+          //evictable是treeMap， 按序拿出第一个副本
           Object eldestKey = evictable.firstKey();
           evictionTimeNs = (Long)eldestKey;
           long evictionTimeMs =
               TimeUnit.MILLISECONDS.convert(evictionTimeNs, TimeUnit.NANOSECONDS);
+          //大于maxNonMmappedEvictableLifespanMs时间的， 则直接删除
           if (evictionTimeMs + maxNonMmappedEvictableLifespanMs >= curMs) break;
           ShortCircuitReplica replica = (ShortCircuitReplica)evictable.get(
               eldestKey);
@@ -121,6 +131,8 @@ public class ShortCircuitCache implements Closeable {
             LOG.trace("CacheCleaner: purging " + replica + ": " +
                 StringUtils.getStackTrace(Thread.currentThread()));
           }
+
+          //调用purge()方法删除这个副本
           purge(replica);
           numPurged++;
         }
@@ -405,6 +417,17 @@ public class ShortCircuitCache implements Closeable {
   }
 
   /**
+   *
+   * unref()操作只能在ShortCircuitReplica.unref()以及purge()
+   * 方法中被调用， 也就是在使用类不再引用ShortCircuitReplica对象以及缓存中不存在
+   * ShortCircuitReplica对象时才会被调用。 如果当前副本已经过期或者不可用， unref()方法会
+   * 直接将当前副本从缓存中删除。 如果当前副本没有被引用， 也就是没有类使用这个副本进
+   * 行读取操作， 同时副本已经从缓存中删除了， 这种情况就需要将副本关闭。 关闭副本操作
+   * 会释放副本对应的Slot对象， 并且释放副本数据块文件的内存映射。 如果副本没有被引
+   * 用， 但在缓存中还存在， 则将副本移入evictable队列， 向evictable队列中添加了元素后，
+   * 还需要调用trimEvictionMaps()方法将超过缓存队列大小的副本移出缓存。
+   *
+   *
    * Unreference a replica.
    *
    * You must hold the cache lock while calling this function.
@@ -417,6 +440,7 @@ public class ShortCircuitCache implements Closeable {
       // If the replica is stale or unusable, but we haven't purged it yet,
       // let's do that.  It would be a shame to evict a non-stale replica so
       // that we could put a stale or unusable one into the cache.
+      //如果当前副本已经过期或者不可用， 则直接将当前副本从缓存中删除
       if (!replica.purged) {
         String purgeReason = null;
         if (!replica.getDataStream().getChannel().isOpen()) {
@@ -433,13 +457,22 @@ public class ShortCircuitCache implements Closeable {
       }
       String addedString = "";
       boolean shouldTrimEvictionMaps = false;
+
+      //更新refCount
       int newRefCount = --replica.refCount;
+
+
+      //副本没有被引用， 也就是没有类使用这个副本进行读取操作， 同时副本也从缓存中删除了，
+      // 这种情况就将副本关闭， 释放Slot， 释放副本数据块文件的内存映射
       if (newRefCount == 0) {
         // Close replica, since there are no remaining references to it.
         Preconditions.checkArgument(replica.purged,
             "Replica %s reached a refCount of 0 without being purged", replica);
         replica.close();
       } else if (newRefCount == 1) {
+
+        //副本没有被引用， 也就是没有类使用这个副本进行读取操作，
+        // 但在缓存中还存在， 则将副本移入evictable队列
         Preconditions.checkState(null == replica.getEvictableTimeNs(),
             "Replica %s had a refCount higher than 1, " +
                 "but was still evictable (evictableTimeNs = %d)",
@@ -447,6 +480,8 @@ public class ShortCircuitCache implements Closeable {
         if (!replica.purged) {
           // Add the replica to the end of an eviction list.
           // Eviction lists are sorted by time.
+
+          //加入对应的evictable队列
           if (replica.hasMmap()) {
             insertEvictable(System.nanoTime(), replica, evictableMmapped);
             addedString = "added to evictableMmapped, ";
@@ -467,6 +502,7 @@ public class ShortCircuitCache implements Closeable {
             (newRefCount + 1) + " -> " + newRefCount +
             StringUtils.getStackTrace(Thread.currentThread()));
       }
+      //调整evictable队列的大小， 大于缓存队列大小的副本直接删除
       if (shouldTrimEvictionMaps) {
         trimEvictionMaps();
       }
@@ -604,6 +640,15 @@ public class ShortCircuitCache implements Closeable {
   }
 
   /**
+   *
+   * 从缓存中删
+   * 除ShortCircuitReplica的purge()方法。 要注意purge()方法只是将副本从缓存中移除， 并没有
+   * 关闭ShortCircuitReplica对象， 也就是没有释放共享内存中的槽位。 Purge()方法首先会设置
+   * 副本的状态为purged， 然后将ShortCircuitReplica对象从replicaInfoMap以及evictable队列中
+   * 删除。 最后由于已经从缓存中删除了ShortCircuitReplica对象， 所以调用unref()方法降低副
+   * 本的引用计数。
+   *
+   *
    * Purge a replica from the cache.
    *
    * This doesn't necessarily close the replica, since there may be
@@ -618,8 +663,11 @@ public class ShortCircuitCache implements Closeable {
     boolean removedFromInfoMap = false;
     String evictionMapName = null;
     Preconditions.checkArgument(!replica.purged);
+    //replica已经删除
     replica.purged = true;
     Waitable<ShortCircuitReplicaInfo> val = replicaInfoMap.get(replica.key);
+
+    //从replicaInfoMap中删除数据
     if (val != null) {
       ShortCircuitReplicaInfo info = val.getVal();
       if ((info != null) && (info.getReplica() == replica)) {
@@ -627,6 +675,8 @@ public class ShortCircuitCache implements Closeable {
         removedFromInfoMap = true;
       }
     }
+
+    //从evictable队列中删除副本数据
     Long evictableTimeNs = replica.getEvictableTimeNs();
     if (evictableTimeNs != null) {
       evictionMapName = removeEvictable(replica);
@@ -643,11 +693,30 @@ public class ShortCircuitCache implements Closeable {
       }
       LOG.trace(builder.toString());
     }
+    //由于在replica构造时就考虑了缓存的引用， 所以从缓存中删除时， 要unref()这个replica
     unref(replica);
   }
 
   static final int FETCH_OR_CREATE_RETRY_TIMES = 3;
+
   /**
+   *
+   * fetchOrCreate()方法用于从ShortCircuitCache缓存中获取一个ShortCircuitReplicaInfo对
+   * 象（封装了ShortCircuitReplica对象） ， 或者在缓存没有保存这个对象时创建一个新的
+   * ShortCircuitReplicaInfo对象会得到这个Waitable对象并在这个Waitable对象上等待。
+   *
+   * 当创建线程成功地创建
+   * ShortCircuitReplicaInfo对象后， 会唤醒该线程并通过Waitable对象将ShortCircuitReplicaInfo
+   * 传递给该线程。
+   *
+   *
+   * 需要特别注意的是， 可能同时有多个线程并发地调用这个方法来获取同一个
+   * ShortCircuitReplicaInfo对象， fetchOrCreate()会允许第一个申请创建ShortCircuitReplicaInfo
+   * 对象的线程调用create()方法执行创建操作， 同时fetchOrCreate()方法会在缓存
+   * ShortCircuitReplicaInfo对象的ShortCircuitCache.replicaInfoMap字段中放入一个Waitable对
+   * 象。 当其他的线程调用fetchOrCreate()方法申请获取同一个ShortCircuitReplicaInfo对象时，
+   *
+   *
    * Fetch or create a replica.
    *
    * You must hold the cache lock while calling this function.
@@ -671,9 +740,12 @@ public class ShortCircuitCache implements Closeable {
               this, key);
           return null;
         }
+
+        //这里从replicaInfoMap中获取Waitable对象
         Waitable<ShortCircuitReplicaInfo> waitable = replicaInfoMap.get(key);
         if (waitable != null) {
           try {
+            //调用fetch()方法等待获取ShortCircuitReplicaInfo对象
             info = fetch(key, waitable);
             break;
           } catch (RetriableException e) {
@@ -683,15 +755,22 @@ public class ShortCircuitCache implements Closeable {
       }
       if (info != null) return info;
       // We need to load the replica ourselves.
+      //第一个尝试创建ShortCircuitReplicaInfo对象的线程， 先构造Waitable并放入plicaInfoMap字段中
       newWaitable = new Waitable<>(lock.newCondition());
       replicaInfoMap.put(key, newWaitable);
     } finally {
       lock.unlock();
     }
+
+    //调用create()方法创建ShortCircuitReplicaInfo对象， 并返回
     return create(key, creator, newWaitable);
   }
 
   /**
+   *
+   * fetch()方法会在Waitable对象上调用await()方法，
+   * 等待另一个线程完成ShortCircuitReplica对象的创建操作。
+   *
    * Fetch an existing ReplicaInfo object.
    *
    * @param key       The key that we're using.
@@ -708,6 +787,8 @@ public class ShortCircuitCache implements Closeable {
     // ShortCircuitReplica.  So we simply wait for it to complete.
     ShortCircuitReplicaInfo info;
     try {
+
+      //在Waitable对象上等待， 等待另一个线程构造ShortCircuitReplicaInfo对象
       LOG.trace("{}: found waitable for {}", this, key);
       info = waitable.await();
     } catch (InterruptedException e) {
@@ -725,13 +806,19 @@ public class ShortCircuitCache implements Closeable {
       LOG.warn(this + ": failed to get " + key);
       return info;
     }
+
+
     if (replica.purged) {
+      //如果当前取得的副本已经从缓存中清除了， 则抛出异常， 在fetchAndCreate()方法中调用create()创建一个新的副本
       // Ignore replicas that have already been purged from the cache.
       throw new RetriableException("Ignoring purged replica " +
           replica + ".  Retrying.");
     }
     // Check if the replica is stale before using it.
     // If it is, purge it and retry.
+
+    //如果当前副本已经过期了， 则从缓存中清除该副本， 抛出异常，
+    // 在fetchAndCreate()方法中调用create()创建一个新的副本
     if (replica.isStale()) {
       LOG.info(this + ": got stale replica " + replica + ".  Removing " +
           "this replica from the replicaInfoMap and retrying.");
@@ -740,10 +827,23 @@ public class ShortCircuitCache implements Closeable {
       purge(replica);
       throw new RetriableException("ignoring stale replica " + replica);
     }
+
+    //在副本上添加引用计数， 因为是获取一个已经创建的副本， 所以需要添加新的引用计数
     ref(replica);
     return info;
   }
 
+
+  /**
+   * 它首先会调用BlockReaderFacotry.createShortCircuitReplicaInfo()方法创建
+   * ShortCircuitReplicaInfo对象， 创建成功之后会将新创建的ShortCircuitReplicaInfo添加到
+   * Waitable对象中， 并且唤醒所有在Waitable上等待的线程。
+   *
+   * @param key
+   * @param creator
+   * @param newWaitable
+   * @return
+   */
   private ShortCircuitReplicaInfo create(ExtendedBlockId key,
       ShortCircuitReplicaCreator creator,
       Waitable<ShortCircuitReplicaInfo> newWaitable) {
@@ -751,14 +851,19 @@ public class ShortCircuitCache implements Closeable {
     ShortCircuitReplicaInfo info = null;
     try {
       LOG.trace("{}: loading {}", this, key);
+      //这里调用了BlockReaderFacotry.
+      // createShortCircuitReplicaInfo()方法创建  ShortCircuitReplicaInfo对象
       info = creator.createShortCircuitReplicaInfo();
     } catch (RuntimeException e) {
       LOG.warn(this + ": failed to load " + key, e);
     }
+
+    //否则， 调用构造方法构造这个ShortCircuitReplicaInfo对象
     if (info == null) info = new ShortCircuitReplicaInfo();
     lock.lock();
     try {
       if (info.getReplica() != null) {
+        //创建成功， 确保启动了CacheCleaner
         // On success, make sure the cache cleaner thread is running.
         LOG.trace("{}: successfully loaded {}", this, info.getReplica());
         startCacheCleanerThreadIfNeeded();
@@ -767,6 +872,7 @@ public class ShortCircuitCache implements Closeable {
         // creation of the replica hold a reference.  So we don't need
         // to increment the reference count here.
       } else {
+        //创建失败， 从replicaInfoMap中删除Waitable
         // On failure, remove the waitable from the replicaInfoMap.
         Waitable<ShortCircuitReplicaInfo> waitableInMap = replicaInfoMap.get(key);
         if (waitableInMap == newWaitable) replicaInfoMap.remove(key);
@@ -777,6 +883,10 @@ public class ShortCircuitCache implements Closeable {
           LOG.warn(this + ": failed to load " + key);
         }
       }
+
+      // 将ShortCircuitReplicaInfo添加到Waitable中，
+      // 并且唤醒所有在Waitable上等待的线程.
+
       newWaitable.provide(info);
     } finally {
       lock.unlock();
@@ -797,6 +907,7 @@ public class ShortCircuitCache implements Closeable {
     }
   }
 
+
   ClientMmap getOrCreateClientMmap(ShortCircuitReplica replica,
       boolean anchored) {
     Condition newCond;
@@ -805,7 +916,10 @@ public class ShortCircuitCache implements Closeable {
       while (replica.mmapData != null) {
         if (replica.mmapData instanceof MappedByteBuffer) {
           ref(replica);
+
+
           MappedByteBuffer mmap = (MappedByteBuffer)replica.mmapData;
+
           return new ClientMmap(replica, mmap, anchored);
         } else if (replica.mmapData instanceof Long) {
           long lastAttemptTimeMs = (Long)replica.mmapData;
@@ -830,7 +944,11 @@ public class ShortCircuitCache implements Closeable {
     } finally {
       lock.unlock();
     }
+
+    //获取文件内容映射
     MappedByteBuffer map = replica.loadMmapInternal();
+
+
     lock.lock();
     try {
       if (map == null) {
@@ -1002,6 +1120,14 @@ public class ShortCircuitCache implements Closeable {
   }
 
   /**
+   *
+   * 它首先调用
+   * DataTransferProtocol.releaseShortCircuitFds()方法通知Datanode释放Datanode侧共享内存中
+   * 的槽位， 然后调用shmManager.freeSlot()方法释放Client侧共享内存中的槽位。 如果在RPC
+   * 过程中失败， 则直接关闭这个共享内存段， 因为Client与Datanode之间的通信已经出现了
+   * 异常。
+   *
+   *
    * Schedule a shared memory slot to be released.
    *
    * @param slot           The slot to release.

@@ -126,6 +126,9 @@ public class BlockReaderRemote implements BlockReader {
     return peer;
   }
 
+  //read()方法的主要实现都在readNextPacket()方法中， 这个方法从输入流中
+  //读取一个新的数据包， 将数据包中的数据部分写入curDataSlice变量中， 并对读入的数据
+  //和数据包中的校验和部分进行匹配。
   @Override
   public synchronized int read(byte[] buf, int off, int len)
       throws IOException {
@@ -138,6 +141,7 @@ public class BlockReaderRemote implements BlockReader {
     }
 
     if (curDataSlice == null ||
+            //读取下一个数据包， 将数据包中的数据部分存入curDataSlice变量中
         curDataSlice.remaining() == 0 && bytesNeededToFinish > 0) {
       readNextPacket();
     }
@@ -151,6 +155,7 @@ public class BlockReaderRemote implements BlockReader {
       return -1;
     }
 
+    //将curDataSlice中的数据写入buf中
     int nRead = Math.min(curDataSlice.remaining(), len);
     curDataSlice.get(buf, off, nRead);
 
@@ -180,20 +185,24 @@ public class BlockReaderRemote implements BlockReader {
 
   private void readNextPacket() throws IOException {
     //Read packet headers.
+    //调用packetReceiver从IO流中读取一个新的数据包
     packetReceiver.receiveNextPacket(in);
 
+    //将数据包头读入curHeader变量中， 将数据包数据写入curDataSlice变量中
     PacketHeader curHeader = packetReceiver.getHeader();
     curDataSlice = packetReceiver.getDataSlice();
     assert curDataSlice.capacity() == curHeader.getDataLen();
 
     LOG.trace("DFSClient readNextPacket got header {}", curHeader);
 
+    //检查头域中的长度
     // Sanity check the lengths
     if (!curHeader.sanityCheck(lastSeqNo)) {
       throw new IOException("BlockReader: error in packet header " +
           curHeader);
     }
 
+    //检查数据和校验和是否匹配
     if (curHeader.getDataLen() > 0) {
       int chunks = 1 + (curHeader.getDataLen() - 1) / bytesPerChecksum;
       int checksumsLen = chunks * checksumSize;
@@ -203,6 +212,7 @@ public class BlockReaderRemote implements BlockReader {
               packetReceiver.getChecksumSlice().capacity() +
               " checksumsLen=" + checksumsLen;
 
+      //如果完成了客户端的整个读取操作， 读取最后一个空的数据包， 因为数据块的最后一个数据包为空的标识数据包
       lastSeqNo = curHeader.getSeqno();
       if (verifyChecksum && curDataSlice.remaining() > 0) {
         // N.B.: the checksum error offset reported here is actually

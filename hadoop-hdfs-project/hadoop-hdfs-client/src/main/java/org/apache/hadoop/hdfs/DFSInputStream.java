@@ -175,13 +175,31 @@ public class DFSInputStream extends FSInputStream
 
   DFSInputStream(DFSClient dfsClient, String src, boolean verifyChecksum,
       LocatedBlocks locatedBlocks) throws IOException {
+    //DFSClient引用。
     this.dfsClient = dfsClient;
+
+    //verifyChecksum： 读取数据时是否进行校验。
     this.verifyChecksum = verifyChecksum;
+
+    //读取文件的地址。
     this.src = src;
+
+    //缓存策略。
+    //
+    // 这里cachingStrategy包括两个部分——readDropBehind，
+    // 当读操作完成时， 系统缓存中的数据是否立即清除，
+    // 由配置项 dfs.client.cache.drop.behind.reads配置， 默认为 false;
+
+    //  readahead, Datanode读取时（ 使用了系统调用posix_fadvise） ，
+    //  预读取字节数， 由配置项dfs.client.cache.readahead配置， 默认为0。
+
     synchronized (infoLock) {
       this.cachingStrategy = dfsClient.getDefaultReadCachingStrategy();
     }
     this.locatedBlocks = locatedBlocks;
+
+    // 从Namenode获取文件对应的数据块位置信息， 并将信息保存至
+    // DFSInputStream.locatedBlocks字段中。
     openInfo(false);
   }
 
@@ -197,9 +215,24 @@ public class DFSInputStream extends FSInputStream
   void openInfo(boolean refreshLocatedBlocks) throws IOException {
     final DfsClientConf conf = dfsClient.getConf();
     synchronized(infoLock) {
+
+      //获取文件对应的所有数据块的位置信
+      //息， 然后更新当前文件的最后一个数据块的长度。 由于文件的最后一个数据块可能处于构
+      //建状态（正在被写入） ， 那么Namenode命名空间中保存的数据块长度就有可能小于
+      //Datanode实际存储数据块的长度， 所以这里需要与Datanode通信以确认文件最后一个数据
+      //块的真实长度。
+
+      //获取文件对应的所有数据块的位置信息
       lastBlockBeingWrittenLength =
           fetchLocatedBlocksAndGetLastBlockLength(refreshLocatedBlocks);
+
+
+      // 初始化重试次数
+      // 重试策略 dfs.client.retry.times.get-last-block-length  默认3
+      // 重试间隔 dfs.client.retry.interval-ms.get-last-block-length 默认4秒
       int retriesForLastBlockLength = conf.getRetryTimesForGetLastBlockLength();
+
+      //如果出现无法获取数据块长度的情况， 则重试. [无法获取: 重试,nanode重启]
       while (retriesForLastBlockLength > 0) {
         // Getting last block length as -1 is a special case. When cluster
         // restarts, DNs may not report immediately. At this time partial block
@@ -209,6 +242,8 @@ public class DFSInputStream extends FSInputStream
           DFSClient.LOG.warn("Last block locations not available. "
               + "Datanodes might not have reported blocks completely."
               + " Will retry for " + retriesForLastBlockLength + " times");
+
+          //线程睡眠4秒， 再次调用fetchLocatedBlocksAndGetLastBlockLength()方法
           waitFor(conf.getRetryIntervalForGetLastBlockLength());
           lastBlockBeingWrittenLength =
               fetchLocatedBlocksAndGetLastBlockLength(true);
@@ -219,6 +254,7 @@ public class DFSInputStream extends FSInputStream
       }
       if (lastBlockBeingWrittenLength == -1
           && retriesForLastBlockLength == 0) {
+        //如果重试次数过多， 则直接抛出异常
         throw new IOException("Could not obtain the last block locations.");
       }
     }
@@ -234,8 +270,14 @@ public class DFSInputStream extends FSInputStream
     }
   }
 
+
+
   private long fetchLocatedBlocksAndGetLastBlockLength(boolean refresh)
       throws IOException {
+
+    //通过ClientProtocol获取文件对应的所有数据块的位置信息
+    //首先调用dfsClient.getLocatedBlocks()方法通过ClientProtocol接口从Namenode获取
+    //当前文件对应的所有数据块的位置信息
     LocatedBlocks newInfo = locatedBlocks;
     if (locatedBlocks == null || refresh) {
       newInfo = dfsClient.getLocatedBlocks(src, 0);
@@ -245,29 +287,48 @@ public class DFSInputStream extends FSInputStream
       throw new IOException("Cannot open filename " + src);
     }
 
+    //比较DFSClient. locatedBlocks属性以及新获取的位置信息
+    //然后将新获取的位置信息与locatedBlocks字段保存的位置信息进行对比， 如果出
+    //现文件数据块不匹配的情况， 则抛出异常。 接下来用新获取的位置信息更新
+    //locatedBlocks字段
     if (locatedBlocks != null) {
       Iterator<LocatedBlock> oldIter = locatedBlocks.getLocatedBlocks().iterator();
       Iterator<LocatedBlock> newIter = newInfo.getLocatedBlocks().iterator();
       while (oldIter.hasNext() && newIter.hasNext()) {
+
+        //如果数据块位置信息不匹配， 则抛出异常
         if (!oldIter.next().getBlock().equals(newIter.next().getBlock())) {
           throw new IOException("Blocklist for " + src + " has changed!");
         }
       }
     }
+
+    //最后调用readBlockLength()方法通过ClientDataNodeProtocol接口获取文件最后一
+    //个数据块的大小， 然后更新DFSInputStream.locatedBlocks字段记录的文件最后一
+    //个数据块的长度。
+
+    //更新locatedBlocks字段
     locatedBlocks = newInfo;
     long lastBlockBeingWrittenLength = 0;
     if (!locatedBlocks.isLastBlockComplete()) {
+
+      //获取最后一个数据块的位置信息
       final LocatedBlock last = locatedBlocks.getLastLocatedBlock();
       if (last != null) {
         if (last.getLocations().length == 0) {
           if (last.getBlockSize() == 0) {
             // if the length is zero, then no data has been written to
             // datanode. So no need to wait for the locations.
+            //如果最后一个数据块的长度为0， 则不用更新， 直接返回
             return 0;
           }
           return -1;
         }
+
+        //通过ClientDatanodeProtocol获取数据块在Datanode上的长度
         final long len = readBlockLength(last);
+
+        //更新DFSClient.locatedBlocks保存的最后一个数据块的长度
         last.getBlock().setNumBytes(len);
         lastBlockBeingWrittenLength = len;
       }
@@ -275,6 +336,8 @@ public class DFSInputStream extends FSInputStream
 
     fileEncryptionInfo = locatedBlocks.getFileEncryptionInfo();
 
+
+    //返回结果
     return lastBlockBeingWrittenLength;
   }
 
@@ -403,6 +466,14 @@ public class DFSInputStream extends FSInputStream
   }
 
   /**
+   *
+   * ■ getBlockAt()： 该方法用于获取文件pos游标所在数据块的位置信息， 也就是获取
+   * 该数据块对应的LocatedBlock对象。 LocatedBlock对象保存了所有存储该数据块
+   * 的Datanode信息， 这些信息会按照距离客户端的远近排序， 同时LocatedBlock还
+   * 保存了当前数据块是否被缓存等信息。 getBlockAt()方法会调用
+   * ClientProtocol.getBlockLocations()方法从Namenode获取LocatedBlock对象， 并将
+   * 这个LocatedBlock对象保存到DFSinputStream.locatedBlocks字段中。
+   *
    * Get block at the specified position.
    * Fetch it from the namenode if not cached.
    *
@@ -529,49 +600,92 @@ public class DFSInputStream extends FSInputStream
   }
 
   /**
+   *
+   * 一个HDFS文件会被切分成多个数据块， 这些数据块分散存储在HDFS集群
+   * 的Datanode上。 当我们读取文件时， 也就是按顺序读取数据块时， 如果读操作完成了对一
+   * 个数据块的读取， 就需要构造读取下一个数据块的输入流， 这时就需要调用blockSeekTo()
+   * 方法获取保存下一个数据块的Datanode。
+   *
+   * blockSeekTo()方法首先会调用getBlockAt()方法获取游标（DFSInputStream.pos字段保
+   * 存） 所在数据块的信息， 然后调用chooseDataNode()方法获取一个存储了该数据块的
+   * Datanode。 接下来会构造从这个节点读取数据块的BlockReader对象， 构造的BlockReader
+   * 对象会被保存在DFSInputStream.blockReader字段中。
+   *
+   *
    * Open a DataInputStream to a DataNode so that it can be read from.
    * We get block ID and the IDs of the destinations at startup, from the namenode.
    */
   private synchronized DatanodeInfo blockSeekTo(long target)
       throws IOException {
+
+    //如果读取位置超过HDFS文件长度， 则抛出异常
     if (target >= getFileLength()) {
       throw new IOException("Attempted to read past end of file");
     }
 
+    //关闭上一个数据块对应的BlockReader
     // Will be getting a new BlockReader.
     closeCurrentBlockReaders();
 
     //
     // Connect to best DataNode for desired Block, with potential offset
+    //使用chosenNode记录选中的Datanode
     //
     DatanodeInfo chosenNode;
+
     int refetchToken = 1; // only need to get a new access token once
     int refetchEncryptionKey = 1; // only need to get a new encryption key once
 
+    //…安全相关
     boolean connectFailedOnce = false;
 
     while (true) {
       //
       // Compute desired block
       //
+
+      //获取target对应的数据块的位置信息
+
+      //■ getBlockAt()： 该方法用于获取文件pos游标所在数据块的位置信息， 也就是获取
+      //该数据块对应的LocatedBlock对象。 LocatedBlock对象保存了所有存储该数据块
+      //的Datanode信息， 这些信息会按照距离客户端的远近排序， 同时LocatedBlock还
+      //保存了当前数据块是否被缓存等信息。 getBlockAt()方法会调用
+      //ClientProtocol.getBlockLocations()方法从Namenode获取LocatedBlock对象， 并将
+      //这个LocatedBlock对象保存到DFSinputStream.locatedBlocks字段中。
       LocatedBlock targetBlock = getBlockAt(target);
 
       // update current position
       this.pos = target;
+
+
       this.blockEnd = targetBlock.getStartOffset() +
             targetBlock.getBlockSize() - 1;
+
+
       this.currentLocatedBlock = targetBlock;
 
+      //获取当前target在新数据块中的偏移量
       long offsetIntoBlock = target - targetBlock.getStartOffset();
 
+
+
+      //选择一个合适的Datanode读取数据块。 这个方法的逻辑很简
+      //单， 由于LocatedBlock对象中已经包含了按照与客户端距离远近排序的Datanode
+      //列表， 所以只需遍历这个列表， 选出第一个不在Datanode黑名单中的Datanode即可。
       DNAddrPair retval = chooseDataNode(targetBlock, null);
+
+      //选中的Datanode
       chosenNode = retval.info;
+
+      //选中的Datanode的地址
       InetSocketAddress targetAddr = retval.addr;
+
       StorageType storageType = retval.storageType;
       // Latest block if refreshed by chooseDatanode()
       targetBlock = retval.block;
 
       try {
+        //获取blockReader对象
         blockReader = getBlockReader(targetBlock, offsetIntoBlock,
             targetBlock.getBlockSize() - offsetIntoBlock, targetAddr,
             storageType, chosenNode);
@@ -590,9 +704,13 @@ public class DFSInputStream extends FSInputStream
           refetchEncryptionKey--;
           dfsClient.clearDataEncryptionKey();
         } else if (refetchToken > 0 && tokenRefetchNeeded(ex, targetAddr)) {
+          //安全相关的异常
           refetchToken--;
           fetchBlockAt(target);
         } else {
+
+          //BlockReader构造失败， 将chosenNode放入黑名单中
+
           connectFailedOnce = true;
           DFSClient.LOG.warn("Failed to connect to {} for file {} for block "
                   + "{}, add to deadNodes and continue. ", targetAddr, src,
@@ -645,6 +763,11 @@ public class DFSInputStream extends FSInputStream
   }
 
   /**
+   * 用户代码读取完所有数据之后， 就会调用DFSInputStream.close()方法关闭输入流。
+   * close()方法的实现也非常简单， 它首先检查DFSClient是否处于运行状态， 然后关闭读取过
+   * 程中可能使用过的ByteBuffer， 最后调用BlockReader.close()关闭当前输入流底层的
+   * BlockReader。
+   *
    * Close it down!
    */
   @Override
@@ -653,8 +776,10 @@ public class DFSInputStream extends FSInputStream
       DFSClient.LOG.debug("DFSInputStream has been closed already");
       return;
     }
+
     dfsClient.checkOpen();
 
+    //关闭读取过程中使用的ByteBuffer
     if ((extendedReadBuffers != null) && (!extendedReadBuffers.isEmpty())) {
       final StringBuilder builder = new StringBuilder();
       extendedReadBuffers.visitAll(new IdentityHashStore.Visitor<ByteBuffer, Object>() {
@@ -669,7 +794,10 @@ public class DFSInputStream extends FSInputStream
           "unreleased ByteBuffers allocated by read().  " +
           "Please release " + builder.toString() + ".");
     }
+    //关闭BlockReader对象
     closeCurrentBlockReaders();
+
+    //调用父类的close()方法
     super.close();
   }
 
@@ -702,13 +830,18 @@ public class DFSInputStream extends FSInputStream
     while (true) {
       // retry as many times as seekToNewSource allows.
       try {
+
+        //调用reader.readFromBlock()读取数据
         return reader.readFromBlock(blockReader, len);
+
       } catch (ChecksumException ce) {
         DFSClient.LOG.warn("Found Checksum error for "
             + getCurrentBlock() + " from " + currentNode
             + " at " + ce.getPos());
         ioe = ce;
         retryCurrentNode = false;
+
+        //将损坏的数据块加入corruptedBlocks中， 并向Namenode汇报
         // we want to remember which block replicas we have tried
         corruptedBlocks.addCorruptedBlock(getCurrentBlock(), currentNode);
       } catch (IOException e) {
@@ -725,8 +858,11 @@ public class DFSInputStream extends FSInputStream
          * result in application level failures (e.g. Datanode could have
          * closed the connection because the client is idle for too long).
          */
+        //重试当前节点
         sourceFound = seekToBlockSource(pos);
       } else {
+
+        //当前Datanode重试失败， 则将当前节点加入黑名单中， 然后重新选择一个Datanode读取数据
         addToDeadNodes(currentNode);
         sourceFound = seekToNewSource(pos);
       }
@@ -737,25 +873,46 @@ public class DFSInputStream extends FSInputStream
     }
   }
 
+  // readWithStrategy()方法首先会调用
+  // blockSeek()方法获取一个保存了目标数据块的Datanode， 然后调用readBuffer()方法从该
+  // Datanode读取数据块。 如果读取过程出现IΟ异常， 则进行重试操作， 并将该Datanode放入黑名单中。
   protected synchronized int readWithStrategy(ReaderStrategy strategy)
       throws IOException {
+
+
+    // …这里检查dfsClient是否已经关闭， 如果关闭了， 则抛出异常
     dfsClient.checkOpen();
     if (closed.get()) {
       throw new IOException("Stream closed");
     }
 
     int len = strategy.getTargetLength();
+
+
+    //CorruptedBlocksp用于保存损坏的数据块
     CorruptedBlocks corruptedBlocks = new CorruptedBlocks();
+
     failures = 0;
+
+    //读取位置在文件范围内
     if (pos < getFileLength()) {
+
+
+      //如果出现异常， 则重试两次
       int retries = 2;
       while (retries > 0) {
         try {
           // currentNode can be left as null if previous read had a checksum
           // error on the same block. See HDFS-3067
+
+          //pos超过数据块边界， 需要从新的数据块开始读取数据
           if (pos > blockEnd || currentNode == null) {
+
+            //调用blockSeekTo()方法获取保存这个数据块的一个数据节点
             currentNode = blockSeekTo(pos);
           }
+
+          //计算这次读取的长度
           int realLen = (int) Math.min(len, (blockEnd - pos + 1L));
           synchronized(infoLock) {
             if (locatedBlocks.isLastBlockComplete()) {
@@ -763,11 +920,22 @@ public class DFSInputStream extends FSInputStream
                   locatedBlocks.getFileLength() - pos);
             }
           }
+
+          //调用readBuffer()方法读取数据
+          //readBuffer()的读入操作主要是通过委托BlockReader对象实现
+          //的， 并在发生异常时进行重试。 当读取出现校验异常时， 表明currentNode上的数据块出现
+          //了错误， 这时readBuffer()方法会将错误的数据块添加到corruptedBlockMap中， 并通过
+          //reportCheckSumFailure()方法向Namenode汇报错误的数据块。 如果是普通的IΟ异常， 则有
+          //可能是客户端与数据节点之间的连接关闭了， 那么readBuffer()方法会在当前节点上调用
+          //seekToBlockSource()重试。 如果重试失败， 则调用seekToNewSource()选择新的Datanode，
+          //并将当前Datanode加入黑名单中。
           int result = readBuffer(strategy, realLen, corruptedBlocks);
 
           if (result >= 0) {
+            //pos移位
             pos += result;
           } else {
+
             // got a EOS from reader though we expect more data on it.
             throw new IOException("Unexpected EOS from the reader");
           }
@@ -779,6 +947,7 @@ public class DFSInputStream extends FSInputStream
           }
           return result;
         } catch (ChecksumException ce) {
+          //出现校验错误， 则抛出异常
           throw ce;
         } catch (IOException e) {
           checkInterrupted(e);
@@ -787,12 +956,16 @@ public class DFSInputStream extends FSInputStream
           }
           blockEnd = -1;
           if (currentNode != null) {
+            //将当前失败的节点入黑名单中
             addToDeadNodes(currentNode);
           }
+          //重试超过两次， 直接抛出异常
           if (--retries == 0) {
             throw e;
           }
         } finally {
+
+          //检查是否需要向Namenode汇报损坏的数据块
           // Check if need to report block replicas corruption either read
           // was successful or ChecksumException occurred.
           reportCheckSumFailure(corruptedBlocks,
@@ -824,8 +997,12 @@ public class DFSInputStream extends FSInputStream
     if (len == 0) {
       return 0;
     }
+
+    //这里使用字节数组作为容器
     ReaderStrategy byteArrayReader =
         new ByteArrayStrategy(buf, off, len, readStatistics, dfsClient);
+
+
     return readWithStrategy(byteArrayReader);
   }
 
@@ -1665,12 +1842,20 @@ public class DFSInputStream extends FSInputStream
       }
     }
     ByteBuffer buffer = null;
+
     if (dfsClient.getConf().getShortCircuitConf().isShortCircuitMmapEnabled()) {
+      // 尝试以零拷贝模式读取数据块，
+      // 如果当前配置或者数据块的状态不支持零拷贝，
+      // 则调用ByteBufferUtil.fallbackRead()
+      // 退化为一个普通的读取操作。
       buffer = tryReadZeroCopy(maxLength, opts);
+
     }
     if (buffer != null) {
       return buffer;
     }
+
+    //如果零拷贝读取不成功， 则退化为一个普通的读取
     buffer = ByteBufferUtil.fallbackRead(this, bufferPool, maxLength);
     if (buffer != null) {
       getExtendedReadBuffers().put(buffer, bufferPool);
@@ -1678,6 +1863,33 @@ public class DFSInputStream extends FSInputStream
     return buffer;
   }
 
+
+  //在传统的文件IΟ操作中， 都是调用操作系统提供的系统调用函数read()或write()来执
+  //行读写操作的， 此时调用此函数的进程（在Java中即java进程） 会由用户态切换到内核
+  //态， 然后操作系统的内核代码负责将相应的文件数据读取到内核的IO缓冲区， 最后再把
+  //数据从内核IO缓冲区拷贝到进程的私有地址空间中， 这样便完成了一次IO操作。
+  //tryReadZeroCopy()方法使用了内存映射文件的读取方式。 内存映射文件和标准IO操作
+  //最大的不同是并不需要将数据读取到操作系统的内核缓冲区， 而是直接将进程私有地址空
+  //间中的一部分区域与文件对象建立起映射关系， 就好像直接从内存中读写文件一样， 减少
+  //了IO的拷贝次数， 提高了文件的读写速度。
+
+  // Java提供了三种内存映射模式， 即： 只读（readonly） 、 读写（read_write） 、 专用（private） 。
+
+  // 只读模式
+  // 如果程序试图进行写操作， 则会抛出ReadOnlyBufferException异常；
+
+  // 读写模式
+  // 如果程序通过内存映射文件的方式写或修改文件内容，
+  //      则修改内容会立刻反映到磁盘文件中， 如果另一个进程共享了同一个映射文件， 也会立即看到变化；
+  //
+  // 专用模式
+  // 采用的是操作系统的“写时拷贝”原则， 即在没有发生写操作的情况下，
+  // 多个进程之间都是共享文件的同一块物理内存的（进程各自的虚拟地址指向同一片物理地址） ，
+  // 一旦某个进程进行写操作， 就会把受影响的文件数据单独拷贝一份到进程的私有缓冲区中，
+  // 不会反映到物理文件中。
+
+  // 在tryReadZeroCopy()方法中使用的是只读模式。
+  //
   private synchronized ByteBuffer tryReadZeroCopy(int maxLength,
       EnumSet<ReadOption> opts) throws IOException {
     // Copy 'pos' and 'blockEnd' to local variables to make it easier for the
@@ -1687,6 +1899,7 @@ public class DFSInputStream extends FSInputStream
     final long blockStartInFile = currentLocatedBlock.getStartOffset();
     final long blockPos = curPos - blockStartInFile;
 
+    //首先确保读取是在同一个数据块之内
     // Shorten this read if the end of the block is nearby.
     long length63;
     if ((curPos + maxLength) <= (curEnd + 1)) {
@@ -1705,6 +1918,8 @@ public class DFSInputStream extends FSInputStream
               +" curPos={}; curEnd={}",
           maxLength, length63, blockPos, curPos, curEnd);
     }
+
+    //确保读取映射数据没有超过2GB
     // Make sure that don't go beyond 31-bit offsets in the MappedByteBuffer.
     int length;
     if (blockPos + length63 <= Integer.MAX_VALUE) {
@@ -1722,12 +1937,19 @@ public class DFSInputStream extends FSInputStream
             + "curEnd={}", curPos, src, blockPos, curEnd);
         return null;
       }
+
+
       length = (int)length31;
       DFSClient.LOG.debug("Reducing read length from {} to {} to avoid 31-bit "
           + "limit.  blockPos={}; curPos={}; curEnd={}",
           maxLength, length, blockPos, curPos, curEnd);
     }
+
+    //调用blockReader.getClientMmap()将文件映射到内存中， 并返回ClientMmap对象。
+    // 这个对象当中包含了MappedByteBuffer对象
     final ClientMmap clientMmap = blockReader.getClientMmap(opts);
+
+
     if (clientMmap == null) {
       DFSClient.LOG.debug("unable to perform a zero-copy read from offset {} of"
           + " {}; BlockReader#getClientMmap returned null.", curPos, src);
@@ -1737,6 +1959,8 @@ public class DFSInputStream extends FSInputStream
     ByteBuffer buffer;
     try {
       seek(curPos + length);
+
+      //将内存映射缓冲区返回， 在缓冲区中是数据块文件的数据
       buffer = clientMmap.getMappedByteBuffer().asReadOnlyBuffer();
       buffer.position((int)blockPos);
       buffer.limit((int)(blockPos + length));

@@ -29,6 +29,14 @@ import org.apache.hadoop.net.unix.DomainSocketWatcher;
 import com.google.common.base.Preconditions;
 
 /**
+ *
+ *
+ * DfsClientShm类用于在DFSClient侧抽象共享内存， 这个类是ShortCircuitShm的子类。
+ *
+ *
+ *
+ *
+ *
  * DfsClientShm is a subclass of ShortCircuitShm which is used by the
  * DfsClient.
  * When the UNIX domain socket associated with this shared memory segment
@@ -103,14 +111,19 @@ public class DfsClientShm extends ShortCircuitShm
     manager.unregisterShm(getShmId());
     synchronized (this) {
       Preconditions.checkState(!disconnected);
+
+      //将共享内存段设置为stale状态
       disconnected = true;
       boolean hadSlots = false;
+
+      //将共享内存中的所有Slot都设置为无效
       for (Iterator<Slot> iter = slotIterator(); iter.hasNext(); ) {
         Slot slot = iter.next();
         slot.makeInvalid();
         hadSlots = true;
       }
       if (!hadSlots) {
+        //如果共享内存中的所有槽位都被释放了， 则调用free()方法释放共享内存
         free();
       }
     }

@@ -55,6 +55,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ *
+ * 老版本的BlockReaderLocal。 当客户端与Datanode在同
+ * 一台机器上时， 客户端直接从磁盘读取数据。 老版本的实现要求客户端获取
+ * Datanode数据目录的权限， 这可能引入安全问题（ 请参考HDFS-2246） 。
+ *
+ *
  * BlockReaderLocalLegacy enables local short circuited reads. If the DFS client
  * is on the same machine as the datanode, then the client can read files
  * directly from the local file system rather than going through the datanode

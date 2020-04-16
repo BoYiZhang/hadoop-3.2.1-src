@@ -47,6 +47,11 @@ public final class ByteBufferUtil {
   }
 
   /**
+   * 当read()方法执行零拷贝读操作失败后， 会调用ByteBufferUtil.fallbackRead()退化为一
+   * 个普通的读操作。 ByteBufferUtil.fallbackRead()方法非常简单， 判断传入参数的
+   * InputStream(DFSInputStream)是否支持ByteBuffer Read（实现了ByteBufferReadable接
+   * 口） 。 如果支持则直接将数据读取至ByteBuffer中， 否则读取到ByteBuffer.array()字节数组
+   * 中。
    * Perform a fallback read.
    */
   public static ByteBuffer fallbackRead(
@@ -57,7 +62,12 @@ public final class ByteBufferUtil {
           "were not available, and you did not provide a fallback " +
           "ByteBufferPool.");
     }
+
+
+    //判断stream是否支持将数据读入ByteBuffer
     boolean useDirect = streamHasByteBufferRead(stream);
+
+    //调用ByteBufferPool构造一个ByteBuffer
     ByteBuffer buffer = bufferPool.getBuffer(useDirect, maxLength);
     if (buffer == null) {
       throw new UnsupportedOperationException("zero-copy reads " +
@@ -80,6 +90,7 @@ public final class ByteBufferUtil {
             success = true;
             break;
           }
+          //直接调用stream上支持ByteBuffer Read的函数
           int nRead = readable.read(buffer);
           if (nRead < 0) {
             if (totalRead > 0) {
@@ -92,6 +103,7 @@ public final class ByteBufferUtil {
         buffer.flip();
       } else {
         buffer.clear();
+        //调用InputStream.read(byte[])方法
         int nRead = stream.read(buffer.array(),
             buffer.arrayOffset(), maxLength);
         if (nRead >= 0) {

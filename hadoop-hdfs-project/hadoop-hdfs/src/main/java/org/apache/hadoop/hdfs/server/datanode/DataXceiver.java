@@ -345,6 +345,34 @@ class DataXceiver extends Receiver implements Runnable {
     }
   }
 
+
+
+  // DFSClient只有构造了ShortCircuitReplica对象才可以执行短路读取操作。
+  //
+  // DFSClient在构造ShortCircuitReplica对象前，
+  // 需要先调用DataTransferProtocol.requestShortCircuitFds()方法
+  // 向Datanode申请数据块文件以及校验和文件的文件描述符， 并且同步共享内存中Slot对象的状态。
+  //
+  // 客户端在调用requestShortCircuitFds()方法前，
+  // 会在DFSClient侧的共享内存中为数据块申请一个槽位并构造Slot对象，
+  // 之后在调用requestShortCircuitFds()方法时传入该槽位的信息，
+  //
+  // Datanode的DataXceiver.requestShortCircuitFds()方法会响应这个请求
+
+
+  //DataXceiver.requestShortCircuitFds()方法首先会调用
+  //ShortCircuitRegistry.registerSlot()方法在Datanode侧的共享内存中创建槽位信息对应的Slot
+  //对象。 然后DataXceiver.requestShortCircuitFds()方法会调用
+  //DataNode.requestShortCircuitFdsForRead()方法获取数据块文件以及校验和文件的文件描述
+  //符， 并通过DomainSocket发送给客户端
+
+
+  //DFSClient的BlockReaderFactory对象成功地从domainSocket接收了数据块文件和校验
+  //和文件的文件描述符之后， 就可以初始化数据块文件和校验和文件的输入流并构造
+  //ShortCircuitReplica对象了。
+
+
+
   @Override
   public void requestShortCircuitFds(final ExtendedBlock blk,
       final Token<BlockTokenIdentifier> token,
@@ -361,6 +389,8 @@ class DataXceiver extends Receiver implements Runnable {
     boolean success = false;
     try {
       try {
+
+        //如果底层不是DomainSocket， 则抛出异常
         if (peer.getDomainSocket() == null) {
           throw new IOException("You cannot pass file descriptors over " +
               "anything but a UNIX domain socket.");
@@ -368,12 +398,22 @@ class DataXceiver extends Receiver implements Runnable {
         if (slotId != null) {
           boolean isCached = datanode.data.
               isCached(blk.getBlockPoolId(), blk.getBlockId());
+
+          //调用ShortCircuitRegistry.registerSlot()方法
+          // 在Datanode的共享内存中注册这个Slot对象
           datanode.shortCircuitRegistry.registerSlot(
               ExtendedBlockId.fromExtendedBlock(blk), slotId, isCached);
           registeredSlotId = slotId;
+
         }
+
+        //获取数据块文件以及校验和文件的文件描述符
         fis = datanode.requestShortCircuitFdsForRead(blk, token, maxVersion);
+
+
         Preconditions.checkState(fis != null);
+
+        //构造响应消息
         bld.setStatus(SUCCESS);
         bld.setShortCircuitAccessVersion(DataNode.CURRENT_BLOCK_FORMAT_VERSION);
       } catch (ShortCircuitFdsVersionException e) {
@@ -389,6 +429,8 @@ class DataXceiver extends Receiver implements Runnable {
         LOG.error("Request short-circuit read file descriptor" +
             " failed with unknown error.", e);
       }
+
+      //发回成功的响应消息
       bld.build().writeDelimitedTo(socketOut);
       if (fis != null) {
         FileDescriptor fds[] = new FileDescriptor[fis.length];
@@ -401,8 +443,11 @@ class DataXceiver extends Receiver implements Runnable {
         } else {
           buf[0] = (byte)DO_NOT_USE_RECEIPT_VERIFICATION.getNumber();
         }
+
+        //通过DomainSocket将数据块文件和校验和文件的文件描述符发送给客户端
         DomainSocket sock = peer.getDomainSocket();
         sock.sendFileDescriptors(fds, buf, 0, buf.length);
+
         if (supportsReceiptVerification) {
           LOG.trace("Reading receipt verification byte for {}", slotId);
           int val = sock.getInputStream().read();
@@ -436,6 +481,9 @@ class DataXceiver extends Receiver implements Runnable {
     }
   }
 
+  //当客户端完成了对副本的短路读操作时， 就需要关闭ShortCircuitReplica对象， 同时调
+  //用DataTransferProtocol.releaseShortCircuitFds()方法删除Datanode侧共享内存中的Slot对
+  //象， 这个请求是由DataXceiver.releaseShortCircuitFds()方法响应的。
   @Override
   public void releaseShortCircuitFds(SlotId slotId) throws IOException {
     boolean success = false;
@@ -443,6 +491,8 @@ class DataXceiver extends Receiver implements Runnable {
       String error;
       Status status;
       try {
+
+        //释放共享内存中的槽位
         datanode.shortCircuitRegistry.unregisterSlot(slotId);
         error = null;
         status = Status.SUCCESS;
@@ -453,12 +503,16 @@ class DataXceiver extends Receiver implements Runnable {
         error = e.getMessage();
         status = Status.ERROR_INVALID;
       }
+
+      //构造响应消息
       ReleaseShortCircuitAccessResponseProto.Builder bld =
           ReleaseShortCircuitAccessResponseProto.newBuilder();
       bld.setStatus(status);
       if (error != null) {
         bld.setError(error);
       }
+
+      //发回响应消息
       bld.build().writeDelimitedTo(socketOut);
       success = true;
     } finally {
@@ -491,12 +545,34 @@ class DataXceiver extends Receiver implements Runnable {
     sock.sendFileDescriptors(shmFdArray, buf, 0, buf.length);
   }
 
+
+  /**
+   * 创建共享内存段
+   *
+   * createNewMemorySegment()方法会将共享内存文件映射到Datanode的内存中，
+   * 然后构造 RegisteredShm类管理这段共享内存
+   *
+   * 之后DataXceiver.requestShortCircuitShm()方法会调用sendShmSuccessResponse()方法
+   * 将共享内存文件的文件描述符通过domainSocket发回客户端
+   *
+   *
+   * DFSClient的DfsClientShmManager对象从domainSocket接收了共享内存文件的文件描
+   * 述符后， 会打开共享内存文件并将该文件映射到DFSClient的内存中， 之后创建
+   * DfsClientShm对象管理这段共享内存并将这个DfsClientShm对象保存在
+   * DfsClientShmManager的对应字段中
+   *
+   * @param clientName       The name of the client.
+   * @throws IOException
+   */
   @Override
   public void requestShortCircuitShm(String clientName) throws IOException {
     NewShmInfo shmInfo = null;
     boolean success = false;
+
+    //获取底层DomainSocket对象
     DomainSocket sock = peer.getDomainSocket();
     try {
+      //如果DataTransferProtocol底层不是DomainSocket， 则发回异常
       if (sock == null) {
         sendShmErrorResponse(ERROR_INVALID, "Bad request from " +
             peer + ": must request a shared " +
@@ -504,6 +580,8 @@ class DataXceiver extends Receiver implements Runnable {
         return;
       }
       try {
+
+        //调用ShortCircuitRegistry.createNewMemorySegment()方法创建共享内存段
         shmInfo = datanode.shortCircuitRegistry.
             createNewMemorySegment(clientName, sock);
         // After calling #{ShortCircuitRegistry#createNewMemorySegment}, the
@@ -519,6 +597,8 @@ class DataXceiver extends Receiver implements Runnable {
             "Failed to create shared file descriptor: " + e.getMessage());
         return;
       }
+
+      //调用sendShmSuccessResponse()方法将共享内存文件的文件描述符发回客户端
       sendShmSuccessResponse(sock, shmInfo);
       success = true;
     } finally {

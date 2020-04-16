@@ -288,6 +288,9 @@ public class ShortCircuitRegistry {
   }
 
   /**
+   *
+   *
+   *
    * Handle a DFSClient request to create a new memory segment.
    *
    * @param clientName    Client name as reported by the client.
@@ -302,6 +305,7 @@ public class ShortCircuitRegistry {
    */
   public NewShmInfo createNewMemorySegment(String clientName,
       DomainSocket sock) throws IOException {
+
     NewShmInfo info = null;
     RegisteredShm shm = null;
     ShmId shmId = null;
@@ -315,9 +319,13 @@ public class ShortCircuitRegistry {
       }
       FileInputStream fis = null;
       try {
+
+
         do {
           shmId = ShmId.createRandom();
         } while (segments.containsKey(shmId));
+
+
         fis = shmFactory.createDescriptor(clientName, SHM_LENGTH);
         shm = new RegisteredShm(clientName, shmId, fis, this);
       } finally {

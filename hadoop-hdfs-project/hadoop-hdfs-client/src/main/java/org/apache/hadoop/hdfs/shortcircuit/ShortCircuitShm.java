@@ -46,6 +46,11 @@ import com.google.common.primitives.Ints;
 import javax.annotation.Nonnull;
 
 /**
+ *
+ * ShortCircuitShm类用来抽象短路读取时用到的一段共享内存，
+ * 这段共享内存中会有多个槽位，
+ * 每个槽位都保存了一个短路读副本的信息。
+ *
  * A shared memory segment used to implement short-circuit reads.
  */
 public class ShortCircuitShm {
@@ -152,6 +157,8 @@ public class ShortCircuitShm {
   }
 
   /**
+   * 用来唯一标识一个Slot。
+   *
    * Uniquely identifies a slot.
    */
   public static class SlotId {
@@ -197,6 +204,9 @@ public class ShortCircuitShm {
     }
   }
 
+  /**
+   * 迭代器类型， 用来遍历当前ShortCircuitShm中保存的所有Slot对象。
+   */
   public class SlotIterator implements Iterator<Slot> {
     int slotIdx = -1;
 
@@ -227,6 +237,10 @@ public class ShortCircuitShm {
   }
 
   /**
+   * Slot类是ShortCircuitShm中最重要的一个内部类，
+   * 它抽象了共享内存中的一个槽位，
+   * 并提供了操作内存映射文件对应槽位数据的方法。
+   *
    * A slot containing information about a replica.
    *
    * The format is:
@@ -242,6 +256,13 @@ public class ShortCircuitShm {
    */
   public class Slot {
     /**
+     *
+     *
+     * VALID_FLAG——用来标识当前Slot是否有效。 DFSClient在共享内存中新创建一
+     * 个Slot时， 会设置这个标志位。 当这个Slot对应的副本不再有效时， Datanode取
+     * 消这个标志位。 同时， 当Client认为Datanode不再使用这个Slot通信时， 也会取消
+     * 这个标志位。
+     *
      * Flag indicating that the slot is valid.
      *
      * The DFSClient sets this flag when it allocates a new slot within one of
@@ -254,16 +275,28 @@ public class ShortCircuitShm {
     private static final long VALID_FLAG =          1L<<63;
 
     /**
+     *
+     * ANCHORABLE_FLAG——当Datanode将Slot对应的副本通过mlock操作缓存到内
+     * 存中时， 会设置这个标志位。 当这个标志位被设置时， DFSClient的
+     * BlockReaderLocal读取Slot对应的副本时不再需要校验， 并且客户端可以进行零
+     * 拷贝读取。 每当客户端进行这样的读取操作时， 都需要在Slot上添加一个锚计
+     * 数， 只有当Slot没有引用的锚， 也就是锚计数为零时， Datanode才可以从缓存中
+     * 移出这个数据块。
+     *
+     *
      * Flag indicating that the slot can be anchored.
      */
     private static final long ANCHORABLE_FLAG =     1L<<62;
 
     /**
+     * 保存当前Slot在共享内存中的地址
      * The slot address in memory.
      */
     private final long slotAddress;
 
     /**
+     * 当前 Slot对应的短路读数据块id。
+     *
      * BlockId of the block this slot is used for.
      */
     private final ExtendedBlockId blockId;
@@ -325,10 +358,13 @@ public class ShortCircuitShm {
     private void setFlag(long flag) {
       long prev;
       do {
+        //这里通过调用native方法， 从内存中获取这8字节
         prev = unsafe.getLongVolatile(null, this.slotAddress);
+        //进行与操作， 如果结果不为空， 则证明标志位已经设置了
         if ((prev & flag) != 0) {
           return;
         }
+        //否则， 就将当前值与flag进行或操作， 也就添加了标志位
       } while (!unsafe.compareAndSwapLong(null, this.slotAddress,
                   prev, prev | flag));
     }
@@ -348,6 +384,11 @@ public class ShortCircuitShm {
       return isSet(VALID_FLAG);
     }
 
+    /**
+     * makeValid()方法是在Slot对象创建时调用的， 也就是Slot对象在创建之
+     * 后就是有效的。
+     *
+     */
     public void makeValid() {
       setFlag(VALID_FLAG);
     }
@@ -360,6 +401,13 @@ public class ShortCircuitShm {
       return isSet(ANCHORABLE_FLAG);
     }
 
+    /**
+     * makeAnchorable()方法则是在数据块被成功放入缓存时， 也就是
+     * CachingTask成功调用mlock()系统调用后执行的， 可锚（Anchorable） 槽位对应的数据块
+     * 在读取时是不需要校验的， 也就是在本地读取该数据块时不需要执行校验操作， 同时客户
+     * 端可以使用零拷贝模式读取这个数据块。
+     *
+     */
     public void makeAnchorable() {
       setFlag(ANCHORABLE_FLAG);
     }
@@ -375,6 +423,15 @@ public class ShortCircuitShm {
     }
 
     /**
+     * 当客户端通过免校
+     * 验模式（缓存中的数据块不需要校验） 或者零拷贝模式读取数据块时， 会调用
+     * addAnchor()方法增加这个Slot的锚次数， 表明当前数据块正在被引用。 只有当Slot的锚次
+     * 数为零时， Datanode才可以将该Slot对应的数据块从缓存中移出
+     *
+     * addAnchor()方法首先判断Slot是否有效并且可锚， 然后判断是否有太
+     * 多线程锚定了这个Slot， 如果不是则增加Slot对象的锚次数
+     *
+     *
      * Try to add an anchor for a given slot.
      *
      * When a slot is anchored, we know that the block it refers to is resident
@@ -388,16 +445,22 @@ public class ShortCircuitShm {
         prev = unsafe.getLongVolatile(null, this.slotAddress);
         if ((prev & VALID_FLAG) == 0) {
           // Slot is no longer valid.
+          //Slot不是有效的， 直接返回false
           return false;
         }
         if ((prev & ANCHORABLE_FLAG) == 0) {
+          //Slot并不是可锚的， 直接返回false
           // Slot can't be anchored right now.
           return false;
         }
+
         if ((prev & 0x7fffffff) == 0x7fffffff) {
+          //有太多线程锚定了这个Slot
           // Too many other threads have anchored the slot (2 billion?)
           return false;
         }
+
+        //否则， 增加当前Slot的锚次数
       } while (!unsafe.compareAndSwapLong(null, this.slotAddress,
                   prev, prev + 1));
       return true;
@@ -424,21 +487,36 @@ public class ShortCircuitShm {
   }
 
   /**
+   *
+   * 用来唯一标识一个ShortCircuitShm， 有两个long类型的id字段， 是随机产生的
+   *
    * ID for this SharedMemorySegment.
    */
   private final ShmId shmId;
 
   /**
+   * 内存映射文件的起始地址
+   *
    * The base address of the memory-mapped file.
    */
   private final long baseAddress;
 
   /**
+   * 内存映射文件的长度。
+   *
    * The mmapped length of the shared memory segment
    */
   private final int mmappedLength;
 
   /**
+   *
+   * 用于描述共享内存中的一个槽位， 每个槽位都用来追踪一个短路数据块的
+   * 状态。 由于是在共享内存中， 这个状态可以由Datanode进程修改， 也可以由
+   * DFSClient修改
+   *
+   * 用来保存共享内存中所有的Slot对象
+   *
+   *
    * The slots associated with this shared memory segment.
    * slot[i] contains the slot at offset i * BYTES_PER_SLOT,
    * or null if that slot is not allocated.
@@ -446,11 +524,23 @@ public class ShortCircuitShm {
   private final Slot slots[];
 
   /**
+   * 一个bitmap用来标识slots数组中哪些位置被占用。 这里积累
+   * BitSet的使用。
+   *
    * A bitset where each bit represents a slot which is in use.
    */
   private final BitSet allocatedSlots;
 
   /**
+   * ShortCircuitShm实现共享内存是通过mmap映射文件的方式， 客户端和Datanode会打
+   * 开同一个文件， 然后进行内存映射以达到共享内存的目的。
+   *
+   *
+   * 它会首先打开共享文件， 执行mmap内存映射操作， 然后根
+   * 据共享文件的大小计算出共享内存中可以有多少个Slot， 最后构造slots字段以及
+   * allocatedSlots字段
+   *
+   *
    * Create the ShortCircuitShm.
    *
    * @param shmId       The ID to use.
@@ -480,9 +570,14 @@ public class ShortCircuitShm {
     }
     this.shmId = shmId;
     this.mmappedLength = getUsableLength(stream);
+
+    //可以看到， 这里实现共享内存是通过mmap方式， 打开同一个文件， 并进行内存映射
     this.baseAddress = POSIX.mmap(stream.getFD(),
         POSIX.MMAP_PROT_READ | POSIX.MMAP_PROT_WRITE, true, mmappedLength);
+
+    //每个Slot是8字节， 这里通过文件的大小计算出当前共享内存中有多少个Slot
     this.slots = new Slot[mmappedLength / BYTES_PER_SLOT];
+
     this.allocatedSlots = new BitSet(slots.length);
     LOG.trace("creating {}(shmId={}, mmappedLength={}, baseAddress={}, "
         + "slots.length={})", this.getClass().getSimpleName(), shmId,
@@ -524,6 +619,11 @@ public class ShortCircuitShm {
   }
 
   /**
+   *
+   * 当前共享内存中注册一个Slot对象，
+   * allocAndRegisterSlot()方法首先从slots数组中获取一个空闲的位置，
+   * 然后构造Slot对象， 将这个Slot对象放入slots数组中， 最后返回新构造的Slot对象。
+   *
    * Allocate a new slot and register it.
    *
    * This function chooses an empty slot, initializes it, and then returns
@@ -533,11 +633,15 @@ public class ShortCircuitShm {
    */
   synchronized public final Slot allocAndRegisterSlot(
       ExtendedBlockId blockId) {
+
+    //获取第一个空闲的位置， 这里使用了BitSet（注意积累BitSet的使用）
     int idx = allocatedSlots.nextClearBit(0);
     if (idx >= slots.length) {
       throw new RuntimeException(this + ": no more slots are available.");
     }
     allocatedSlots.set(idx, true);
+
+    //构造Slot对象， 然后放入slots字段中
     Slot slot = new Slot(calculateSlotAddress(idx), blockId);
     slot.clear();
     slot.makeValid();
@@ -600,6 +704,8 @@ public class ShortCircuitShm {
   }
 
   /**
+   *
+   * 从ShortCircuitShm移除一个Slot对象
    * Unregisters a slot.
    *
    * This doesn't alter the contents of the slot.  It just means
@@ -610,6 +716,8 @@ public class ShortCircuitShm {
     Preconditions.checkState(allocatedSlots.get(slotIdx),
         "tried to unregister slot " + slotIdx + ", which was not registered.");
     allocatedSlots.set(slotIdx, false);
+
+    //将slots数组中对应的槽位设置为null
     slots[slotIdx] = null;
     LOG.trace("{}: unregisterSlot {}", this, slotIdx);
   }
@@ -627,6 +735,8 @@ public class ShortCircuitShm {
 
   public void free() {
     try {
+
+      // 将共享内存释放
       POSIX.munmap(baseAddress, mmappedLength);
     } catch (IOException e) {
       LOG.warn(this + ": failed to munmap", e);

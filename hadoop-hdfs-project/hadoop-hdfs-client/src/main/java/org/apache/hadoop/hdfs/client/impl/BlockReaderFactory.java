@@ -299,6 +299,13 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
   }
 
   /**
+   *
+   * build()方法首先尝试创建一个本地短路读取器， 短路读取避免了Socket通信的开销。
+   * 如果短路读取方式创建失败， 则创建一个域套接字读取器， 这种方式使用Linux的
+   * domainSocket方法进行本地传输（由dfs.client.domain.socket.data.traffic配置， 默认为
+   * false） 。 如果上述两种方式都不能创建成功， 则创建一个远程读取器， 使用TCP进行数据
+   * 的读取。
+   *
    * Build a BlockReader with the given options.
    *
    * This function will do the best it can to create a block reader that meets
@@ -339,14 +346,20 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
    *             If there was another problem.
    */
   public BlockReader build() throws IOException {
+
     Preconditions.checkNotNull(configuration);
     Preconditions
         .checkState(length >= 0, "Length must be set to a non-negative value");
+
+
     BlockReader reader = tryToCreateExternalBlockReader();
+
     if (reader != null) {
       return reader;
     }
+
     final ShortCircuitConf scConf = conf.getShortCircuitConf();
+
     try {
       if (scConf.isShortCircuitLocalReads() && allowShortCircuitLocalReads) {
         if (clientContext.getUseLegacyBlockReaderLocal()) {
@@ -356,6 +369,8 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
             return reader;
           }
         } else {
+
+          //尝试创建一个本地短路读取器。
           reader = getBlockReaderLocal();
           if (reader != null) {
             LOG.trace("{}: returning new block reader local.", this);
@@ -364,6 +379,7 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
         }
       }
       if (scConf.isDomainSocketDataTraffic()) {
+        // 使用Domain Socket
         reader = getRemoteBlockReaderFromDomain();
         if (reader != null) {
           LOG.trace("{}: returning new remote block reader using UNIX domain "
@@ -377,6 +393,8 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
     Preconditions.checkState(!DFSInputStream.tcpReadsDisabledForTesting,
         "TCP reads were disabled for testing, but we failed to " +
         "do a non-TCP read.");
+
+    // 获取remote reader
     return getRemoteBlockReaderFromTcp();
   }
 
@@ -463,6 +481,38 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
     return null;
   }
 
+  /**
+   *
+   * BlockReaderLocal类实现了本地短路读取功能， 也就是当客户端与Datanode在同一台
+   * 机器上时， 客户端可以绕过Datanode进程直接从本地磁盘读取数据。
+   *
+   * getBlockReaderLocal()方法会尝试创建一个本地短路读取器。 这个方法首先从
+   * clientContext中获取ShortCircuitCache， ShortCircuitCache是在DFSClient端缓存
+   * ShortCircuitReplicaInfo的类。 然后调用fetchOrCreate()方法从ShortCircuitCache中获取当前
+   * 读取数据块对应的ShortCircuitReplicaInfo类。
+   *
+   * ShortCircuitCache中的
+   * ShortCircuitReplica类保存了用来执行短路读取的文件描述符、 Client和Datanode共享内存
+   * 中记录当前副本信息的Slot对象， 以及数据块在内存中的映射文件mmap
+   *
+   *
+   * 获取了数据块对应的ShortCircuitReplica后， getBlockReaderLocal()方法会使用
+   * ShortCircuitReplica中保存的文件描述符构造数据块文件以及校验文件的输入流， 然后构造
+   * BlockReaderLocal类。
+   *
+   *
+   * 当客户端向Datanode请求数据时， Datanode会打开块文件以及该块文
+   * 件的元数据文件， 将这两个文件的文件描述符通过domainSocket传给客户端， 客户端拿到
+   * 文件描述符后构造输入流， 之后通过输入流直接读取磁盘上的块文件。 采用这种方式， 数
+   * 据绕过了Datanode进程的转发， 提供了更好的读取性能（请参考HDFS-347） 。 由于文件
+   * 描述符是只读的， 所以客户端不能修改收到的文件； 同时由于客户端自身无法访问块文件
+   * 所在的目录， 所以它也就不能访问数据目录中的其他文件了， 从而提高了数据读取的安全
+   * 性
+   *
+   *
+   * @return
+   * @throws IOException
+   */
   private BlockReader getBlockReaderLocal() throws IOException {
     LOG.trace("{}: trying to construct a BlockReaderLocal for short-circuit "
         + " reads.", this);
@@ -475,11 +525,19 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
               "giving up on BlockReaderLocal.", this, pathInfo);
       return null;
     }
+
+
     ShortCircuitCache cache = clientContext.getShortCircuitCache();
+
     ExtendedBlockId key = new ExtendedBlockId(block.getBlockId(),
         block.getBlockPoolId());
+
     ShortCircuitReplicaInfo info = cache.fetchOrCreate(key, this);
+
+
     InvalidToken exc = info.getInvalidTokenException();
+
+
     if (exc != null) {
       LOG.trace("{}: got InvalidToken exception while trying to construct "
           + "BlockReaderLocal via {}", this, pathInfo.getPath());

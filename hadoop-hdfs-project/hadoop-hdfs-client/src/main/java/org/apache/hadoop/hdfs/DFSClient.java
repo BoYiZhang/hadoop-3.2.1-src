@@ -195,6 +195,23 @@ import com.google.common.collect.Lists;
 import com.google.common.net.InetAddresses;
 
 /********************************************************
+ *
+ * DFSClient是一个真正实现了分布式文件系统客户端功能的类， 是用户使用HDFS各项
+ * 功能的起点。 DFSClient会连接到HDFS， 对外提供管理文件／ 目录、 读写文件以及管理与
+ * 配置HDFS系统等功能。
+ *
+ * 对于管理文件／ 目录以及管理与配置HDFS系统这两个功能， DFSClient并不需要与
+ * Datanode交互， 而是直接通过远程接口ClientProtocol调用Namenode提供的服务即可。 而对
+ * 于文件读写功能， DFSClient除了需要调用ClientProtocol与Namenode交互外， 还需要通过
+ * 流式接口DataTransferProtocol与Datanode交互传输数据。
+ *
+ * DFSClient对外提供的接口方法可以分为如下几类
+ * ■ DFSClient的构造方法和关闭方法。
+ * ■ 管理与配置文件系统相关方法。
+ * ■ 操作HDFS文件与目录方法。
+ * ■ 读写HDFS文件方法
+ *
+ *
  * DFSClient can connect to a Hadoop Filesystem and
  * perform basic file tasks.  It uses the ClientProtocol
  * to communicate with a NameNode daemon, and connects
@@ -293,12 +310,18 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   }
 
   /**
+   *
+   *
    * Create a new DFSClient connected to the given nameNodeUri or rpcNamenode.
    * If HA is enabled and a positive value is set for
    * {@link HdfsClientConfigKeys#DFS_CLIENT_TEST_DROP_NAMENODE_RESPONSE_NUM_KEY}
    * in the configuration, the DFSClient will use
    * {@link LossyRetryInvocationHandler} as its RetryInvocationHandler.
    * Otherwise one of nameNodeUri or rpcNamenode must be null.
+   *
+   *
+   *
+   *
    */
   @VisibleForTesting
   public DFSClient(URI nameNodeUri, ClientProtocol rpcNamenode,
@@ -307,12 +330,13 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     this.tracer = FsTracer.get(conf);
     this.dfsClientConf = new DfsClientConf(conf);
 
-    //HDFS配置信息。
+    //todo HDFS配置信息。
     this.conf = conf;
 
     //Client状态统计信息，包括Client读、写字节数等。
     this.stats = stats;
     this.socketFactory = NetUtils.getSocketFactory(conf, ClientProtocol.class);
+
 
     // 当Client读写数据时，如果Datanode出现故障，是否进行Datanode替换的策略。
     this.dtpReplaceDatanodeOnFailure = ReplaceDatanodeOnFailure.get(conf);
@@ -347,12 +371,14 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
           + ", this hacked client will proactively drop responses");
 
       //获取proxyInfo引用
+      //通过NameNodeProxies.createProxy()创建Namenode RPC引用
       proxyInfo = NameNodeProxiesClient.createProxyWithLossyRetryHandler(conf,
           nameNodeUri, ClientProtocol.class, numResponseToDrop,
           nnFallbackToSimpleAuth);
     }
 
     if (proxyInfo != null) {
+      //对属性赋值
       this.dtService = proxyInfo.getDelegationTokenService();
       //构造方法
       this.namenode = proxyInfo.getProxy();
@@ -367,6 +393,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
       //获取proxyInfo引用
       proxyInfo = NameNodeProxiesClient.createProxyWithClientProtocol(conf,
           nameNodeUri, nnFallbackToSimpleAuth);
+      //对属性赋值
       this.dtService = proxyInfo.getDelegationTokenService();
       this.namenode = proxyInfo.getProxy();
     }
@@ -864,6 +891,11 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
 
   public LocatedBlocks getLocatedBlocks(String src, long start)
       throws IOException {
+
+    // prefetchSize参数， 它指明了这次获取数据块的范围，
+    // 由配置项dfs.client.read.prefetch.size配置， 默认是10个数据块大小，
+    // 如果系统数据块大小是64MB， 那么prefetchSize大小是640MB。
+
     return getLocatedBlocks(src, start, dfsClientConf.getPrefetchSize());
   }
 

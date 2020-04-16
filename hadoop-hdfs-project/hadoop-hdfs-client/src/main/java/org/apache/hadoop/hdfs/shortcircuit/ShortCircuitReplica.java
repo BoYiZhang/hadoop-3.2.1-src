@@ -38,6 +38,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ *
+ * ShortCircuitReplica类封装了一个短路读数据块副本的所有信息， 只有获取了
+ * ShortCircuitReplica对象， 才能构造BlockReaderLocal对象完成短路读操作.
+ *
+ *
  * A ShortCircuitReplica object contains file descriptors for a block that
  * we are reading via short-circuit local reads.
  *
@@ -51,16 +56,19 @@ public class ShortCircuitReplica {
       ShortCircuitCache.class);
 
   /**
+   * 对应BlockId， 唯一标识这个ShortCircuitReplica对象
    * Identifies this ShortCircuitReplica object.
    */
   final ExtendedBlockId key;
 
   /**
+   * 副本的数据块文件输入流。
    * The block data input stream.
    */
   private final FileInputStream dataStream;
 
   /**
+   * 副本的校验文件输入流。
    * The block metadata input stream.
    *
    * TODO: make this nullable if the file has no checksums on disk.
@@ -68,11 +76,13 @@ public class ShortCircuitReplica {
   private final FileInputStream metaStream;
 
   /**
+   * 副本校验文件头。
    * Block metadata header.
    */
   private final BlockMetadataHeader metaHeader;
 
   /**
+   * 管理这个ShortCircuitReplica对象的ShortCircuitCache对象
    * The cache we belong to.
    */
   private final ShortCircuitCache cache;
@@ -83,11 +93,15 @@ public class ShortCircuitReplica {
   private final long creationTimeMs;
 
   /**
+   * 这个ShortCircuitReplica对象对应的共享内存中的槽位。
    * If non-null, the shared memory slot associated with this replica.
    */
   private final Slot slot;
 
   /**
+   *
+   * 当前ShortCircuitReplica对象在内存中的映射数据
+   *
    * Current mmap state.
    *
    * Protected by the cache lock.
@@ -95,6 +109,8 @@ public class ShortCircuitReplica {
   Object mmapData;
 
   /**
+   * 当前ShortCircuitReplica对象是否在cahce中被删除
+   *
    * True if this replica has been purged from the cache; false otherwise.
    *
    * Protected by the cache lock.
@@ -102,6 +118,13 @@ public class ShortCircuitReplica {
   boolean purged = false;
 
   /**
+   *
+   * 标识当前ShortCircuitReplica对象被引用的次
+   * 数。 ShortCircuitReplica只可能被ShortCircuitCache、 BlockReaderLocal以及
+   * ClientMmap对象引用。 当我们构建一个ShortCircuitReplica对象时， 这个值为2，
+   * 因为在创建时， ShortCircuitReplica对象就已经被ShortCircuitCache以及请求类引
+   * 用了。 只有refCount==0时， ShortCircuitReplica对象才可以被关闭。
+   *
    * Number of external references to this replica.  Replicas are referenced
    * by the cache, BlockReaderLocal instances, and by ClientMmap instances.
    * The number starts at 2 because when we create a replica, it is referenced
@@ -112,6 +135,10 @@ public class ShortCircuitReplica {
   int refCount = 2;
 
   /**
+   *
+   * ShortCircuitReplica对象被加入ShortCircuitCache的evictable队列
+   * 的时间。 如果不在evictable队列中， 则为null。
+   *
    * The monotonic time in nanoseconds at which the replica became evictable, or
    * null if it is not evictable.
    *
@@ -137,6 +164,10 @@ public class ShortCircuitReplica {
   }
 
   /**
+   *
+   *  unref()用于在不需要对 ShortCircuitReplica对象的引用时，
+   *  解除对ShortCircuitReplica对象的引用。
+   *
    * Decrement the reference count.
    */
   public void unref() {
@@ -172,6 +203,11 @@ public class ShortCircuitReplica {
   }
 
   /**
+   *
+   * 共享内存的槽位中添加一个免校验（nochecksum） 的锚（anchor） 。 只有当Datanode通过mlock操作将数据块副本缓存到内存
+   * 后， 也就是副本对应的Slot是可锚状态时， 才可以添加这个锚。
+   *
+   *
    * Try to add a no-checksum anchor to our shared memory slot.
    *
    * It is only possible to add this anchor when the block is mlocked on the Datanode.
@@ -220,11 +256,14 @@ public class ShortCircuitReplica {
    */
   void munmap() {
     MappedByteBuffer mmap = (MappedByteBuffer)mmapData;
+
+    //调用munmap()系统调用移除映射
     NativeIO.POSIX.munmap(mmap);
     mmapData = null;
   }
 
   /**
+   * 关闭ShortCircuitReplica对象
    * Close the replica.
    *
    * Must be called after there are no more references to the replica in the
@@ -274,12 +313,18 @@ public class ShortCircuitReplica {
     return cache.getOrCreateClientMmap(this, anchor);
   }
 
+  //loadMmapInternal()方法用于将ShortCircuitReplica对应的数据块文件映射到内存中，
+  //这个方法是在客户端对副本进行零拷贝读取时调用的， 这个方法的逆方法是munmap()。
   MappedByteBuffer loadMmapInternal() {
     try {
       FileChannel channel = dataStream.getChannel();
+
+      // 膜拜大神!!!!!!
+      // 调用java.nio.Channel.map()方法创建文件的内存映射
       MappedByteBuffer mmap = channel.map(MapMode.READ_ONLY, 0,
           Math.min(Integer.MAX_VALUE, channel.size()));
-      LOG.trace("{}: created mmap of size {}", this, channel.size());
+
+      LOG.warn("{}: created mmap of size {}", this, channel.size());
       return mmap;
     } catch (IOException e) {
       LOG.warn(this + ": mmap error", e);
