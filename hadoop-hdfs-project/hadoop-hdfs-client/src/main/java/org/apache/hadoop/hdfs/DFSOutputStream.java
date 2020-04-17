@@ -240,16 +240,32 @@ public class DFSOutputStream extends FSOutputSummer
     }
   }
 
+  /**
+   * 它首先调用私有的构造方法初始化一些属性，
+   * 并且对shouldSyncBlock（是否在关闭时将数据块持久化到磁盘） 属性赋值。 然后调用
+   * computePacketChunkSize()方法确定数据包（packet） 大小， 同时确定一个数据包当中包含
+   * 多少个校验块（chunk） 。 接下来create()方法会构造streamer线程， 这个streamer线程
+   * 是DFSOutputStream的内部类， 它负责建立数据流管道（pipeline） ， 并将数据包发送到数
+   * 据流管道中的第一个Datanode。 create()方法最后设置了favoredNodes字段， 确认客户端想
+   * 要在哪些Datanode上写入数据块。
+   *
+   */
   /** Construct a new output stream for creating a file. */
   protected DFSOutputStream(DFSClient dfsClient, String src,
       HdfsFileStatus stat, EnumSet<CreateFlag> flag, Progressable progress,
       DataChecksum checksum, String[] favoredNodes, boolean createStreamer) {
+
+    //调用DFSOutputStream私有的构造方法初始化DFSOutputStream的字段
     this(dfsClient, src, flag, progress, stat, checksum);
+
+    //初始化shouldSyncBlock字段
     this.shouldSyncBlock = flag.contains(CreateFlag.SYNC_BLOCK);
 
+    //调用computePacketChunkSize()方法计算chunk大小， 以及packet中包含多少个chunk
     computePacketChunkSize(dfsClient.getConf().getWritePacketSize(),
         bytesPerChecksum);
 
+    //构造streamer线程
     if (createStreamer) {
       streamer = new DataStreamer(stat, null, dfsClient, src, progress,
           checksum, cachingStrategy, byteArrayManager, favoredNodes,
@@ -257,6 +273,10 @@ public class DFSOutputStream extends FSOutputSummer
     }
   }
 
+
+  //这个方法首先通过调用
+  //ClientProtocol.create()在Namenode的命名空间（Namespace） 中创建一个新文件， 然后调
+  //用DFSOutputStream的构造方法创建输出流， 最后启动DFSOutputStream的streamer线程。
   static DFSOutputStream newStreamForCreate(DFSClient dfsClient, String src,
       FsPermission masked, EnumSet<CreateFlag> flag, boolean createParent,
       short replication, long blockSize, Progressable progress,
@@ -273,9 +293,12 @@ public class DFSOutputStream extends FSOutputSummer
       while (shouldRetry) {
         shouldRetry = false;
         try {
+
+          //调用ClientProtocol.create()方法， 在命名空间中创建HDFS文件
           stat = dfsClient.namenode.create(src, masked, dfsClient.clientName,
               new EnumSetWritable<>(flag), createParent, replication,
               blockSize, SUPPORTED_CRYPTO_VERSIONS, ecPolicyName);
+
           break;
         } catch (RemoteException re) {
           IOException e = re.unwrapRemoteException(
@@ -307,12 +330,14 @@ public class DFSOutputStream extends FSOutputSummer
       Preconditions.checkNotNull(stat, "HdfsFileStatus should not be null!");
       final DFSOutputStream out;
       if(stat.getErasureCodingPolicy() != null) {
+        //调用构造方法创建DFSOutputStream对象
         out = new DFSStripedOutputStream(dfsClient, src, stat,
             flag, progress, checksum, favoredNodes);
       } else {
         out = new DFSOutputStream(dfsClient, src, stat,
             flag, progress, checksum, favoredNodes, true);
       }
+      //启动DFSOutputStream的streamer线程
       out.start();
       return out;
     }
@@ -403,10 +428,20 @@ public class DFSOutputStream extends FSOutputSummer
   }
 
   protected void computePacketChunkSize(int psize, int csize) {
+
+    //chunkSize为完整校验块的大小， 包括校验块数据和校验块数据对应的校验和
+    //todo 后面的值是多少
     final int bodySize = psize - PacketHeader.PKT_MAX_HEADER_LEN;
+
+    //每个数据包中可以包含的校验块数量
     final int chunkSize = csize + getChecksumSize();
+
+
     chunksPerPacket = Math.max(bodySize/chunkSize, 1);
+
+    //数据包的大小
     packetSize = chunkSize*chunksPerPacket;
+
     DFSClient.LOG.debug("computePacketChunkSize: src={}, chunkSize={}, "
             + "chunksPerPacket={}, packetSize={}",
         src, chunkSize, chunksPerPacket, packetSize);
@@ -416,6 +451,7 @@ public class DFSOutputStream extends FSOutputSummer
     return dfsClient.newPathTraceScope("DFSOutputStream#write", src);
   }
 
+  // 写入操作
   // @see FSOutputSummer#writeChunk()
   @Override
   protected synchronized void writeChunk(byte[] b, int offset, int len,

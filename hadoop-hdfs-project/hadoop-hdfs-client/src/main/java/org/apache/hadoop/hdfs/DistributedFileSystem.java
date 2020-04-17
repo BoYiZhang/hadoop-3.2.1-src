@@ -515,6 +515,9 @@ public class DistributedFileSystem extends FileSystem
     }.resolve(this, absF);
   }
 
+  //用户代码创建一个新文件时， 会首先调用DistributedFileSystem.create()方法创建一个
+  //空文件， 然后通过create()方法返回的HdfsDataOutputStream输出流写文件
+
   @Override
   public FSDataOutputStream create(final Path f, final FsPermission permission,
       final EnumSet<CreateFlag> cflags, final int bufferSize,
@@ -527,9 +530,13 @@ public class DistributedFileSystem extends FileSystem
     return new FileSystemLinkResolver<FSDataOutputStream>() {
       @Override
       public FSDataOutputStream doCall(final Path p) throws IOException {
+
+        //调用DFSClient.create()创建DFSOutputStream
         final DFSOutputStream dfsos = dfs.create(getPathName(p), permission,
             cflags, replication, blockSize, progress, bufferSize,
             checksumOpt);
+
+        //构造HdfsDataOutputStream， 包装DFSOutputStream， 并返回
         return dfs.createWrappedOutputStream(dfsos, statistics);
       }
       @Override

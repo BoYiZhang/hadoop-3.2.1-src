@@ -51,6 +51,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
 
 /**
+ *
+ *
+ * ShortCircuitRegistry类用于管理Datanode侧的所有共享内存， 包括创建、 释放共享内
+ * 存等操作。
+ *
  * Manages client short-circuit memory segments on the DataNode.
  *
  * DFSClients request shared memory segments from the DataNode.  The 
@@ -86,6 +91,13 @@ public class ShortCircuitRegistry {
 
   private static final int SHM_LENGTH = 8192;
 
+
+
+  //DfsClientShm类用于描述DFSClient侧的共享内存， 与DfsClientShm一样，
+  //RegisteredShm也是ShortCircuitRegistry的子类，
+  // 同样实现了DomainSocketWatcher.Handler接口。
+
+
   public static class RegisteredShm extends ShortCircuitShm
       implements DomainSocketWatcher.Handler {
     private final String clientName;
@@ -113,6 +125,11 @@ public class ShortCircuitRegistry {
     }
   }
 
+  // 用于从ShortCircuitRegistry类中删除一段共享内存， 这个方法是在
+  //Datanode与DFSClient之间的DomainSocket出现异常时， 由RegisteredShm.handle()
+  //方法调用的（请参考RegisteredShm类小节） 。 removeShm()方法首先会停止
+  //ShortCircuitRegistry对这段共享内存的追踪， 然后停止对共享内存中所有Slot对象
+  //的追踪， 最后释放这段共享内存并关闭共享内存映射文件
   public synchronized void removeShm(ShortCircuitShm shm) {
     if (LOG.isTraceEnabled()) {
       LOG.trace("removing shm " + shm);
@@ -197,6 +214,13 @@ public class ShortCircuitRegistry {
   }
 
   /**
+   * 用于在缓存数据块对应的Slot对象上添加可锚状态
+   * 位， 这个方法是在Datanode将一个数据块添加到缓存时， 由CachingTask对象调
+   * 用的（请参考第4章的FSDatasetImpl实现小节） 。 processBlockMlockEvent()会从
+   * ShortCircuit Registry.slots字段获取该数据块对应的Slot对象， 然后调用
+   * Slot.makeAnchorable()方法添加一个可锚状态位， 由于这个状态位是保存在共享
+   * 内存文件中的， 所以这个状态位的信息会同步到DFSClient端的Slot对象上。
+   *
    * Process a block mlock event from the FsDatasetCache.
    *
    * @param blockId    The block that was mlocked.
@@ -210,6 +234,10 @@ public class ShortCircuitRegistry {
   }
 
   /**
+   * 类似于processBlockMlockEvent()方法， 当
+   * Datanode将数据块从缓存中移除时， 会调用这个方法删除Slot对象的可锚状态
+   * 位。
+   *
    * Mark any slots associated with this blockId as unanchorable.
    *
    * @param blockId        The block ID.
@@ -289,6 +317,12 @@ public class ShortCircuitRegistry {
 
   /**
    *
+   * 用于在Datanode侧构造一段共享内存， 这个方法是
+   * 在DataXceiver.requestShortCircuitShm()响应
+   * DataTransferProtocol.requestShortCircuitShm()请求时调用的
+   * createNewMemorySegment()方法会打开共享内存文件， 并将该文件映射到内存中。
+   * 然后创建RegisteredShm对象管理该共享内存，
+   * 并将RegisteredShm对象加入ShortCircuitRegistry.segments字段中保存
    *
    *
    * Handle a DFSClient request to create a new memory segment.
@@ -344,7 +378,14 @@ public class ShortCircuitRegistry {
     }
     return info;
   }
-  
+
+  //用于在Datanode侧的共享内存中添加一个Slot对象， 这个方法是在
+  //DataXceiver.requestShortCircuitFds()响应
+  //DataTransferProtocol.requestShortCircuitFds()请求时调用的。 registerSlot()方法首
+  //先从ShortCircuitRegistry.segments字段中取出指定共享内存对应的RegisteredShm
+  //对象， 然后调用RegisteredShm.registerSlot()方法构造并添加Slot对象， 最后将该
+  //Slot对象加入ShortCircuitRegistry.slots字段中保存。
+
   public synchronized void registerSlot(ExtendedBlockId blockId, SlotId slotId,
       boolean isCached) throws InvalidRequestException {
     if (!enabled) {
@@ -373,7 +414,13 @@ public class ShortCircuitRegistry {
         slotId + " (isCached=" + isCached + ")");
     }
   }
-  
+
+  //用于在Datanode侧的共享内存中删除一个Slot对象， 这个方法是
+  //在DataXceiver.releaseShortCircuitFds()响应
+  //DataTransferProtocol.releaseShortCircuitFds()请求时调用的。 unregisterSlot()方法
+  //首先从ShortCircuitRegistry.segments字段中取出指定共享内存对应的
+  //RegisteredShm对象， 然后调用RegisteredShm.unregisterSlot()释放Slot对象， 最后
+  //将该Slot对象从ShortCircuitRegistry.slots字段中删除。
   public synchronized void unregisterSlot(SlotId slotId)
       throws InvalidRequestException {
     if (!enabled) {
