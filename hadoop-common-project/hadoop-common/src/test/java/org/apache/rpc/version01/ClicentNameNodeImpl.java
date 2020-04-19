@@ -1,4 +1,4 @@
-package org.apache.rpc;
+package org.apache.rpc.version01;
 
 /**
  * 实现协议结构

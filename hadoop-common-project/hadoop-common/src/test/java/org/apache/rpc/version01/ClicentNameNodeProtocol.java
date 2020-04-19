@@ -1,4 +1,4 @@
-package org.apache.rpc;
+package org.apache.rpc.version01;
 
 /**
  * 协议接口
