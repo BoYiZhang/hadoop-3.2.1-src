@@ -1,0 +1,28 @@
+/**
+ * 生成java代码指令
+ * protoc --java_out=. CustomProtocol.proto
+ *
+ */
+
+option java_package = "org.apache.hadoop.rpc.protobuf";
+option java_outer_classname = "CustomProtos";
+option java_generic_services = true;
+option java_generate_equals_and_hash = true;
+
+package hadoop.common;
+
+service MetaInfo {
+  rpc getMetaInfo(GetMetaInfoRequestProto) returns (GetMetaInfoResponseProto);
+}
+
+
+message GetMetaInfoRequestProto {
+  required string path = 1;
+}
+
+message GetMetaInfoResponseProto {
+  required string info = 1;
+}
+
+
+
