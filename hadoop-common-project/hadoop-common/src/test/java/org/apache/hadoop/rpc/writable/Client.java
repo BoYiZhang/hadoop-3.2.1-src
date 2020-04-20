@@ -1,9 +1,10 @@
-package org.apache.rpc;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.ipc.RPC;
+package org.apache.hadoop.rpc.writable;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.ipc.RPC;
 
 /**
  * 访问RPC服务

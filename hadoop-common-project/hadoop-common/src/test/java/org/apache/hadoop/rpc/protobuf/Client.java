@@ -1,22 +1,10 @@
-package org.apache.hadoop.rpc;
+package org.apache.hadoop.rpc.protobuf;
 
 import java.net.InetSocketAddress;
-import java.util.concurrent.CompletionService;
-import java.util.concurrent.ExecutorCompletionService;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.ipc.RPC;
-import com.google.protobuf.BlockingService;
-import com.google.protobuf.RpcController;
-import com.google.protobuf.ServiceException;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
-import org.apache.hadoop.ipc.ProtocolInfo;
-import org.apache.hadoop.ipc.RPC;
-import org.apache.hadoop.rpc.protobuf.CustomProtos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

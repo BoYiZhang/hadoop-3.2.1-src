@@ -1,4 +1,4 @@
-package org.apache.hadoop.rpc;
+package org.apache.hadoop.rpc.protobuf;
 
 
 import com.google.protobuf.BlockingService;

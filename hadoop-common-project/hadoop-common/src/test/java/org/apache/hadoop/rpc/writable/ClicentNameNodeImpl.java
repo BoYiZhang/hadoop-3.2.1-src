@@ -1,4 +1,4 @@
-package org.apache.rpc.version01;
+package org.apache.hadoop.rpc.writable;
 
 /**
  * 实现协议结构
