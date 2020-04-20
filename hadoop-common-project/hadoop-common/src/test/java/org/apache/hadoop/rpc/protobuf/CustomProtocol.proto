@@ -15,7 +15,6 @@ service MetaInfo {
   rpc getMetaInfo(GetMetaInfoRequestProto) returns (GetMetaInfoResponseProto);
 }
 
-
 message GetMetaInfoRequestProto {
   required string path = 1;
 }
@@ -23,6 +22,4 @@ message GetMetaInfoRequestProto {
 message GetMetaInfoResponseProto {
   required string info = 1;
 }
-
-
 

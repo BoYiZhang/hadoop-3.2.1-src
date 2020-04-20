@@ -15,24 +15,26 @@ public class Client {
 
     public static void main(String[] args) throws Exception {
 
+        //1. 构建配置对象
         Configuration conf = new Configuration();
+
+        //2. 设置协议的RpcEngine为ProtobufRpcEngine .
         RPC.setProtocolEngine(conf, Server.MetaInfoProtocol.class,
                 ProtobufRpcEngine.class);
 
 
-        //1. 拿到RPC协议
+        //3. 拿到RPC协议
         Server.MetaInfoProtocol proxy = RPC.getProxy(Server.MetaInfoProtocol.class, 1L,
                 new InetSocketAddress("localhost", 7777), conf);
 
-        //2. 发送请求
+        //4. 发送请求
         CustomProtos.GetMetaInfoRequestProto obj =  CustomProtos.GetMetaInfoRequestProto.newBuilder().setPath("/meta").build();
 
         CustomProtos.GetMetaInfoResponseProto metaData = proxy.getMetaInfo(null, obj);
 
-        //3. 打印元数据
+        //5. 打印元数据
         System.out.println(metaData.getInfo());
 
-
-
     }
+
 }

@@ -28,8 +28,7 @@ public class Server {
     }
 
     // 实现类
-    public static class MetaInfoServer
-            implements MetaInfoProtocol {
+    public static class MetaInfoServer implements MetaInfoProtocol {
 
         @Override
         public CustomProtos.GetMetaInfoResponseProto getMetaInfo(RpcController controller,
@@ -46,35 +45,34 @@ public class Server {
 
 
     public static void main(String[] args) throws  Exception{
+
+
+        //1. 构建配置对象
         Configuration conf = new Configuration();
 
-        MetaInfoServer serverImpl =
-                new MetaInfoServer();
-
+        //2. 协议对象的实例
+        MetaInfoServer serverImpl =  new MetaInfoServer();
         BlockingService blockingService =
                 CustomProtos.MetaInfo.newReflectiveBlockingService(serverImpl);
 
+        //3. 设置协议的RpcEngine为ProtobufRpcEngine .
         RPC.setProtocolEngine(conf, MetaInfoProtocol.class,
                 ProtobufRpcEngine.class);
 
-
-        //1. 构建RPC框架
+        //4. 构建RPC框架
         RPC.Builder builder = new RPC.Builder(conf);
-        //2. 绑定地址
+        //5. 绑定地址
         builder.setBindAddress("localhost");
-        //3. 绑定端口
+        //6. 绑定端口
         builder.setPort(7777);
-        //4. 绑定协议
+        //7. 绑定协议
         builder.setProtocol(MetaInfoProtocol.class);
-        //5. 调用协议实现类
+        //8. 调用协议实现类
         builder.setInstance(blockingService);
-        //6. 创建服务
+        //9. 创建服务
         RPC.Server server = builder.build();
-        //7. 启动服务
+        //10. 启动服务
         server.start();
-
-
-
 
     }
 
