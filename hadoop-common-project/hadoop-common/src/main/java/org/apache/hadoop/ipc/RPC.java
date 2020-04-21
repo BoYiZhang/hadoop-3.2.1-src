@@ -208,12 +208,18 @@ public class RPC {
   // return the RpcEngine configured to handle a protocol
   static synchronized RpcEngine getProtocolEngine(Class<?> protocol,
       Configuration conf) {
+    //从缓存中获取RpcEngine ,
+    // 这个是提前设置的
+    // 通过 RPC.setProtocolEngine(conf, MetaInfoProtocol.class,ProtobufRpcEngine.class);
+
     RpcEngine engine = PROTOCOL_ENGINES.get(protocol);
     if (engine == null) {
-      //todo 这个类是在哪呢?????  rpc.engine 这个包在哪 ??
-      // 比如:  rpc.engine.ClientNamenodeProtocolPB ??
+
+      //通过这里 获取RpcEngine的实现类 , 这里我们获取的是 ProtobufRpcEngine.class
       Class<?> impl = conf.getClass(ENGINE_PROP+"."+protocol.getName(),
                                     WritableRpcEngine.class);
+
+      // impl  : org.apache.hadoop.ipc.ProtobufRpcEngine
       engine = (RpcEngine)ReflectionUtils.newInstance(impl, conf);
       PROTOCOL_ENGINES.put(protocol, engine);
     }
@@ -759,11 +765,17 @@ public class RPC {
    * Class to construct instances of RPC server with specific options.
    */
   public static class Builder {
+    //设置协议
     private Class<?> protocol = null;
+    //设置协议的实例
     private Object instance = null;
+    //设置绑定地址
     private String bindAddress = "0.0.0.0";
+    //设置端口
     private int port = 0;
+    //这是处理任务的hadnler数量
     private int numHandlers = 1;
+    //设置读取任务的县城数量
     private int numReaders = -1;
     private int queueSizePerHandler = -1;
     private boolean verbose = false;
@@ -1056,8 +1068,10 @@ public class RPC {
                      Configuration conf, String serverName, 
                      SecretManager<? extends TokenIdentifier> secretManager,
                      String portRangeConfig) throws IOException {
+     //调用父类,进行Server的初始化操作
       super(bindAddress, port, paramClass, handlerCount, numReaders, queueSizePerHandler,
             conf, serverName, secretManager, portRangeConfig);
+      ///在这里设置meta data 的通讯协议,已经处理的RpcEngine
       initProtocolMetaInfo(conf);
     }
     

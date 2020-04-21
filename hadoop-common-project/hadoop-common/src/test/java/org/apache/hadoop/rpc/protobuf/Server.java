@@ -46,7 +46,6 @@ public class Server {
 
     public static void main(String[] args) throws  Exception{
 
-
         //1. 构建配置对象
         Configuration conf = new Configuration();
 
@@ -69,6 +68,7 @@ public class Server {
         builder.setProtocol(MetaInfoProtocol.class);
         //8. 调用协议实现类
         builder.setInstance(blockingService);
+        builder.setVerbose(true);
         //9. 创建服务
         RPC.Server server = builder.build();
         //10. 启动服务

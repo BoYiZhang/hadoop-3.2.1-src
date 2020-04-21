@@ -1194,10 +1194,15 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
    *         or null if no such property exists.
    */
   public String get(String name) {
+
     String[] names = handleDeprecation(deprecationContext.get(), name);
+
     String result = null;
+
     for(String n : names) {
+
       result = substituteVars(getProps().getProperty(n));
+
     }
     return result;
   }
@@ -2629,7 +2634,9 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
    *         or <code>defaultValue</code>. 
    */
   public Class<?> getClass(String name, Class<?> defaultValue) {
+    //
     String valueString = getTrimmed(name);
+
     if (valueString == null)
       return defaultValue;
     try {

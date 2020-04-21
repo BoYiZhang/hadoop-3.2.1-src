@@ -123,7 +123,7 @@ public class ReflectionUtils {
   @SuppressWarnings("unchecked")
   public static <T> T newInstance(Class<T> theClass, Configuration conf) {
     T result;
-    try {
+    try {  //class org.apache.hadoop.ipc.WritableRpcEngine
       Constructor<T> meth = (Constructor<T>) CONSTRUCTOR_CACHE.get(theClass);
       if (meth == null) {
         meth = theClass.getDeclaredConstructor(EMPTY_ARRAY);

@@ -60,27 +60,51 @@ public class CallQueueManager<E extends Schedulable>
     return (Class<? extends RpcScheduler>)schedulerClass;
   }
 
+  /**
+   *
+   * 启用Backoff配置参数。
+   * 当前，如果应用程序中包含较多的用户调用，假设没有达到操作系统的连接限制，则RPC请求将处于阻塞状态。
+   * 或者，当RPC或NameNode在重负载时，可以基于某些策略将一些明确定义的异常抛回给客户端，
+   * 客户端将理解这种异常并进行指数回退，
+   * 以此作为类RetryInvocationHandler的另一个实现
+   */
   private volatile boolean clientBackOffEnabled;
+
 
   // Atomic refs point to active callQueue
   // We have two so we can better control swapping
+  // 存放队列引用
   private final AtomicReference<BlockingQueue<E>> putRef;
+
+  // 获取队列引用
   private final AtomicReference<BlockingQueue<E>> takeRef;
 
+  //调度器
   private RpcScheduler scheduler;
 
   public CallQueueManager(Class<? extends BlockingQueue<E>> backingClass,
                           Class<? extends RpcScheduler> schedulerClass,
       boolean clientBackOffEnabled, int maxQueueSize, String namespace,
       Configuration conf) {
+
     int priorityLevels = parseNumLevels(namespace, conf);
+
+    //创建调度scheduler. 默认DefaultRpcScheduler
     this.scheduler = createScheduler(schedulerClass, priorityLevels,
         namespace, conf);
+
+    //创建queue 实例
     BlockingQueue<E> bq = createCallQueueInstance(backingClass,
         priorityLevels, maxQueueSize, namespace, conf);
+
     this.clientBackOffEnabled = clientBackOffEnabled;
+
+    //放入队列引用
     this.putRef = new AtomicReference<BlockingQueue<E>>(bq);
+
+    //获取队列引用
     this.takeRef = new AtomicReference<BlockingQueue<E>>(bq);
+
     LOG.info("Using callQueue: {}, queueCapacity: {}, " +
         "scheduler: {}, ipcBackoff: {}.",
         backingClass, maxQueueSize, schedulerClass, clientBackOffEnabled);

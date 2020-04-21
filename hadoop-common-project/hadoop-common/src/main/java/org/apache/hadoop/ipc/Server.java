@@ -679,34 +679,48 @@ public abstract class Server {
 
   static Class<? extends BlockingQueue<Call>> getQueueClass(
       String prefix, Configuration conf) {
+    //  ipc.[端口号].callqueue.impl LinkedBlockingQueue
     String name = prefix + "." + CommonConfigurationKeys.IPC_CALLQUEUE_IMPL_KEY;
     Class<?> queueClass = conf.getClass(name, LinkedBlockingQueue.class);
-    return CallQueueManager.convertQueueClass(queueClass, Call.class);
+
+    //这里需要看一下, 到底是啥
+    Class<? extends BlockingQueue<Call>> call = CallQueueManager.convertQueueClass(queueClass, Call.class);
+
+    return call;
   }
 
   static Class<? extends RpcScheduler> getSchedulerClass(
       String prefix, Configuration conf) {
+
+    //   ipc.[端口号].scheduler.impl
     String schedulerKeyname = prefix + "." + CommonConfigurationKeys
         .IPC_SCHEDULER_IMPL_KEY;
+
     Class<?> schedulerClass = conf.getClass(schedulerKeyname, null);
     // Patch the configuration for legacy fcq configuration that does not have
     // a separate scheduler setting
     if (schedulerClass == null) {
+
       String queueKeyName = prefix + "." + CommonConfigurationKeys
           .IPC_CALLQUEUE_IMPL_KEY;
       Class<?> queueClass = conf.getClass(queueKeyName, null);
+
       if (queueClass != null) {
-        if (queueClass.getCanonicalName().equals(
-            FairCallQueue.class.getCanonicalName())) {
-          conf.setClass(schedulerKeyname, DecayRpcScheduler.class,
-              RpcScheduler.class);
+
+        // FairCallQueue , 当进行大量rpc操作时,默认的FIFO会使后面的操作失灵.  可以使用DecayRpcScheduler 策略.
+        if (queueClass.getCanonicalName().equals(FairCallQueue.class.getCanonicalName())) {
+          conf.setClass(schedulerKeyname, DecayRpcScheduler.class, RpcScheduler.class);
         }
+
       }
     }
+
+
     schedulerClass = conf.getClass(schedulerKeyname,
         DefaultRpcScheduler.class);
 
-    return CallQueueManager.convertSchedulerClass(schedulerClass);
+    Class<? extends RpcScheduler> scheduler = CallQueueManager.convertSchedulerClass(schedulerClass);
+    return scheduler;
   }
 
   /*
@@ -1021,6 +1035,7 @@ public abstract class Server {
         startNanos = Time.monotonicNowNanos();
 
         setResponseFields(value, responseParams);
+        //todo 发送响应
         sendResponse();
 
         deltaNanos = Time.monotonicNowNanos() - startNanos;
@@ -1171,39 +1186,55 @@ public abstract class Server {
 
   /** Listens on the socket. Creates jobs for the handler threads*/
   private class Listener extends Thread {
-    
+
+    // socket 接收服务的channel 这是一个无阻塞的socker服务.
     private ServerSocketChannel acceptChannel = null; //the accept channel
 
+    // 注册一个 Selector 用于服务的监控
     private Selector selector = null; //the selector that we use for the server
 
+    // 注册Reader 服务的缓冲池.用于读取client的服务.
     private Reader[] readers = null;
 
     private int currentReader = 0;
+
+    // Socket 地址的实体对象
     private InetSocketAddress address; //the address we bind at
+
+    // 监听的端口
     private int listenPort; //the port we bind at
+
+    //服务监听队列的长度, 默认 128
     private int backlogLength = conf.getInt(
         CommonConfigurationKeysPublic.IPC_SERVER_LISTEN_QUEUE_SIZE_KEY,
         CommonConfigurationKeysPublic.IPC_SERVER_LISTEN_QUEUE_SIZE_DEFAULT);
     
     Listener(int port) throws IOException {
 
+      //创建InetSocketAddress 实例
       address = new InetSocketAddress(bindAddress, port);
       // Create a new server socket and set to non blocking mode
+
+      // 创建一个无阻塞的socket服务
       acceptChannel = ServerSocketChannel.open();
       acceptChannel.configureBlocking(false);
 
       // Bind the server socket to the local host and port
+      // 绑定服务和端口
       bind(acceptChannel.socket(), address, backlogLength, conf, portRangeConfig);
+
       //Could be an ephemeral port
+      // 可能是一个临时端口
       this.listenPort = acceptChannel.socket().getLocalPort();
 
-
+      //设置当前线程的名字
       Thread.currentThread().setName("Listener at " +  bindAddress + "/" + this.listenPort);
-      // create a selector;
 
+      // create a selector;
+      // 创建一个selector
       selector= Selector.open();
 
-
+      // 创建 Reader
       readers = new Reader[readThreads];
       for (int i = 0; i < readThreads; i++) {
         Reader reader = new Reader(
@@ -1213,18 +1244,28 @@ public abstract class Server {
       }
 
       // Register accepts on the server socket with the selector.
+      /// 注册 SelectionKey.OP_ACCEPT 事件到 selector
       acceptChannel.register(selector, SelectionKey.OP_ACCEPT);
+
+      //设置线程名字
       this.setName("IPC Server listener on " + port);
+      //设置守护模式.
       this.setDaemon(true);
+
     }
     
     private class Reader extends Thread {
+      // 队列
       final private BlockingQueue<Connection> pendingConnections;
+
+      //Selector 用于注册 channel
       private final Selector readSelector;
 
       Reader(String name) throws IOException {
+        //设置线程名字
         super(name);
 
+        //reader的队列长度, 默认 100
         this.pendingConnections =
             new LinkedBlockingQueue<Connection>(readerPendingConnectionQueue);
         this.readSelector = Selector.open();
@@ -1253,8 +1294,6 @@ public abstract class Server {
             // consume as many connections as currently queued to avoid
             // unbridled acceptance of connections that starves the select
 
-            // 使用当前排队的尽可能多的连接以避免
-            //肆无忌惮地接受缺乏选择的连接
             int size = pendingConnections.size();
             for (int i=size; i>0; i--) {
               Connection conn = pendingConnections.take();
@@ -1322,27 +1361,30 @@ public abstract class Server {
     @Override
     public void run() {
       LOG.info(Thread.currentThread().getName() + ": starting");
-      SERVER.set(Server.this);
-      connectionManager.startIdleScan();
 
+      SERVER.set(Server.this);
+
+      //创建线程,定时扫描connection, 关闭超时,无效的连接
+      connectionManager.startIdleScan();
 
       while (running) {
         SelectionKey key = null;
         try {
 
+          //如果没有请求进来的话,会阻塞.
           getSelector().select();
+
           //循环判断是否有新的连接建立请求
           Iterator<SelectionKey> iter = getSelector().selectedKeys().iterator();
+
           while (iter.hasNext()) {
             key = iter.next();
             iter.remove();
             try {
               if (key.isValid()) {
                 if (key.isAcceptable()){
-
                   //如果有，则调用doAccept()方法响应
                   doAccept(key);
-
                 }
               }
             } catch (IOException e) {
@@ -1351,6 +1393,7 @@ public abstract class Server {
           }
         } catch (OutOfMemoryError e) {
           //这里可能出现内存溢出的情况，要特别注意
+          // 如果内存溢出了,会关闭当前连接, 休眠 60 秒
           // we can run out of memory if we have too many threads
           // log the event and sleep for a minute and give 
           // some thread(s) a chance to finish
@@ -1367,6 +1410,8 @@ public abstract class Server {
 
       LOG.info("Stopping " + Thread.currentThread().getName());
 
+
+      // 关闭请求. 停止所有服务.
       synchronized (this) {
         try {
           acceptChannel.close();
@@ -1401,13 +1446,14 @@ public abstract class Server {
     //
     // 之后doAccept()方法会从readers线程池中选出一个Reader线程读取来自这个客户端的RPC请求。
     // 每个Reader线程都会有一个自己的readSelector，用于监听是 否有新的RPC请求到达。
-    // 所以doAccept()方法在建立连接并选出Reader对象后，
-    // 会在这个 Reader对象的readSelector上注册OP_READ事件。
+    // 所以doAccept()方法在建立连接并选出 Reader对象后，
+    // 会在这个 Reader 对象的 readSelector上注册OP_READ事件。
     // 那么这里就有一个问题了，
+
     // Reader对象 在被通知时是怎么知道从哪个Socket输入流上读取数据呢?
     // 这里就用到了Connection类，
-    // Connection类封装了Server与Client之间的Socket连接，
-    // doAccept()方法会通过SelectionKey 将新构造的Connection对象传给Reader，
+    // Connection类封装了 Server 与 Client之间的Socket连接，
+    // doAccept()方法会通过 SelectionKey 将新构造的 Connection对象传给Reader，
     // 这样Reader线程在被唤醒时就可以通过Connection 对象读取RPC请求了。
 
     void doAccept(SelectionKey key) throws InterruptedException, IOException,  OutOfMemoryError {
@@ -1425,10 +1471,12 @@ public abstract class Server {
         // 获取 reader , 通过 % 取余的方式获取reader
         Reader reader = getReader();
 
-        //注册IO读事件
+
+        //构造Connection对象， 添加到readKey的附件传递给Reader对象
         Connection c = connectionManager.register(channel, this.listenPort);
 
         // If the connectionManager can't take it, close the connection.
+        // 如果connectionManager获取不到Connection, 关闭当前连接
         if (c == null) {
           if (channel.isOpen()) {
             IOUtils.cleanup(null, channel);
@@ -1437,7 +1485,7 @@ public abstract class Server {
           continue;
         }
 
-
+        //todo 这个是干啥用????  4307
         key.attach(c);  // so closeCurrentConnection can get the object
 
 
@@ -1449,7 +1497,7 @@ public abstract class Server {
     // doRead()方法负责读取RPC请求，
     // 虽然readSelector监听到了RPC请求的可读事件，
     // 但 是doRead()方法此时并不知道这个RPC请求是由哪个客户端发送来的，
-    // 所以doRead()方法首先会调用SelectionKey.attachment()方法获取Listener对象构造的Connection对象，
+    // 所以doRead()方法首先会调用SelectionKey.attachment() 方法获取 Listener 对象构造的 Connection 对象，
     // Connection对象中封装了Server与Client之间的网络连接，之后doRead()方法只需调用
     // Connection.readAndProcess()方法就可以读取RPC请求了，这里的设计非常的巧妙。
 
@@ -1457,10 +1505,13 @@ public abstract class Server {
       int count;
 
       //通过SelectionKey获取Connection对象
+      // (Connection对象是 Listener#run方法中的doAccept 方法中绑定的  key.attach(c) )
       Connection c = (Connection)key.attachment();
+
       if (c == null) {
         return;  
       }
+
       c.setLastContact(Time.now());
       
       try {
@@ -1485,8 +1536,7 @@ public abstract class Server {
       if (count < 0 || c.shouldClose()) {
         closeConnection(c);
         c = null;
-      }
-      else {
+      } else {
         c.setLastContact(Time.now());
       }
     }   
@@ -1509,6 +1559,7 @@ public abstract class Server {
     }
     
     synchronized Selector getSelector() { return selector; }
+
     // The method that will return the next reader to work with
     // Simplistic implementation of round robin for now
     Reader getReader() {
@@ -1569,7 +1620,7 @@ public abstract class Server {
           waitPending();     // If a channel is being registered, wait.
 
 
-          // 阻塞 15min ???
+          // 阻塞 15min ,如果超时的话, 会执行后面的清除长期没有发送成功的消息
           writeSelector.select(
               TimeUnit.NANOSECONDS.toMillis(PURGE_INTERVAL_NANOS));
 
@@ -1609,6 +1660,9 @@ public abstract class Server {
           if(LOG.isDebugEnabled()) {
             LOG.debug("Checking for old call responses.");
           }
+
+
+
           ArrayList<RpcCall> calls;
           
           // get the list of channels from list of keys.
@@ -1623,7 +1677,7 @@ public abstract class Server {
               }
             }
           }
-
+          // 移除掉已经很久没有发送调的信息
           for (RpcCall call : calls) {
             doPurge(call, nowNanos);
           }
@@ -1747,6 +1801,8 @@ public abstract class Server {
                 // Wakeup the thread blocked on select, only then can the call 
                 // to channel.register() complete.
                 writeSelector.wakeup();
+
+                //注册并将 RpcCall 对象 附在 key 上面
                 channel.register(writeSelector, SelectionKey.OP_WRITE, call);
               } catch (ClosedChannelException e) {
                 //Its ok. channel might be closed else where.
@@ -1898,6 +1954,7 @@ public abstract class Server {
         new RpcCall(this, AUTHORIZATION_FAILED_CALL_ID);
 
     private boolean sentNegotiate = false;
+
     private boolean useWrap = false;
     
     public Connection(SocketChannel channel, long lastContact,
@@ -2638,6 +2695,7 @@ public abstract class Server {
           LOG.debug(" got #" + callId);
         }
 
+        //检测头信息是否正确
         checkRpcHeaders(header);
 
 
@@ -2674,6 +2732,7 @@ public abstract class Server {
             rse.getRpcStatusProto(), rse.getRpcErrorCodeProto(), null,
             t.getClass().getName(),
             t.getMessage() != null ? t.getMessage() : t.toString());
+
         sendResponse(call);
       }
     }
@@ -2731,7 +2790,7 @@ public abstract class Server {
         RpcWritable.Buffer buffer) throws RpcServerException,
         InterruptedException {
 
-
+      //获取协议
       Class<? extends Writable> rpcRequestClass = 
           getRpcRequestWrapper(header.getRpcKind());
 
@@ -2800,6 +2859,7 @@ public abstract class Server {
       // Save the priority level assignment by the scheduler
       call.setPriorityLevel(callQueue.getPriorityLevel(call));
       call.markCallCoordinated(false);
+
       if(alignmentContext != null && call.rpcRequest != null &&
           (call.rpcRequest instanceof ProtobufRpcEngine.RpcProtobufRequest)) {
         // if call.rpcRequest is not RpcProtobufRequest, will skip the following
@@ -3087,7 +3147,7 @@ public abstract class Server {
           connDropped = !call.isOpen();
 
 
-          //通过call()发起本地调用，并返回结果
+          //通过调用Call对象的run()方法发起本地调用，并返回结果
           if (remoteUser != null) {
             remoteUser.doAs(call);
           } else {
@@ -3196,27 +3256,52 @@ public abstract class Server {
       String serverName, SecretManager<? extends TokenIdentifier> secretManager,
       String portRangeConfig)
     throws IOException {
+    //绑定IP 地址 必填
     this.bindAddress = bindAddress;
+    //绑定配置文件
     this.conf = conf;
     this.portRangeConfig = portRangeConfig;
+
+    //绑定 端口 必填
     this.port = port;
-    this.rpcRequestClass = rpcRequestClass; 
+
+    // 这个值 应该是为null,
+    this.rpcRequestClass = rpcRequestClass;
+
+    // handlerCount 的线程数量
     this.handlerCount = handlerCount;
+
+
     this.socketSendBufferSize = 0;
+
+    // 服务名
     this.serverName = serverName;
+
     this.auxiliaryListenerMap = null;
+
+    // server接收的最大数据长度
+    // ipc.maximum.data.length  默认 :  64 * 1024 * 1024    ===>  64 MB
     this.maxDataLength = conf.getInt(CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH,
         CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH_DEFAULT);
+
+    // handler队列的最大数量 默认值为-1 , 即默认最大容量为 handler线程的数量 * 每个handler线程队列的数量 = 1 * 100 = 100
     if (queueSizePerHandler != -1) {
+      //最大队列长度:  如果不是默认值为handler线程的数量 * 每个handler线程队列的数量
       this.maxQueueSize = handlerCount * queueSizePerHandler;
     } else {
+      //最大队列长度:   如果设置为 -1 的话,  默认值handler队列值为 100 , 所以最大队列长度为  : handler 线程的数量 * 100
       this.maxQueueSize = handlerCount * conf.getInt(
           CommonConfigurationKeys.IPC_SERVER_HANDLER_QUEUE_SIZE_KEY,
           CommonConfigurationKeys.IPC_SERVER_HANDLER_QUEUE_SIZE_DEFAULT);      
     }
+
+    // 返回值的大小如果超过 1024*1024 = 1M  ,将会有告警[WARN]级别的日志输出....
     this.maxRespSize = conf.getInt(
         CommonConfigurationKeys.IPC_SERVER_RPC_MAX_RESPONSE_SIZE_KEY,
         CommonConfigurationKeys.IPC_SERVER_RPC_MAX_RESPONSE_SIZE_DEFAULT);
+
+
+    //设置 readThread的线程数量, 默认 1
     if (numReaders != -1) {
       this.readThreads = numReaders;
     } else {
@@ -3224,48 +3309,68 @@ public abstract class Server {
           CommonConfigurationKeys.IPC_SERVER_RPC_READ_THREADS_KEY,
           CommonConfigurationKeys.IPC_SERVER_RPC_READ_THREADS_DEFAULT);
     }
+
+    //设置reader的队列长度, 默认 100
     this.readerPendingConnectionQueue = conf.getInt(
         CommonConfigurationKeys.IPC_SERVER_RPC_READ_CONNECTION_QUEUE_SIZE_KEY,
         CommonConfigurationKeys.IPC_SERVER_RPC_READ_CONNECTION_QUEUE_SIZE_DEFAULT);
 
     // Setup appropriate callqueue
     final String prefix = getQueueClassPrefix();
+
+    //callQueue reader 读取client端的数据之后 . 放到这个队列里面, 等到hander进行处理
+
+    //队列 : LinkedBlockingQueue<Call> 格式.  调度器默认: DefaultRpcScheduler
+    //      clientBackOffEnabled 这个值没懂干啥用的!!!  默认false
     this.callQueue = new CallQueueManager<Call>(getQueueClass(prefix, conf),
         getSchedulerClass(prefix, conf),
         getClientBackoffEnable(prefix, conf), maxQueueSize, prefix, conf);
 
+    // 安全相关
     this.secretManager = (SecretManager<TokenIdentifier>) secretManager;
-    this.authorize = 
-      conf.getBoolean(CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, 
-                      false);
+    this.authorize = conf.getBoolean(CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, false);
 
     // configure supported authentications
     this.enabledAuthMethods = getAuthMethods(secretManager, conf);
     this.negotiateResponse = buildNegotiateResponse(enabledAuthMethods);
-    
+
+
     // Start the listener here and let it bind to the port
+    //创建Listener , 绑定监听的端口, 所有client端发送的请求, 都是通过这里进行转发
     listener = new Listener(port);
+
+
     // set the server port to the default listener port.
     this.port = listener.getAddress().getPort();
+
     connectionManager = new ConnectionManager();
     this.rpcMetrics = RpcMetrics.create(this, conf);
     this.rpcDetailedMetrics = RpcDetailedMetrics.create(this.port);
+
+
+    //打开/关闭服务器上TCP套接字连接的Nagle算法 默认值 true
+    //如果设置为true，则禁用该算法，并可能会降低延迟，同时会导致更多/更小数据包的开销。
     this.tcpNoDelay = conf.getBoolean(
         CommonConfigurationKeysPublic.IPC_SERVER_TCPNODELAY_KEY,
         CommonConfigurationKeysPublic.IPC_SERVER_TCPNODELAY_DEFAULT);
 
+
+    //如果当前的rpc服务比其他的rpc服务要慢的话, 记录日志, 默认 false
     this.setLogSlowRPC(conf.getBoolean(
         CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC,
         CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_DEFAULT));
 
     // Create the responder here
+    // 创建响应服务
     responder = new Responder();
-    
+
+    //安全相关
     if (secretManager != null || UserGroupInformation.isSecurityEnabled()) {
       SaslRpcServer.init(conf);
       saslPropsResolver = SaslPropertiesResolver.getInstance(conf);
     }
-    
+
+    //设置StandbyException异常处理
     this.exceptionsHandler.addTerseLoggingExceptions(StandbyException.class);
   }
 
@@ -3792,18 +3897,36 @@ public abstract class Server {
   }
   
   private class ConnectionManager {
+
+    // 现有Connection的数量
     final private AtomicInteger count = new AtomicInteger();
+
     final private AtomicLong droppedConnections = new AtomicLong();
+
+    //现有的Connection连接.
     final private Set<Connection> connections;
+
     /* Map to maintain the statistics per User */
     final private Map<String, Integer> userToConnectionsMap;
+
     final private Object userToConnectionsMapLock = new Object();
 
+    //Timer定时器, 定期检查/关闭 Connection
     final private Timer idleScanTimer;
+
+    // 定义 空闲多久之后关闭 Connection 默认值: 4秒
     final private int idleScanThreshold;
+
+    // 扫描间隔  默认 10秒
     final private int idleScanInterval;
+
+    // 最大等待时间 默认值 20秒
     final private int maxIdleTime;
+
+    // 定义一次断开连接的最大客户端数。 默认值 10
     final private int maxIdleToClose;
+
+    // 定义最大连接数 默认值 0 , 无限制
     final private int maxConnections;
     
     ConnectionManager() {
@@ -3961,7 +4084,8 @@ public abstract class Server {
         close(connection);
       }
     }
-    
+
+    //创建线程,定时扫描connection, 关闭超时,无效的连接
     void startIdleScan() {
       scheduleIdleScanTask();
     }
@@ -3974,6 +4098,7 @@ public abstract class Server {
       if (!running) {
         return;
       }
+      //创建线程,定时扫描connection, 关闭超时,无效的连接
       TimerTask idleScanTask = new TimerTask(){
         @Override
         public void run() {
