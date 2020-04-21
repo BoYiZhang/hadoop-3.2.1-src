@@ -1425,8 +1425,12 @@ public class Client implements AutoCloseable {
     }
   }
 
-  /** Construct an IPC client whose values are of the given {@link Writable}
-   * class. */
+  /**
+   *
+   *    valueClass  ==> 创建时指定 RpcWritable.Buffer.class
+   *  根据给定的value 构造一个 IPC client
+   * Construct an IPC client whose values are of the given {@link Writable} class.
+   * */
   public Client(Class<? extends Writable> valueClass, Configuration conf, 
       SocketFactory factory) {
     this.valueClass = valueClass;
@@ -1790,6 +1794,9 @@ public class Client implements AutoCloseable {
   }
   
   /**
+   *
+   * 这个类 持有 请求地址 和 用户的ticket
+   * clietn 连接 server 的唯一凭证 :  [remoteAddress, protocol, ticket]
    * This class holds the address and the user ticket. The client connections
    * to servers are uniquely identified by <remoteAddress, protocol, ticket>
    */
@@ -1817,31 +1824,54 @@ public class Client implements AutoCloseable {
     ConnectionId(InetSocketAddress address, Class<?> protocol, 
                  UserGroupInformation ticket, int rpcTimeout,
                  RetryPolicy connectionRetryPolicy, Configuration conf) {
+
+      // 协议
       this.protocol = protocol;
+
+      // 请求地址
       this.address = address;
+
+      //用户 ticket
       this.ticket = ticket;
+
+      //设置超时时间
       this.rpcTimeout = rpcTimeout;
+
+      //设置重试策略 默认: 重试10次, 每次间隔1秒
       this.connectionRetryPolicy = connectionRetryPolicy;
 
+      // 单位 10秒
       this.maxIdleTime = conf.getInt(
           CommonConfigurationKeysPublic.IPC_CLIENT_CONNECTION_MAXIDLETIME_KEY,
           CommonConfigurationKeysPublic.IPC_CLIENT_CONNECTION_MAXIDLETIME_DEFAULT);
+
+      // sasl client最大重试次数 5 次
       this.maxRetriesOnSasl = conf.getInt(
           CommonConfigurationKeys.IPC_CLIENT_CONNECT_MAX_RETRIES_ON_SASL_KEY,
           CommonConfigurationKeys.IPC_CLIENT_CONNECT_MAX_RETRIES_ON_SASL_DEFAULT);
+
+      //指示客户端将在套接字超时时进行重试的次数，以建立服务器连接。 默认值: 45
       this.maxRetriesOnSocketTimeouts = conf.getInt(
           CommonConfigurationKeysPublic.IPC_CLIENT_CONNECT_MAX_RETRIES_ON_SOCKET_TIMEOUTS_KEY,
           CommonConfigurationKeysPublic.IPC_CLIENT_CONNECT_MAX_RETRIES_ON_SOCKET_TIMEOUTS_DEFAULT);
+
+      //使用TCP_NODELAY标志绕过Nagle的算法传输延迟。 默认值: true
       this.tcpNoDelay = conf.getBoolean(
           CommonConfigurationKeysPublic.IPC_CLIENT_TCPNODELAY_KEY,
           CommonConfigurationKeysPublic.IPC_CLIENT_TCPNODELAY_DEFAULT);
+
+      // 从客户端启用低延迟连接 默认 false
       this.tcpLowLatency = conf.getBoolean(
           CommonConfigurationKeysPublic.IPC_CLIENT_LOW_LATENCY,
           CommonConfigurationKeysPublic.IPC_CLIENT_LOW_LATENCY_DEFAULT
           );
+
+      // 启用从RPC客户端到服务器的ping操作 默认值: true
       this.doPing = conf.getBoolean(
           CommonConfigurationKeys.IPC_CLIENT_PING_KEY,
           CommonConfigurationKeys.IPC_CLIENT_PING_DEFAULT);
+
+      // 设置ping 操作的间隔, 默认值 : 1分钟
       this.pingInterval = (doPing ? Client.getPingInterval(conf) : 0);
       this.conf = conf;
     }
@@ -1912,18 +1942,29 @@ public class Client implements AutoCloseable {
         Class<?> protocol, UserGroupInformation ticket, int rpcTimeout,
         RetryPolicy connectionRetryPolicy, Configuration conf) throws IOException {
 
+
+      //构建重试策略
       if (connectionRetryPolicy == null) {
+        //设置最大重试次数 默认值: 10
         final int max = conf.getInt(
             CommonConfigurationKeysPublic.IPC_CLIENT_CONNECT_MAX_RETRIES_KEY,
             CommonConfigurationKeysPublic.IPC_CLIENT_CONNECT_MAX_RETRIES_DEFAULT);
+
+        // 设置重试间隔: 1 秒
         final int retryInterval = conf.getInt(
             CommonConfigurationKeysPublic.IPC_CLIENT_CONNECT_RETRY_INTERVAL_KEY,
             CommonConfigurationKeysPublic
                 .IPC_CLIENT_CONNECT_RETRY_INTERVAL_DEFAULT);
 
+        //创建重试策略实例 RetryUpToMaximumCountWithFixedSleep
+        //              重试10次, 每次间隔1秒
         connectionRetryPolicy = RetryPolicies.retryUpToMaximumCountWithFixedSleep(
             max, retryInterval, TimeUnit.MILLISECONDS);
       }
+
+      //创建ConnectionId :
+      //  这个类 持有 请求地址 和 用户的ticket
+      //  clietn 连接 server 的唯一凭证 :  [remoteAddress, protocol, ticket]
 
       return new ConnectionId(addr, protocol, ticket, rpcTimeout,
           connectionRetryPolicy, conf);

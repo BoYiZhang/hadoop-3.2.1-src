@@ -201,6 +201,8 @@ public class UserGroupInformation {
       }
       //If we don't have a kerberos user and security is disabled, check
       //if user is specified in the environment or properties
+
+      //todo 在这里获取 操作系统 环境变量的用户名  HADOOP_USER_NAME
       if (!isSecurityEnabled() && (user == null)) {
         String envUser = System.getenv(HADOOP_USER_NAME);
         if (envUser == null) {

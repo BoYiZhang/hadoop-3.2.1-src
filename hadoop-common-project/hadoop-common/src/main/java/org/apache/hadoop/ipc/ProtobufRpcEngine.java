@@ -100,7 +100,7 @@ public class ProtobufRpcEngine implements RpcEngine {
 
     //构造一个实现了InvocationHandler接口的invoker 对象
     // (动态代理机制中的InvocationHandler对象会在invoke()方法中代理所有目标接口上的 调用，
-    // 用户可以在invoke()方法中添加代理操作)
+    // 用户可以在invoke()方法中添加代理操作
     final Invoker invoker = new Invoker(protocol, addr, ticket, conf, factory,
         rpcTimeout, connectionRetryPolicy, fallbackToSimpleAuth,
         alignmentContext);
@@ -155,9 +155,17 @@ public class ProtobufRpcEngine implements RpcEngine {
      */
     private Invoker(Class<?> protocol, Client.ConnectionId connId,
         Configuration conf, SocketFactory factory) {
+
+      // 设置ConnectionId , ConnectionId里面保存着Client连接Server的信息
       this.remoteId = connId;
+
+      // 获取/创建  客户端
       this.client = CLIENTS.getClient(conf, factory, RpcWritable.Buffer.class);
+
+      // 获取协议的名称
       this.protocolName = RPC.getProtocolName(protocol);
+
+      // 获取协议的版本 version
       this.clientProtocolVersion = RPC
           .getProtocolVersion(protocol);
     }
@@ -236,7 +244,9 @@ public class ProtobufRpcEngine implements RpcEngine {
       // if Tracing is on then start a new span for this rpc.
       // guard it in the if statement to make sure there isn't
       // any extra string manipulation.
-      // todo 这个是啥
+
+      //如果启用了“跟踪”，则为此rpc开始一个新的跨度。
+      //在if语句中对其进行保护，以确保没有任何额外的字符串操作。
       Tracer tracer = Tracer.curThreadTracer();
       TraceScope traceScope = null;
       if (tracer != null) {
@@ -253,7 +263,8 @@ public class ProtobufRpcEngine implements RpcEngine {
       }
 
 
-      //获取请求调用的参数，例如RenameRequestProto
+      //获取请求调用的参数，这个是才client端代码就创建好的,通过参数传进来的.
+      // 例如 GetMetaInfoRequestProto
       final Message theRequest = (Message) args[1];
       final RpcWritable.Buffer val;
       try {
@@ -282,12 +293,13 @@ public class ProtobufRpcEngine implements RpcEngine {
         long callTime = Time.now() - startTime;
         LOG.debug("Call: " + method.getName() + " took " + callTime + "ms");
       }
-      
+
+      //Client 是否是异步模式.
       if (Client.isAsynchronousMode()) {
-        final AsyncGet<RpcWritable.Buffer, IOException> arr
-            = Client.getAsyncRpcResponse();
-        final AsyncGet<Message, Exception> asyncGet
-            = new AsyncGet<Message, Exception>() {
+
+        //获取请求信息
+        final AsyncGet<RpcWritable.Buffer, IOException> arr  = Client.getAsyncRpcResponse();
+        final AsyncGet<Message, Exception> asyncGet  = new AsyncGet<Message, Exception>() {
           @Override
           public Message get(long timeout, TimeUnit unit) throws Exception {
             return getReturnMessage(method, arr.get(timeout, unit));
@@ -301,6 +313,7 @@ public class ProtobufRpcEngine implements RpcEngine {
         ASYNC_RETURN_MESSAGE.set(asyncGet);
         return null;
       } else {
+        //同步请求, 获取响应信息
         return getReturnMessage(method, val);
       }
     }

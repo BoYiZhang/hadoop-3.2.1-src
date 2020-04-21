@@ -23,16 +23,17 @@ public class Client {
                 ProtobufRpcEngine.class);
 
 
-        //3. 拿到RPC协议
+        //3. 拿到代理对象
         Server.MetaInfoProtocol proxy = RPC.getProxy(Server.MetaInfoProtocol.class, 1L,
                 new InetSocketAddress("localhost", 7777), conf);
 
-        //4. 发送请求
+        //4. 构建发送请求对象
         CustomProtos.GetMetaInfoRequestProto obj =  CustomProtos.GetMetaInfoRequestProto.newBuilder().setPath("/meta").build();
 
+        //5. 将请求对象传入, 获取响应信息
         CustomProtos.GetMetaInfoResponseProto metaData = proxy.getMetaInfo(null, obj);
 
-        //5. 打印元数据
+        //6. 输出数据
         System.out.println(metaData.getInfo());
 
     }

@@ -650,10 +650,10 @@ public class RPC {
     * Construct a client-side proxy object with the default SocketFactory
     * @param <T>
     * 
-    * @param protocol
-    * @param clientVersion
-    * @param addr
-    * @param conf
+    * @param protocol 协议
+    * @param clientVersion 客户端的版本
+    * @param addr  请求地址
+    * @param conf 配置文件
     * @return a proxy instance
     * @throws IOException
     */

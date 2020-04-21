@@ -37,6 +37,9 @@ public class ClientCache {
     new HashMap<SocketFactory, Client>();
 
   /**
+   * 如果没有缓存的client存在的话
+   * 根据用户提供的SocketFactory 构造 或者 缓存一个IPC 客户端
+   *
    * Construct & cache an IPC client with the user-provided SocketFactory 
    * if no cached client exists.
    * 
@@ -47,21 +50,33 @@ public class ClientCache {
    */
   public synchronized Client getClient(Configuration conf,
       SocketFactory factory, Class<? extends Writable> valueClass) {
-    // Construct & cache client.  The configuration is only used for timeout,
-    // and Clients have connection pools.  So we can either (a) lose some
-    // connection pooling and leak sockets, or (b) use the same timeout for all
-    // configurations.  Since the IPC is usually intended globally, not
-    // per-job, we choose (a).
+    // Construct & cache client.
+    //
+    // The configuration is only used for timeout,
+    // and Clients have connection pools.  So we can either
+    // (a) lose some connection pooling and leak sockets, or
+    // (b) use the same timeout for all configurations.
+    //
+    // Since the IPC is usually intended globally, notper-job, we choose (a).
+
+    //从缓存中获取Client
     Client client = clients.get(factory);
+
     if (client == null) {
+      //client在缓存中不存在, 创建一个.
       client = new Client(valueClass, conf, factory);
+      //缓存创建的client
       clients.put(factory, client);
     } else {
+      //client的引用计数+1
       client.incCount();
     }
+
+
     if (Client.LOG.isDebugEnabled()) {
       Client.LOG.debug("getting client out of cache: " + client);
     }
+    // 返回client
     return client;
   }
 
