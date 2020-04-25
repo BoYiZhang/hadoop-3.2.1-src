@@ -12,7 +12,6 @@ public class Client {
     public static final Logger LOG =
             LoggerFactory.getLogger(Client.class);
 
-
     public static void main(String[] args) throws Exception {
 
         //1. 构建配置对象

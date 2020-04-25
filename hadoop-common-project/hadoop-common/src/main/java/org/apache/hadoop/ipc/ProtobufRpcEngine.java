@@ -322,7 +322,7 @@ public class ProtobufRpcEngine implements RpcEngine {
         final RpcWritable.Buffer buf) throws ServiceException {
       Message prototype = null;
       try {
-        //获取返回参数类型，比如: RenameResponseProto
+        //获取返回参数
         prototype = getReturnProtoType(method);
       } catch (Exception e) {
         throw new ServiceException(e);
@@ -549,6 +549,9 @@ public class ProtobufRpcEngine implements RpcEngine {
        */
       public Writable call(RPC.Server server, String connectionProtocolName,
           Writable writableRequest, long receiveTime) throws Exception {
+
+        System.out.println("ProtoBufRpcInvoker#connectionProtocolName  ===> " + connectionProtocolName);
+
 
         //获取rpc调用头
         RpcProtobufRequest request = (RpcProtobufRequest) writableRequest;

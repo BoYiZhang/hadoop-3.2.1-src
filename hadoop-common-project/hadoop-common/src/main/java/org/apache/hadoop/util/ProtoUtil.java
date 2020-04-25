@@ -173,9 +173,16 @@ public abstract class ProtoUtil {
   public static RpcRequestHeaderProto makeRpcRequestHeader(RPC.RpcKind rpcKind,
       RpcRequestHeaderProto.OperationProto operation, int callId,
       int retryCount, byte[] uuid, AlignmentContext alignmentContext) {
+
+    //构建请求头对象
     RpcRequestHeaderProto.Builder result = RpcRequestHeaderProto.newBuilder();
-    result.setRpcKind(convert(rpcKind)).setRpcOp(operation).setCallId(callId)
-        .setRetryCount(retryCount).setClientId(ByteString.copyFrom(uuid));
+
+    //这是头信息
+    result.setRpcKind(convert(rpcKind))
+            .setRpcOp(operation)
+            .setCallId(callId)
+            .setRetryCount(retryCount)
+            .setClientId(ByteString.copyFrom(uuid));
 
     // Add tracing info if we are currently tracing.
     Span span = Tracer.getCurrentSpan();
@@ -188,15 +195,17 @@ public abstract class ProtoUtil {
 
     // Add caller context if it is not null
     CallerContext callerContext = CallerContext.getCurrent();
+
     if (callerContext != null && callerContext.isContextValid()) {
-      RPCCallerContextProto.Builder contextBuilder = RPCCallerContextProto
-          .newBuilder().setContext(callerContext.getContext());
+      RPCCallerContextProto.Builder contextBuilder = RPCCallerContextProto .newBuilder().setContext(callerContext.getContext());
+
       if (callerContext.getSignature() != null) {
-        contextBuilder.setSignature(
-            ByteString.copyFrom(callerContext.getSignature()));
+        contextBuilder.setSignature( ByteString.copyFrom(callerContext.getSignature()));
       }
+
       result.setCallerContext(contextBuilder);
     }
+
 
     // Add alignment context if it is not null
     if (alignmentContext != null) {
