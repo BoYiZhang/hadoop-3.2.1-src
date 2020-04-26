@@ -2360,16 +2360,34 @@ public abstract class Server {
      * 如果在处理过程中抛出了异常，则直接通过Socket返回RPC响应(带 有Server异常信息的响应)。
      */
     public int readAndProcess() throws IOException, InterruptedException {
-      while (!shouldClose()) { // stop if a fatal response has been sent.
+
+
+      int whileIndex = 0 ;
+      while (!shouldClose()) {
+
+
+
+
+        // stop if a fatal response has been sent.
         // dataLengthBuffer is used to read "hrpc" or the rpc-packet length
         int count = -1;
+
+
+        System.out.println(" init  dataLengthBuffer.remaining  :  " + dataLengthBuffer.remaining());
         if (dataLengthBuffer.remaining() > 0) {
           count = channelRead(channel, dataLengthBuffer);       
-          if (count < 0 || dataLengthBuffer.remaining() > 0) 
+          if (count < 0 || dataLengthBuffer.remaining() > 0) {
+
+            System.out.println(" 数据读完了耶, 退出  readAndProcess ");
             return count;
+          }else{
+            System.out.println(" 数据还没有读完!!!!!!  继续下一部分处理. ");
+          }
+
         }
-        
+
         if (!connectionHeaderRead) {
+          System.out.println("还没有读取 头信息  .. ");
           // Every connection is expected to send the header;
           // so far we read "hrpc" of the connection header.
           if (connectionHeaderBuf == null) {
@@ -2378,11 +2396,15 @@ public abstract class Server {
           }
           count = channelRead(channel, connectionHeaderBuf);
           if (count < 0 || connectionHeaderBuf.remaining() > 0) {
+            System.out.println("   !connectionHeaderRead  ==> connectionHeaderBuf.remaining : "+ connectionHeaderBuf.remaining());
             return count;
+
           }
           int version = connectionHeaderBuf.get(0);
           // TODO we should add handler for service class later
           this.setServiceClass(connectionHeaderBuf.get(1));
+
+
           dataLengthBuffer.flip();
           
           // Check if it looks like the user is hitting an IPC port
@@ -2418,10 +2440,22 @@ public abstract class Server {
           connectionHeaderRead = true;
           continue; // connection header read, now read  4 bytes rpc packet len
         }
-        
+
+        System.out.println("已经读取过头信息  .. ");
         if (data == null) { // just read 4 bytes -  length of RPC packet
+
+          System.out.println("befroe : "  + dataLengthBuffer);
+
           dataLengthBuffer.flip();
+
+
           dataLength = dataLengthBuffer.getInt();
+
+
+          System.out.println("after : "  + dataLengthBuffer);
+
+
+
           checkDataLength(dataLength);
           // Set buffer for reading EXACTLY the RPC-packet length and no more.
           data = ByteBuffer.allocate(dataLength);
@@ -2436,7 +2470,7 @@ public abstract class Server {
           data = null; // null out in case processOneRpc throws.
           boolean isHeaderRead = connectionContextRead;
 
-
+          System.out.println("处理这个RPC请求#processOneRpc");
           //处理这个RPC请求。
           processOneRpc(requestData);
 
@@ -2700,7 +2734,8 @@ public abstract class Server {
 
 
         //处理RPC请求头域异常的情况
-        if (callId < 0) { // callIds typically used during connection setup
+        if (callId < 0) {
+          // callIds typically used during connection setup
           processRpcOutOfBandRequest(header, buffer);
         } else if (!connectionContextRead) {
           throw new FatalRpcServerException(
@@ -2789,6 +2824,16 @@ public abstract class Server {
     private void processRpcRequest(RpcRequestHeaderProto header,
         RpcWritable.Buffer buffer) throws RpcServerException,
         InterruptedException {
+
+      System.out.println(
+
+              String.format("processRpcRequest#header: CallId [%s]  , ClientId [%s]  , CallerContext [%s]  , RpcKind [%s] " ,
+              header.getCallId(),
+              header.getClientId(),
+              header.getCallerContext(),
+              header.getRpcKind())
+      );
+
 
       //获取协议
       Class<? extends Writable> rpcRequestClass = 

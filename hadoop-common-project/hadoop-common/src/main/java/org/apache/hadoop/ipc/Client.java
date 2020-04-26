@@ -1139,8 +1139,8 @@ public class Client implements AutoCloseable {
 
       synchronized (ipcStreams.out) {
         ipcStreams.sendRequest(buf.toByteArray());
-      }
 
+      }
     }
 
     /**
@@ -2169,6 +2169,7 @@ public class Client implements AutoCloseable {
 
     public void sendRequest(byte[] buf) throws IOException {
       out.write(buf);
+      out.flush();
     }
 
     @Override

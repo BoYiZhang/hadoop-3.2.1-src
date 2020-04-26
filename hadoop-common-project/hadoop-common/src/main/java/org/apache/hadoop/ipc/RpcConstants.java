@@ -27,9 +27,14 @@ public class RpcConstants {
   private RpcConstants() {
     // Hidden Constructor
   }
-  
+
+  //鉴权失败
   public static final int AUTHORIZATION_FAILED_CALL_ID = -1;
+
+  //无效ID
   public static final int INVALID_CALL_ID = -2;
+
+  //
   public static final int CONNECTION_CONTEXT_CALL_ID = -3;
   public static final int PING_CALL_ID = -4;
   
