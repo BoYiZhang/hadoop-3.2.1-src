@@ -695,6 +695,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   }
 
   /**
+   * 从配置中加载image和edits目录  实例化FSNamesystem
    * Instantiates an FSNamesystem loaded from the image and edits
    * directories specified in the passed Configuration.
    *
@@ -706,18 +707,36 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   static FSNamesystem loadFromDisk(Configuration conf) throws IOException {
 
     checkConfiguration(conf);
+
+    // 构建 FSImage
     FSImage fsImage = new FSImage(conf,
-        FSNamesystem.getNamespaceDirs(conf),
+        FSNamesystem.getNamespaceDirs(conf),  //dfs.namenode.name.dir
         FSNamesystem.getNamespaceEditsDirs(conf));
+
+
+    //FSNamesystem的构造方法比较长， 但是逻辑很简单， 主要是从配置文件中获取参数，
+    // 然后构造FSDirectory、 BlockManager、 SnapshotManager、 CacheManager、SafeModeInfo等对象。
+    //
+    // 需要注意的是， FSNamesystem的构造方法并不从磁盘上加载fsimage以及editlog文件，
+    // 这些操作是在创建FSNamesystem对象成功后， 在loadFromDisk()中执行的。
+
+    // 如果FSNamesystem初始化失败，
+    // 则会调用FSNamesystem.close()方法
+    // 关闭FSNamesystem启动的所有服务
     FSNamesystem namesystem = new FSNamesystem(conf, fsImage, false);
+
     StartupOption startOpt = NameNode.getStartupOption(conf);
     if (startOpt == StartupOption.RECOVER) {
       namesystem.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
     }
 
     long loadStart = monotonicNow();
+
     try {
+
+      //加栽fsimage以及editlog文件
       namesystem.loadFSImage(startOpt);
+
     } catch (IOException ioe) {
       LOG.warn("Encountered exception loading fsimage", ioe);
       fsImage.close();
@@ -725,11 +744,15 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     }
     long timeTakenToLoadFSImage = monotonicNow() - loadStart;
     LOG.info("Finished loading FSImage in " + timeTakenToLoadFSImage + " msecs");
+
     NameNodeMetrics nnMetrics = NameNode.getNameNodeMetrics();
+
     if (nnMetrics != null) {
       nnMetrics.setFsImageLoadTime((int) timeTakenToLoadFSImage);
     }
+
     namesystem.getFSDirectory().createReservedStatuses(namesystem.getCTime());
+
     return namesystem;
   }
   
@@ -738,6 +761,10 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   }
   
   /**
+   * 创建与指定映像关联的FSNamesystem。
+   * FSNamesystem的构造方法比较长， 但是逻辑很简单， 主要是从配置文件中获取参数，
+   * 然后构造FSDirectory、 BlockManager、 SnapshotManager、 CacheManager、SafeModeInfo等对象。
+   *
    * Create an FSNamesystem associated with the specified image.
    * 
    * Note that this does not load any data off of disk -- if you would
@@ -764,6 +791,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
     this.fsImage = fsImage;
     try {
+
+      // dfs.namenode.resource.check.interval : 5000
       resourceRecheckInterval = conf.getLong(
           DFS_NAMENODE_RESOURCE_CHECK_INTERVAL_KEY,
           DFS_NAMENODE_RESOURCE_CHECK_INTERVAL_DEFAULT);
@@ -799,11 +828,13 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
       // block manager needs the haEnabled initialized
       this.blockManager = new BlockManager(this, haEnabled, conf);
+
       this.datanodeStatistics = blockManager.getDatanodeManager().getDatanodeStatistics();
 
       // Get the checksum type from config
       String checksumTypeStr = conf.get(DFS_CHECKSUM_TYPE_KEY,
           DFS_CHECKSUM_TYPE_DEFAULT);
+
       DataChecksum.Type checksumType;
       try {
          checksumType = DataChecksum.Type.valueOf(checksumTypeStr);
@@ -825,6 +856,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
               CommonConfigurationKeysPublic.HADOOP_SECURITY_KEY_PROVIDER_PATH,
               ""),
           blockManager.getStoragePolicySuite().getDefaultPolicy().getId());
+
 
       this.maxFsObjects = conf.getLong(DFS_NAMENODE_MAX_OBJECTS_KEY, 
                                        DFS_NAMENODE_MAX_OBJECTS_DEFAULT);
@@ -888,7 +920,11 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
           DFS_NAMENODE_DELEGATION_TOKEN_ALWAYS_USE_DEFAULT);
       
       this.dtSecretManager = createDelegationTokenSecretManager(conf);
+
+
+      //构建FSDirectory 用于管理 namenode 状态
       this.dir = new FSDirectory(this, conf);
+
       this.snapshotManager = new SnapshotManager(conf, dir);
       this.cacheManager = new CacheManager(this, conf, blockManager);
       // Init ErasureCodingPolicyManager instance.
@@ -1110,7 +1146,12 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       LOG.info("Need to save fs image? " + needToSave
           + " (staleImage=" + staleImage + ", haEnabled=" + haEnabled
           + ", isRollingUpgrade=" + isRollingUpgrade() + ")");
+
+
+
       if (needToSave) {
+
+        //todo 保存 namespace
         fsImage.saveNamespace(this);
       } else {
         // No need to save, so mark the phase done.
@@ -1118,11 +1159,16 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         prog.beginPhase(Phase.SAVING_CHECKPOINT);
         prog.endPhase(Phase.SAVING_CHECKPOINT);
       }
-      // This will start a new log segment and write to the seen_txid file, so
+
+
+      // This will start a new log segment and write to the seen_txid file,
+      // so
       // we shouldn't do it when coming up in standby state
       if (!haEnabled || (haEnabled && startOpt == StartupOption.UPGRADE)
           || (haEnabled && startOpt == StartupOption.UPGRADEONLY)) {
+
         fsImage.openEditLogForWrite(getEffectiveLayoutVersion());
+
       }
       success = true;
     } finally {
@@ -1131,7 +1177,10 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       }
       writeUnlock("loadFSImage", true);
     }
+
+
     imageLoadComplete();
+
   }
 
   private void startSecretManager() {

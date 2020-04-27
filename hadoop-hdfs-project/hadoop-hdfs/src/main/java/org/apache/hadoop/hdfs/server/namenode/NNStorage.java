@@ -62,6 +62,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
 /**
+ *
+ * NNStorage负责管理NameNode使用的 StorageDirectories。
+ *
+ *
  * NNStorage is responsible for management of the StorageDirectories used by
  * the NameNode.
  */

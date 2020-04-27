@@ -97,6 +97,11 @@ import static org.apache.hadoop.hdfs.server.common.HdfsServerConstants.XATTR_SAT
 import static org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot.CURRENT_STATE_ID;
 
 /**
+ *
+ * FSDirectory和FSNamesystem 用来管理namespace的状态
+ * FSDirectory 是一个纯内存的管理结构,所有的操作都发生在内存当中.
+ * FSNamesystem 持久化操作在磁盘中
+ *
  * Both FSDirectory and FSNamesystem manage the state of the namespace.
  * FSDirectory is a pure in-memory data structure, all of whose operations
  * happen entirely in memory. In contrast, FSNamesystem persists the operations

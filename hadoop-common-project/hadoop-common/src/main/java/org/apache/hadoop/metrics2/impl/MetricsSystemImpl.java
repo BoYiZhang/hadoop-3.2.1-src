@@ -160,6 +160,7 @@ public class MetricsSystemImpl extends MetricsSystem implements MetricsSource {
     }
     switch (initMode()) {
       case NORMAL:
+        // 常规模式
         try { start(); }
         catch (MetricsConfigException e) {
           // Configuration errors (e.g., typos) should not be fatal.

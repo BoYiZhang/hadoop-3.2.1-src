@@ -645,6 +645,7 @@ public class NameNode extends ReconfigurableBase implements
   }
 
   protected void loadNamesystem(Configuration conf) throws IOException {
+    // 从磁盘中加载 FSNamesystem
     this.namesystem = FSNamesystem.loadFromDisk(conf);
   }
 
@@ -684,8 +685,12 @@ public class NameNode extends ReconfigurableBase implements
    * @param conf the configuration
    */
   protected void initialize(Configuration conf) throws IOException {
+
+
     if (conf.get(HADOOP_USER_GROUP_METRICS_PERCENTILES_INTERVALS) == null) {
+
       String intervals = conf.get(DFS_METRICS_PERCENTILES_INTERVALS_KEY);
+
       if (intervals != null) {
         conf.set(HADOOP_USER_GROUP_METRICS_PERCENTILES_INTERVALS,
           intervals);
@@ -693,24 +698,39 @@ public class NameNode extends ReconfigurableBase implements
     }
 
     UserGroupInformation.setConfiguration(conf);
+
     loginAsNameNodeUser(conf);
 
     NameNode.initMetrics(conf, this.getRole());
+
     StartupProgressMetrics.register(startupProgress);
 
+
+    //构造JvmPauseMonitor对象， 并启动
     pauseMonitor = new JvmPauseMonitor();
     pauseMonitor.init(conf);
     pauseMonitor.start();
     metrics.getJvmMetrics().setPauseMonitor(pauseMonitor);
 
+    //启动HTTP服务
     if (NamenodeRole.NAMENODE == role) {
       startHttpServer(conf);
     }
 
+
+    // 初始化FSNamesystem
+    // NameNode将对文件系统的管理都委托给了FSNamesystem对象，
+    // NameNode会调用FSNamesystem.loadFromDisk()创建FSNamesystem对象。
+    //
+    // FSNamesystem.loadFromDisk()首先调用构造方法构造FSNamesystem对象，
+    // 然后将fsimage以及editlog文件加载到命名空间中。
     loadNamesystem(conf);
+
+
     startAliasMapServerIfNecessary(conf);
 
-    //创建NameNodeRpcServer对象的实例
+
+    //创建RPC服务
     rpcServer = createRpcServer(conf);
 
     initReconfigurableBackoffKey();
@@ -728,7 +748,10 @@ public class NameNode extends ReconfigurableBase implements
       httpServer.setFSImage(getFSImage());
     }
 
+    //启动httpServer以及 rpcServer
     startCommonServices(conf);
+
+    //启动计时器定期将NameNode度量写入日志文件。此行为可由配置禁用。
     startMetricsLogger(conf);
   }
 
@@ -930,14 +953,22 @@ public class NameNode extends ReconfigurableBase implements
   protected NameNode(Configuration conf, NamenodeRole role)
       throws IOException {
     super(conf);
+
     this.tracer = new Tracer.Builder("NameNode").
         conf(TraceUtils.wrapHadoopConf(NAMENODE_HTRACE_PREFIX, conf)).
         build();
+
     this.tracerConfigurationManager =
         new TracerConfigurationManager(NAMENODE_HTRACE_PREFIX, conf);
+
     this.role = role;
+
     String nsId = getNameServiceId(conf);
+
+    // 根据配置确认是否开启了HA
     String namenodeId = HAUtil.getNameNodeId(conf, nsId);
+
+    //fs.defaultFS
     clientNamenodeAddress = NameNodeUtils.getClientNamenodeAddress(
         conf, nsId);
 
@@ -945,24 +976,37 @@ public class NameNode extends ReconfigurableBase implements
       LOG.info("Clients should use {} to access"
           + " this namenode/service.", clientNamenodeAddress);
     }
+
+    // 是否启用ha
     this.haEnabled = HAUtil.isHAEnabled(conf, nsId);
+
+    //非HA ==> ACTIVE_STATE
     state = createHAState(getStartupOption(conf));
+
+    //This is used only by tests at the moment.
     this.allowStaleStandbyReads = HAUtil.shouldAllowStandbyReads(conf);
+
     this.haContext = createHAContext();
     try {
+
       initializeGenericKeys(conf, nsId, namenodeId);
+
       initialize(getConf());
       try {
         haContext.writeLock();
+
+        //初始化完成后， Namenode进入Standby状态
         state.prepareToEnterState(haContext);
         state.enterState(haContext);
       } finally {
         haContext.writeUnlock();
       }
     } catch (IOException e) {
+      //出现异常， 直接停止Namenode服务
       this.stopAtException(e);
       throw e;
     } catch (HadoopIllegalArgumentException e) {
+      //直接停止Namenode服务
       this.stopAtException(e);
       throw e;
     }
@@ -994,11 +1038,14 @@ public class NameNode extends ReconfigurableBase implements
   }
 
   /**
+   *
    * Wait for service to finish.
    * (Normally, it runs forever.)
    */
+
   public void join() {
     try {
+      // join()方法等待RPC服务执行完毕， 在通常情况下这个服务是一直循环执行的
       rpcServer.join();
     } catch (InterruptedException ie) {
       LOG.info("Caught interrupted exception ", ie);
@@ -1631,12 +1678,18 @@ public class NameNode extends ReconfigurableBase implements
   public static NameNode createNameNode(String argv[], Configuration conf)
       throws IOException {
     LOG.info("createNameNode " + Arrays.asList(argv));
+
+    //构建配置文件
     if (conf == null)
       conf = new HdfsConfiguration();
+
+
     // Parse out some generic args into Configuration.
     GenericOptionsParser hParser = new GenericOptionsParser(conf, argv);
     argv = hParser.getRemainingArgs();
+
     // Parse the rest, NN specific args.
+    //解析命令行的参数
     StartupOption startOpt = parseArguments(argv);
     if (startOpt == null) {
       printUsage(System.err);
@@ -1645,7 +1698,11 @@ public class NameNode extends ReconfigurableBase implements
     setStartupOption(conf, startOpt);
 
     boolean aborted = false;
+
+    //根据启动选项调用对应的方法执行操作
     switch (startOpt) {
+
+    //格式化当前Namenode， 调用format()方法执行格式化操作
     case FORMAT:
       aborted = format(conf, startOpt.getForceFormat(),
           startOpt.getInteractiveFormat());
@@ -1656,39 +1713,63 @@ public class NameNode extends ReconfigurableBase implements
       System.out.println(NNStorage.newClusterID());
       terminate(0);
       return null;
+
+    //回滚上一次升级， 调用doRollback()方法执行回滚操作。
     case ROLLBACK:
       aborted = doRollback(conf, true);
       terminate(aborted ? 1 : 0);
       return null; // avoid warning
+
+    // 拷贝Active Namenode的最新命名空间数据到StandbyNamenode，
+    // 调用BootstrapStandby.run()方法执行操作
     case BOOTSTRAPSTANDBY:
       String[] toolArgs = Arrays.copyOfRange(argv, 1, argv.length);
       int rc = BootstrapStandby.run(toolArgs, conf);
       terminate(rc);
       return null; // avoid warning
+
+    //初始化editlog的共享存储空间， 并从Active
+    //Namenode中拷贝足够的editlog数据， 使得Standby节点能够顺利启动。 这里调用
+    //了静态方法initializeSharedEdits()执行操作
     case INITIALIZESHAREDEDITS:
       aborted = initializeSharedEdits(conf,
           startOpt.getForceFormat(),
           startOpt.getInteractiveFormat());
       terminate(aborted ? 1 : 0);
       return null; // avoid warning
+    // 启动backup节点， 这里直接构造一个BackupNode对象并返回。
+    // 啥也不错 ??
     case BACKUP:
+
+
+    //启动checkpoint节点， 也是直接构造BackupNode对象并返回。
     case CHECKPOINT:
       NamenodeRole role = startOpt.toNodeRole();
       DefaultMetricsSystem.initialize(role.toString().replace(" ", ""));
       return new BackupNode(conf, role);
+
+    //恢复损坏的元数据以及文件系统， 这里调用了doRecovery()方法执行操作
     case RECOVER:
       NameNode.doRecovery(startOpt, conf);
       return null;
+
+    //确认配置文件夹存在， 并且打印fsimage文件和文件系统的元数据版本
     case METADATAVERSION:
       printMetadataVersion(conf);
       terminate(0);
       return null; // avoid javac warning
+
+    //升级Namenode， 升级完成后关闭Namenode。
     case UPGRADEONLY:
       DefaultMetricsSystem.initialize("NameNode");
       new NameNode(conf);
       terminate(0);
       return null;
+
+
+    //在默认情况下直接构造NameNode对象并返回
     default:
+      // 初始化 度量服务
       DefaultMetricsSystem.initialize("NameNode");
       return new NameNode(conf);
     }
@@ -1757,12 +1838,17 @@ public class NameNode extends ReconfigurableBase implements
 
     try {
       StringUtils.startupShutdownMessage(NameNode.class, argv, LOG);
+
+      //调用createNameNode()方法创建NameNode对象
       NameNode namenode = createNameNode(argv, null);
+
       if (namenode != null) {
+        //等待Namenode RPC服务结束
         namenode.join();
       }
     } catch (Throwable e) {
       LOG.error("Failed to start namenode.", e);
+      //出现异常则直接退出执行
       terminate(1, e);
     }
   }

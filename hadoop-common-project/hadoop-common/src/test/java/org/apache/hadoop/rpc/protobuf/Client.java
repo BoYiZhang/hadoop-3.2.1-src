@@ -14,6 +14,7 @@ public class Client {
 
     public static void main(String[] args) throws Exception {
 
+        System.out.println(System.currentTimeMillis());
         //1. 构建配置对象
         Configuration conf = new Configuration();
 

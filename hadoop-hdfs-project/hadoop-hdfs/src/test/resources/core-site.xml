@@ -15,24 +15,9 @@
 -->
 
 <!-- Put site-specific property overrides in this file. -->
-
 <configuration>
     <property>
-        <name>dfs.replication</name>
-        <value>1</value>
-    </property>
-    <property>
-      <name>dfs.datanode.data.dir</name>
-      <value>/tools/hadoop-3.2.1/data/hdfs/data</value>
-      <final>true</final>
-    </property>
-    <property>
-      <name>dfs.namenode.name.dir</name>
-      <value>/tools/hadoop-3.2.1/data/namenode</value>
-      <final>true</final>
-    </property>
-    <property>
-      <name>dfs.permissions</name>
-      <value>false</value>
+        <name>fs.defaultFS</name>
+        <value>hdfs://localhost:8020</value>
     </property>
 </configuration>
