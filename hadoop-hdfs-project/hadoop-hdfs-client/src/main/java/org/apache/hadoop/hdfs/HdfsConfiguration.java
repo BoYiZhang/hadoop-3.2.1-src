@@ -35,11 +35,17 @@ public class HdfsConfiguration extends Configuration {
 
     // adds the default resources
     Configuration.addDefaultResource("hdfs-default.xml");
+
+
     Configuration.addDefaultResource("hdfs-site.xml");
   }
 
   public HdfsConfiguration() {
     super();
+
+    System.out.println("dfs.namenode.name.dir : "+this.get("dfs.namenode.name.dir"));
+
+    System.out.println(" ---------------- ");
   }
 
   public HdfsConfiguration(boolean loadDefaults) {
@@ -156,5 +162,8 @@ public class HdfsConfiguration extends Configuration {
   public static void main(String[] args) {
     init();
     Configuration.dumpDeprecatedKeys();
+
+
+
   }
 }

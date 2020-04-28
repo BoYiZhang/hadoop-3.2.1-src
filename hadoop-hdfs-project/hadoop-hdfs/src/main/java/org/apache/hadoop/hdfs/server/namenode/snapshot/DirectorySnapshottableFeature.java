@@ -52,6 +52,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
 /**
+ * 描述了目录开启快照功能的特性
+ *
  * A directory with this feature is a snapshottable directory, where snapshots
  * can be taken. This feature extends {@link DirectoryWithSnapshotFeature}, and
  * maintains extra information about all the snapshots taken on this directory.

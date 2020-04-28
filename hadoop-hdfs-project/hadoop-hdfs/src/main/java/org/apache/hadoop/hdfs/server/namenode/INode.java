@@ -51,6 +51,11 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
 /**
+ *
+ * 我们在内存中保存了 file/block 层级
+ *
+ * 这是包含了文件和目录共有属性的 基类
+ *
  * We keep an in-memory representation of the file/block hierarchy.
  * This is a base INode class containing common fields for file and 
  * directory inodes.
@@ -75,13 +80,17 @@ public abstract class INode implements INodeAttributes, Diff.Element<byte[]> {
   public abstract long getId();
 
   /**
+   * 检查 是否是root inode
    * Check whether this is the root inode.
    */
   final boolean isRoot() {
     return getLocalNameBytes().length == 0;
   }
 
-  /** Get the {@link PermissionStatus} */
+  /**
+   * 获取 权限状态
+   * Get the {@link PermissionStatus}
+   * */
   abstract PermissionStatus getPermissionStatus(int snapshotId);
 
   /** The same as getPermissionStatus(null). */
@@ -332,6 +341,7 @@ public abstract class INode implements INodeAttributes, Diff.Element<byte[]> {
   }
 
   /**
+   * 检查是否是目录
    * Check whether it's a directory
    */
   public boolean isDirectory() {

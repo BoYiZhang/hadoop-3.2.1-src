@@ -761,6 +761,8 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
   }
  
   static {
+
+
     // Add default resources
     addDefaultResource("core-default.xml");
     addDefaultResource("core-site.xml");
@@ -778,6 +780,8 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
           "respectively");
       addDefaultResource("hadoop-site.xml");
     }
+
+
   }
 
   private Properties properties;
@@ -793,6 +797,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
   /** A new configuration. */
   public Configuration() {
     this(true);
+
   }
 
   /** A new configuration where the behavior of reading from the default 
@@ -803,11 +808,16 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
    * @param loadDefaults specifies whether to load from the default files
    */
   public Configuration(boolean loadDefaults) {
+
+
     this.loadDefaults = loadDefaults;
+
 
     synchronized(Configuration.class) {
       REGISTRY.put(this, null);
     }
+
+
   }
   
   /** 

@@ -80,6 +80,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
 /**
+ *
+ * FSImage处理检查点和命名空间 edits 的日志记录。
  * FSImage handles checkpointing and logging of the namespace edits.
  * 
  */

@@ -61,6 +61,22 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
 /**
+ *
+ * 文件
+ * INodeFile 类中保存了HDFS文件最重要的两个信息：
+ * [ 文件头header字段 ] 和 [ 文件对应的数据块信息blocks字段 ]。
+ *
+ * header字段保存了当前文件有多少个副本，
+ * 以及文件数据块的大小
+ * （
+ *     header字段的处理类似于INode中的permission字段，
+ *     前4个比特用于保存存储策略，中间12个比特用于保存文件备份系数，
+ *     后48个比特用于保存数据块大小。
+ *     使用内部类HeaderFormat处理
+ * ）
+ *
+ *  blocks字段是一个BlockInfo类型的数组， 保存了当前文件对应的所有数据块信息。
+ *
  * I-node for closed file.
  *
  * */
@@ -102,6 +118,21 @@ public class INodeFile extends INodeWithAdditionalFields
    *      出前4个比特的存储策略信息、
    *      中间12个比特的文件备份系数信息，
    *      以及后48个比特的数据块大小信息。
+   *
+   *
+   *
+   * BLOCK_LAYOUT_AND_REDUNDANCY包含12位，描述块的布局和冗余。
+   * 我们使用最高的1位来确定该块是副本还是擦除编码。
+   *
+   * 对于复制块，尾11位存储复制因子。
+   *
+   * 对于擦除编码块，尾11位存储EC策略ID，
+   *
+   * 将来，我们可能会进一步划分这11位以存储EC策略ID和擦除编码块的复制因子。
+   *
+   * 本节的布局如下所示。
+   *
+   * 另一种可能的将来扩展是针对将来的块类型，在这种情况下，可以将“副本或EC”位扩展到11位字段中。
    *
    *
    * Bit format:
@@ -248,6 +279,13 @@ public class INodeFile extends INodeWithAdditionalFields
       return layoutRedundancy;
     }
 
+    /**
+     *
+     * @param preferredBlockSize  文件大小
+     * @param layoutRedundancy    副本信息
+     * @param storagePolicyID     存储策略
+     * @return
+     */
     static long toLong(long preferredBlockSize, long layoutRedundancy,
         byte storagePolicyID) {
       long h = 0;
@@ -291,14 +329,19 @@ public class INodeFile extends INodeWithAdditionalFields
     super(id, name, permissions, mtime, atime);
     final long layoutRedundancy = HeaderFormat.getBlockLayoutRedundancy(
         blockType, replication, ecPolicyID);
+
+    // 构建头信息
     header = HeaderFormat.toLong(preferredBlockSize, layoutRedundancy,
         storagePolicyID);
+
+    // 设置blocks信息
     if (blklist != null && blklist.length > 0) {
       for (BlockInfo b : blklist) {
         Preconditions.checkArgument(b.getBlockType() == blockType);
       }
     }
     setBlocks(blklist);
+
   }
   
   public INodeFile(INodeFile that) {
@@ -338,6 +381,8 @@ public class INodeFile extends INodeWithAdditionalFields
   /* Start of Under-Construction Feature */
 
   /**
+   * 表示文件处于构建状态
+   *
    * If the inode contains a {@link FileUnderConstructionFeature}, return it;
    * otherwise, return null.
    */
@@ -345,7 +390,10 @@ public class INodeFile extends INodeWithAdditionalFields
     return getFeature(FileUnderConstructionFeature.class);
   }
 
-  /** Is this file under construction? */
+  /**
+   * 文件处于构建状态??
+   * Is this file under construction?
+   * */
   @Override // BlockCollection
   public boolean isUnderConstruction() {
     return getFileUnderConstructionFeature() != null;
@@ -464,7 +512,12 @@ public class INodeFile extends INodeWithAdditionalFields
 
   /* End of Under-Construction Feature */
   
-  /* Start of Snapshot Feature */
+  /**
+   *
+   *  添加快照
+   *  Start of Snapshot Feature
+   *
+   *  */
 
   public FileWithSnapshotFeature addSnapshotFeature(FileDiffList diffs) {
     Preconditions.checkState(!isWithSnapshot(), 

@@ -125,7 +125,7 @@ class MetricsConfig extends SubsetConfiguration {
       } catch (ConfigurationException e) {
         // Commons Configuration defines the message text when file not found
         if (e.getMessage().startsWith("Could not locate")) {
-          LOG.debug("Could not locate file {}", fname, e);
+//          LOG.debug("Could not locate file {}", fname, e);
           continue;
         }
         throw new MetricsConfigException(e);

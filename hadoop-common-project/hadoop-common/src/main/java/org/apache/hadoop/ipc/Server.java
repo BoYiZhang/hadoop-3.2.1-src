@@ -1303,7 +1303,6 @@ public abstract class Server {
             //等待请求接入
             readSelector.select();
 
-
             //在当前的readSelector上等待可读事件，也就是有客户端RPC请求到达
             Iterator<SelectionKey> iter = readSelector.selectedKeys().iterator();
             while (iter.hasNext()) {

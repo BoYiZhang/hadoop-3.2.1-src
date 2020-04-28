@@ -98,7 +98,10 @@ import static org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot.CURRENT_S
 
 /**
  *
- * FSDirectory和FSNamesystem 用来管理namespace的状态
+ * FSDirectory维护着文件系统目录树的根节点
+ *
+ *
+ * FSDirectory 和FSNamesystem 用来管理namespace的状态
  * FSDirectory 是一个纯内存的管理结构,所有的操作都发生在内存当中.
  * FSNamesystem 持久化操作在磁盘中
  *
@@ -257,6 +260,7 @@ public class FSDirectory implements Closeable {
   public final EncryptionZoneManager ezManager;
 
   /**
+   * 缓存经常使用的文件名称
    * Caches frequently used file names used in {@link INode} to reuse 
    * byte[] objects and reduce heap usage.
    */
@@ -340,6 +344,8 @@ public class FSDirectory implements Closeable {
     this.maxComponentLength = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_MAX_COMPONENT_LENGTH_KEY,
         DFSConfigKeys.DFS_NAMENODE_MAX_COMPONENT_LENGTH_DEFAULT);
+
+    // 目录最大数量 1024 * 1024 = 1048576  ≈ 100 万
     this.maxDirItems = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_MAX_DIRECTORY_ITEMS_KEY,
         DFSConfigKeys.DFS_NAMENODE_MAX_DIRECTORY_ITEMS_DEFAULT);
@@ -352,6 +358,12 @@ public class FSDirectory implements Closeable {
     Preconditions.checkArgument(this.inodeXAttrsLimit >= 0,
         "Cannot set a negative limit on the number of xattrs per inode (%s).",
         DFSConfigKeys.DFS_NAMENODE_MAX_XATTRS_PER_INODE_KEY);
+
+    // 我们需要一个最大最大值，因为默认情况下，
+    // PB将message大小限制为64MB。
+    // 这意味着每个目录只能存储大约670万个条目，
+    // 但是为了安全起见，请使用640万个条目。
+
     // We need a maximum maximum because by default, PB limits message sizes
     // to 64MB. This means we can only store approximately 6.7 million entries
     // per directory, but let's use 6.4 million for some safety.

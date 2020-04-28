@@ -48,7 +48,7 @@ import static org.apache.hadoop.hdfs.protocol.HdfsConstants.BLOCK_STORAGE_POLICY
 
 /**
  *
- *
+ * 目录实现类
  * Directory INode class.
  */
 public class INodeDirectory extends INodeWithAdditionalFields
@@ -141,6 +141,7 @@ public class INodeDirectory extends INodeWithAdditionalFields
     return getParent() != null ? getParent().getStoragePolicyID() : BLOCK_STORAGE_POLICY_ID_UNSPECIFIED;
   }
 
+  //向当前目录添加磁盘配额特性
   void setQuota(BlockStoragePolicySuite bsps, long nsQuota, long ssQuota, StorageType type) {
     DirectoryWithQuotaFeature quota = getDirectoryWithQuotaFeature();
     if (quota != null) {
@@ -162,6 +163,8 @@ public class INodeDirectory extends INodeWithAdditionalFields
       } else {
         builder.storageSpaceQuota(ssQuota);
       }
+
+      //向当前目录添加磁盘配额特性
       addDirectoryWithQuotaFeature(builder.build()).setSpaceConsumed(c);
     }
   }
@@ -183,6 +186,8 @@ public class INodeDirectory extends INodeWithAdditionalFields
   }
 
   /**
+   * 获取当前目录磁盘配额特性对应的DirectoryWithQuotaFeature对象
+   *
    * If the directory contains a {@link DirectoryWithQuotaFeature}, return it;
    * otherwise, return null.
    */
@@ -190,13 +195,16 @@ public class INodeDirectory extends INodeWithAdditionalFields
     return getFeature(DirectoryWithQuotaFeature.class);
   }
 
-  /** Is this directory with quota? */
+  /**
+   * Is this directory with quota?
+   * */
   final boolean isWithQuota() {
     return getDirectoryWithQuotaFeature() != null;
   }
 
   DirectoryWithQuotaFeature addDirectoryWithQuotaFeature(
       DirectoryWithQuotaFeature q) {
+    //构造DirectoryWithQuotaFeature对象， 调用addFeature()方法添加到features集合中
     Preconditions.checkState(!isWithQuota(), "Directory is already with quota");
     addFeature(q);
     return q;

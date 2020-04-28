@@ -37,6 +37,7 @@ import static org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot.NO_SNAPSH
 /**
  *
  *
+ * 描述了目录拥有快照的特性
  *
  * Feature used to store and process the snapshot diff information for a
  * directory. In particular, it contains a directory diff list recording changes
@@ -142,7 +143,8 @@ public class DirectoryWithSnapshotFeature implements INode.Feature {
 
   /**
    *
-   * DirectoryDiff是DirectoryWithSnapshotFeature的内部类，它扩展自AbstractINodeDiff 类。
+   * DirectoryDiff是DirectoryWithSnapshotFeature的内部类，
+   * 它扩展自AbstractINodeDiff 类。
    * AbstractINodeDiff类用于抽象INode在两个快照版本之间的状态差异，
    * 由此可以知道 DirectoryDiff就是用于描述INodeDirectory在两个快照版本之间的状态差异的。
    *
@@ -159,6 +161,7 @@ public class DirectoryWithSnapshotFeature implements INode.Feature {
 
     /**
      * 子目录项diff
+     * ChildrenDiff类用于描述INodeDirectory的子目录项集合children字段的当前状态与上一 个快照版本状态之间的差异
      * The children list diff. */
     private final ChildrenDiff diff;
     private boolean isSnapshotRoot = false;
