@@ -996,6 +996,8 @@ public class NameNode extends ReconfigurableBase implements
         haContext.writeLock();
 
         //初始化完成后， Namenode进入Standby状态
+        //在这里会开启StandbyCheckpointer里面的
+        //  checkpointer 线程. 定时合并&处理images文件
         state.prepareToEnterState(haContext);
         state.enterState(haContext);
       } finally {

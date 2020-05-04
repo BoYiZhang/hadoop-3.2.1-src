@@ -44,12 +44,17 @@ public interface JournalManager extends Closeable, FormatConfirmable,
     LogsPurgeable {
 
   /**
+   *
+   * 格式化底层存储
    * Format the underlying storage, removing any previously
    * stored data.
    */
   void format(NamespaceInfo ns, boolean force) throws IOException;
 
   /**
+   * 从指定事务id开始记录一个操作的段落，
+   *
+   * 开始写入日志流的新段，该段从给定的事务ID开始。
    * Begin writing to a new segment of the log stream, which starts at
    * the given transaction ID.
    */
@@ -57,6 +62,12 @@ public interface JournalManager extends Closeable, FormatConfirmable,
       throws IOException;
 
   /**
+   *
+   * 完成指定事务id区间的写操作
+   *
+   * 当状态为finalized 和 complete ,
+   * 标记 日志段落 从 firstTxId 到 lastTxId .
+   *
    * Mark the log segment that spans from firstTxId to lastTxId
    * as finalized and complete.
    */

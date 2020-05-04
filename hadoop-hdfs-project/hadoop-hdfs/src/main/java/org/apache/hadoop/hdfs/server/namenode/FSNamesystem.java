@@ -734,7 +734,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
     try {
 
-      //加栽fsimage以及editlog文件
+      //加载fsimage以及editlog文件
       namesystem.loadFSImage(startOpt);
 
     } catch (IOException ioe) {
@@ -1132,13 +1132,19 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
       startOpt = StartupOption.REGULAR;
     }
+
+
     boolean success = false;
     writeLock();
     try {
       // We shouldn't be calling saveNamespace if we've come up in standby state.
       MetaRecoveryContext recovery = startOpt.createRecoveryContext();
+
+
+      // 加载 FSImage 文件
       final boolean staleImage
           = fsImage.recoverTransitionRead(startOpt, this, recovery);
+
       if (RollingUpgradeStartupOption.ROLLBACK.matches(startOpt)) {
         rollingUpgradeInfo = null;
       }

@@ -739,8 +739,10 @@ public class NNStorage extends Storage implements Closeable,
   
   static File getStorageFile(StorageDirectory sd, NameNodeFile type,
       long imageTxId) {
-    return new File(sd.getCurrentDir(),
-                    String.format("%s_%019d", type.getName(), imageTxId));
+    File file = new File(sd.getCurrentDir(),
+            String.format("%s_%019d", type.getName(), imageTxId)) ;
+    System.out.println("NNStorage$getStorageFile  file path :  " + file.getPath() );
+    return file ;
   }
   
   /**

@@ -235,7 +235,10 @@ public final class FSImageFormatProtobuf {
       RandomAccessFile raFile = new RandomAccessFile(file, "r");
       FileInputStream fin = new FileInputStream(file);
       try {
+
+        // 加载文件
         loadInternal(raFile, fin);
+
         try {
           dt.join();
           imgDigest = dt.getDigest();
@@ -250,12 +253,20 @@ public final class FSImageFormatProtobuf {
       }
     }
 
+    // loadInternal()方法会打开fsimage文件通道，
+    // 然后读取fsimage文件中的FileSummary对象，
+    // FileSummary对象中记录了fsimage中保存的所有section的信息。
+    // loadInternal()会对FileSummary对象中保存的section排序，
+    // 然后遍历每个section并调用对应的方法从fsimage文件中加载这个section。
     private void loadInternal(RandomAccessFile raFile, FileInputStream fin)
         throws IOException {
       if (!FSImageUtil.checkFileFormat(raFile)) {
         throw new IOException("Unrecognized file format");
       }
+
+      // 从fsimage文件末尾加载FileSummary， 也就是fsimage文件内容的描述
       FileSummary summary = FSImageUtil.loadSummary(raFile);
+
       if (requireSameLayoutVersion && summary.getLayoutVersion() !=
           HdfsServerConstants.NAMENODE_LAYOUT_VERSION) {
         throw new IOException("Image version " + summary.getLayoutVersion() +
@@ -263,13 +274,17 @@ public final class FSImageFormatProtobuf {
             HdfsServerConstants.NAMENODE_LAYOUT_VERSION);
       }
 
+      //获取通道
       FileChannel channel = fin.getChannel();
 
+      // 构造FSImageFormatPBINode.Loader和FSImageFormatPBSnapshot.
+      // Loader加载INode以及Snapshot
       FSImageFormatPBINode.Loader inodeLoader = new FSImageFormatPBINode.Loader(
           fsn, this);
       FSImageFormatPBSnapshot.Loader snapshotLoader = new FSImageFormatPBSnapshot.Loader(
           fsn, this);
 
+      //对fsimage文件描述中记录的sections进行排序
       ArrayList<FileSummary.Section> sections = Lists.newArrayList(summary
           .getSectionsList());
       Collections.sort(sections, new Comparator<FileSummary.Section>() {
@@ -287,6 +302,8 @@ public final class FSImageFormatProtobuf {
         }
       });
 
+
+
       StartupProgress prog = NameNode.getStartupProgress();
       /**
        * beginStep() and the endStep() calls do not match the boundary of the
@@ -295,7 +312,10 @@ public final class FSImageFormatProtobuf {
        */
       Step currentStep = null;
 
+      //遍历每个section， 并调用对应的方法加载这个section
       for (FileSummary.Section s : sections) {
+
+        //在通道中定位这个section的起始位置
         channel.position(s.getOffset());
         InputStream in = new BufferedInputStream(new LimitInputStream(fin,
             s.getLength()));
@@ -305,6 +325,7 @@ public final class FSImageFormatProtobuf {
 
         String n = s.getName();
 
+        //调用对应的方法加载不同的section
         switch (SectionName.fromString(n)) {
         case NS_INFO:
           loadNameSystemSection(in);
@@ -502,17 +523,27 @@ public final class FSImageFormatProtobuf {
     }
 
     /**
+     * save()方法会打开fsimage文件的输出流并且获得文件通道，
+     * 然后调用saveInternal()方法将命名空间保存到fsimage文件中。
+     *
      * @return number of non-fatal errors detected while writing the image.
      * @throws IOException on fatal error.
      */
     long save(File file, FSImageCompression compression) throws IOException {
+
+
       FileOutputStream fout = new FileOutputStream(file);
+
       fileChannel = fout.getChannel();
+
       try {
         LOG.info("Saving image file {} using {}", file, compression);
         long startTime = monotonicNow();
-        long numErrors = saveInternal(
-            fout, compression, file.getAbsolutePath());
+
+        // 保存到fsimage文件
+        long numErrors = saveInternal( fout, compression, file.getAbsolutePath());
+
+
         LOG.info("Image file {} of size {} bytes saved in {} seconds {}.", file,
             file.length(), (monotonicNow() - startTime) / 1000,
             (numErrors > 0 ? (" with" + numErrors + " errors") : ""));
@@ -531,12 +562,18 @@ public final class FSImageFormatProtobuf {
       out.write(lengthBytes);
     }
 
+    // saveINodes()方法构造了一个FSImageFormatPBINode.Saver对象，
+    // 并调用这个对象对应的方法保存文件系统目录树中的INode信息、 INodeDirectory信息，
+    // 以及处于构建状态的文件信息
     private long saveInodes(FileSummary.Builder summary) throws IOException {
-      FSImageFormatPBINode.Saver saver = new FSImageFormatPBINode.Saver(this,
-          summary);
 
+      FSImageFormatPBINode.Saver saver = new FSImageFormatPBINode.Saver(this,summary);
+
+      // 保存INode信息是由FSImageFormatPBINode.Saver.serializeINodeSection()方法实现的
       saver.serializeINodeSection(sectionOutputStream);
+
       saver.serializeINodeDirectorySection(sectionOutputStream);
+
       saver.serializeFilesUCSection(sectionOutputStream);
 
       return saver.getNumImageErrors();
@@ -561,28 +598,60 @@ public final class FSImageFormatProtobuf {
     }
 
     /**
+     * saveInternal()方法首先构造底层fsimage文件的输出流，
+     * 构造fsimage文件的描述类 FileSummary ，
+     *
+     * 然后在FileSummary中记录ondiskVersion、 layoutVersion、 codec等信息。
+     * 接下来saveInternal()方法依次向fsimage文件中写入
+     *     1.命名空间信息、
+     *     2.inode信息、
+     *     3.快照信息、
+     *     4.安全信息、
+     *     5.缓存信息、
+     *     6.StringTable
+     * 信息等。
+     *
+     * 注意上述信息都是以section为单位写入的， 每个section的格式定义请参考fsimage.proto文件。
+     * saveInternal()方法以section为单位写入元数据信息时，
+     * 还会在FileSummary中记录这个section的长度，
+     * 以及section在fsimage文件中的起始位置等信息。
+     *
+     * 当完成了所有section的写入后，
+     * FileSummary对象也就构造完毕了，
+     * saveInternal()最后会将
+     * FileSummary对象写入fsimage文件中。
+     *
      * @return number of non-fatal errors detected while writing the FsImage.
      * @throws IOException on fatal error.
+     *
      */
     private long saveInternal(FileOutputStream fout,
         FSImageCompression compression, String filePath) throws IOException {
-      StartupProgress prog = NameNode.getStartupProgress();
-      MessageDigest digester = MD5Hash.getDigester();
-      int layoutVersion =
-          context.getSourceNamesystem().getEffectiveLayoutVersion();
 
-      underlyingOutputStream = new DigestOutputStream(new BufferedOutputStream(
-          fout), digester);
+
+      StartupProgress prog = NameNode.getStartupProgress();
+
+      //构造输出流， 一边写入数据， 一边写入校验值
+      MessageDigest digester = MD5Hash.getDigester();
+
+      int layoutVersion = context.getSourceNamesystem().getEffectiveLayoutVersion();
+
+      underlyingOutputStream = new DigestOutputStream(new BufferedOutputStream(fout), digester);
+
       underlyingOutputStream.write(FSImageUtil.MAGIC_HEADER);
 
       fileChannel = fout.getChannel();
 
+      // FileSummary为fsimage文件的描述部分， 也是protobuf定义的
       FileSummary.Builder b = FileSummary.newBuilder()
           .setOndiskVersion(FSImageUtil.FILE_VERSION)
           .setLayoutVersion(
               context.getSourceNamesystem().getEffectiveLayoutVersion());
 
+      //获取压缩格式， 并装饰输出流
       codec = compression.getImageCodec();
+
+
       if (codec != null) {
         b.setCodec(codec.getClass().getCanonicalName());
         sectionOutputStream = codec.createOutputStream(underlyingOutputStream);
@@ -590,10 +659,14 @@ public final class FSImageFormatProtobuf {
         sectionOutputStream = underlyingOutputStream;
       }
 
+      //保存命名空间信息
       saveNameSystemSection(b);
+
       // Check for cancellation right after serializing the name system section.
       // Some unit tests, such as TestSaveNamespace#testCancelSaveNameSpace
       // depends on this behavior.
+
+      // 检查是否取消了保存操作
       context.checkCancelled();
 
       Step step;
@@ -601,40 +674,63 @@ public final class FSImageFormatProtobuf {
       // Erasure coding policies should be saved before inodes
       if (NameNodeLayoutVersion.supports(
           NameNodeLayoutVersion.Feature.ERASURE_CODING, layoutVersion)) {
+
         step = new Step(StepType.ERASURE_CODING_POLICIES, filePath);
         prog.beginStep(Phase.SAVING_CHECKPOINT, step);
+
+        //保存 ErasureCoding 信息
         saveErasureCodingSection(b);
         prog.endStep(Phase.SAVING_CHECKPOINT, step);
+
       }
 
+
+      //保存命名空间中的inode信息
       step = new Step(StepType.INODES, filePath);
+
       prog.beginStep(Phase.SAVING_CHECKPOINT, step);
       // Count number of non-fatal errors when saving inodes and snapshots.
+      // 保存命名空间中的inode信息
       long numErrors = saveInodes(b);
+
+      // 保存快照信息
       numErrors += saveSnapshots(b);
       prog.endStep(Phase.SAVING_CHECKPOINT, step);
 
+
+      // 保存安全信息
       step = new Step(StepType.DELEGATION_TOKENS, filePath);
       prog.beginStep(Phase.SAVING_CHECKPOINT, step);
       saveSecretManagerSection(b);
       prog.endStep(Phase.SAVING_CHECKPOINT, step);
 
+
+      // 保存缓存信息
       step = new Step(StepType.CACHE_POOLS, filePath);
       prog.beginStep(Phase.SAVING_CHECKPOINT, step);
       saveCacheManagerSection(b);
       prog.endStep(Phase.SAVING_CHECKPOINT, step);
 
+      // 保存StringTable
       saveStringTableSection(b);
 
       // We use the underlyingOutputStream to write the header. Therefore flush
       // the buffered stream (which is potentially compressed) first.
+
+      // flush输出流
       flushSectionOutputStream();
 
       FileSummary summary = b.build();
+      //将FileSummary写入文件
       saveFileSummary(underlyingOutputStream, summary);
+
+      //关闭底层输出流
       underlyingOutputStream.close();
+
       savedDigest = new MD5Hash(digester.digest());
       return numErrors;
+
+
     }
 
     private void saveSecretManagerSection(FileSummary.Builder summary)

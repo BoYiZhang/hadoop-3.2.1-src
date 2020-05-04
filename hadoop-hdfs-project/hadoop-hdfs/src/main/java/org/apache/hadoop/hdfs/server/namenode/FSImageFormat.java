@@ -220,12 +220,18 @@ public class FSImageFormat {
         is = new FileInputStream(file);
         byte[] magic = new byte[FSImageUtil.MAGIC_HEADER.length];
         IOUtils.readFully(is, magic, 0, magic.length);
+
+        // fsimage文件中包括 magicHeader， 使用的是protobuf序列化方式
         if (Arrays.equals(magic, FSImageUtil.MAGIC_HEADER)) {
+
+          //构造FSImageFormatProtobuf.Loader加载fsimage文件
           FSImageFormatProtobuf.Loader loader = new FSImageFormatProtobuf.Loader(
               conf, fsn, requireSameLayoutVersion);
           impl = loader;
           loader.load(file);
+
         } else {
+          //否则构造FSImageFormat.Loader加载fsimage文件
           Loader loader = new Loader(conf, fsn);
           impl = loader;
           loader.load(file);

@@ -228,17 +228,23 @@ public final class FSImageFormatPBINode {
 
     void loadINodeSection(InputStream in, StartupProgress prog,
         Step currentStep) throws IOException {
+
       INodeSection s = INodeSection.parseDelimitedFrom(in);
+
       fsn.dir.resetLastInodeId(s.getLastInodeId());
+
       long numInodes = s.getNumInodes();
+
       LOG.info("Loading " + numInodes + " INodes.");
       prog.setTotal(Phase.LOADING_FSIMAGE, currentStep, numInodes);
       Counter counter = prog.getCounter(Phase.LOADING_FSIMAGE, currentStep);
       for (int i = 0; i < numInodes; ++i) {
         INodeSection.INode p = INodeSection.INode.parseDelimitedFrom(in);
         if (p.getId() == INodeId.ROOT_INODE_ID) {
+          // 加载root
           loadRootINode(p);
         } else {
+          //加载子节点
           INode n = loadINode(p);
           dir.addToInodeMap(n);
         }
@@ -570,24 +576,47 @@ public final class FSImageFormatPBINode {
           FSImageFormatProtobuf.SectionName.INODE_DIR);
     }
 
+    /**
+     * serializeINodeSection()方法会首先构造一个INodeSection对象，
+     * 记录文件系统目录树中保存的最后一个inode的inodeid，
+     * 以及命名空间中所有inode的个数。
+     *
+     * 之后迭代处理将所有inode信息写入fsimage文件中，
+     * 最后将INodeSection的属性信息记录在FileSummary中。
+     *
+     * serializeINodeSection
+     * @param out
+     * @throws IOException
+     */
     void serializeINodeSection(OutputStream out) throws IOException {
+
+
       INodeMap inodesMap = fsn.dir.getINodeMap();
 
+      //构造一个 INodeSection， 保存最后一个inode的 inodeid， 以及这个命名空间中所有inode的个数
       INodeSection.Builder b = INodeSection.newBuilder()
           .setLastInodeId(fsn.dir.getLastInodeId()).setNumInodes(inodesMap.size());
+
       INodeSection s = b.build();
+
+      //序列化至输出流
       s.writeDelimitedTo(out);
 
       int i = 0;
+
+      //迭代处理inodeMap中所有的inode， 调用save()方法将inode信息保存到fsimage中
       Iterator<INodeWithAdditionalFields> iter = inodesMap.getMapIterator();
       while (iter.hasNext()) {
         INodeWithAdditionalFields n = iter.next();
+        // 将所有inode信息写入fsimage文件中
         save(out, n);
         ++i;
         if (i % FSImageFormatProtobuf.Saver.CHECK_CANCEL_INTERVAL == 0) {
           context.checkCancelled();
         }
       }
+
+      //调用commitSection()方法在FileSummary中写入inode section
       parent.commitSection(summary, FSImageFormatProtobuf.SectionName.INODE);
     }
 
@@ -633,6 +662,12 @@ public final class FSImageFormatPBINode {
           .setType(INodeSection.INode.Type.DIRECTORY).setDirectory(b).build();
       r.writeDelimitedTo(out);
     }
+
+    // 首先构造protobuf Builder类——INodeSection.INodeFile.Builder，
+    // 然后设置blocks——也就是当前文件有哪些数据块，
+    // 如果当前的INodeFile处于构建状态， 则设置对应的构建信息。
+    //
+    // 最后将序列化后的inode信息写入输出流中。
 
     private void save(OutputStream out, INodeFile n) throws IOException {
       INodeSection.INodeFile.Builder b = buildINodeFile(n,

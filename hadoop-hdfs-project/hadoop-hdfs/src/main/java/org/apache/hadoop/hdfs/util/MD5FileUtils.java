@@ -147,6 +147,7 @@ public abstract class MD5FileUtils {
       throws IOException {
     final String digestString = StringUtils.byteToHexString(digest.getDigest());
     saveMD5File(dataFile, digestString);
+    System.out.println("MD5FileUtils$saveMD5File:digestString "+digestString);
   }
 
   private static void saveMD5File(File dataFile, String digestString)

@@ -37,6 +37,13 @@ import org.apache.hadoop.io.IOUtils;
 import com.google.common.annotations.VisibleForTesting;
 
 /**
+ *
+ *
+ * 向本地文件系统中保存的editlog文件写数据的输出流， 向
+ * EditLogFileOutputStream写数据时， 数据首先被写入到输出流的缓冲区中， 当显式地调用
+ * flush()操作后， 数据才会从缓冲区同步到editlog文件中
+ *
+ *
  * An implementation of the abstract class {@link EditLogOutputStream}, which
  * stores edits in a local file.
  */
@@ -46,21 +53,41 @@ public class EditLogFileOutputStream extends EditLogOutputStream {
       LoggerFactory.getLogger(EditLogFileOutputStream.class);
   public static final int MIN_PREALLOCATION_LENGTH = 1024 * 1024;
 
+  //输出流对应的editlog文件。
   private File file;
+
+  //editlog文件对应的输出流。
   private FileOutputStream fp; // file stream for storing edit logs
+
+  //editlog文件对应的输出流通道。
   private FileChannel fc; // channel of the file stream for sync
+
+
+  //一个具有两块缓存的缓冲区， 数据必须先写入缓存， 然后再由缓存同步到磁盘上。
   private EditsDoubleBuffer doubleBuf;
+
+
+  //用来扩充editlog文件大小的数据块。 当要进行同步操作时，
+  // 如果editlog文件不够大， 则使用fill来扩充editlog。
+  // 文件最小1M
   static final ByteBuffer fill = ByteBuffer.allocateDirect(MIN_PREALLOCATION_LENGTH);
+
+
   private boolean shouldSyncWritesAndSkipFsync = false;
+
 
   private static boolean shouldSkipFsyncForTests = false;
 
+
+  // EditLogFileOutputStream有一个static的代码段， 将fill字段用
+  // FSEditLogOpCodes.OP_INVALID 字节填满。
   static {
     fill.position(0);
     for (int i = 0; i < fill.capacity(); i++) {
       fill.put(FSEditLogOpCodes.OP_INVALID.getOpCode());
     }
   }
+
 
   /**
    * Creates output buffers and file object.
@@ -93,8 +120,11 @@ public class EditLogFileOutputStream extends EditLogOutputStream {
     fc.position(fc.size());
   }
 
+  // 直接调用doubleBuf中的对应方法
+  // 向输出流写入一个操作
   @Override
   public void write(FSEditLogOp op) throws IOException {
+    //向doubleBuf写入FSEditLogOp对象
     doubleBuf.writeOp(op, getCurrentLogVersion());
   }
 
@@ -181,6 +211,10 @@ public class EditLogFileOutputStream extends EditLogOutputStream {
   }
 
   /**
+   *
+   * 为同步数据做准备
+   * 调用doubleBuf.setReadyToFlush()交换两个缓冲区
+   *
    * All data that has been written to the stream so far will be flushed. New
    * data can be still written to the stream while flushing is performed.
    */
@@ -190,6 +224,10 @@ public class EditLogFileOutputStream extends EditLogOutputStream {
   }
 
   /**
+   *
+   * 将准备好的缓冲区刷新到持久性存储。
+   * 由于会刷新和同步readyBuffer，因此currentBuffer不会累积新的日志记录，因此不会刷新。
+   *
    * Flush ready buffer to persistent store. currentBuffer is not flushed as it
    * accumulates new log records while readyBuffer will be flushed and synced.
    */
@@ -202,7 +240,11 @@ public class EditLogFileOutputStream extends EditLogOutputStream {
       LOG.info("Nothing to flush");
       return;
     }
+    // preallocate()方法用于在editLog文件大小不够时， 填充editlog文件。
     preallocate(); // preallocate file if necessary
+
+
+    //将缓存中的数据同步到editlog文件中。
     doubleBuf.flushTo(fp);
     if (durable && !shouldSkipFsyncForTests && !shouldSyncWritesAndSkipFsync) {
       fc.force(false); // metadata updates not needed
@@ -221,7 +263,11 @@ public class EditLogFileOutputStream extends EditLogOutputStream {
     long position = fc.position();
     long size = fc.size();
     int bufSize = doubleBuf.getReadyBuf().getLength();
+
+
+    //判断需要扩充容量的大小
     long need = bufSize - (size - position);
+
     if (need <= 0) {
       return;
     }
@@ -230,6 +276,8 @@ public class EditLogFileOutputStream extends EditLogOutputStream {
     long fillCapacity = fill.capacity();
     while (need > 0) {
       fill.position(0);
+
+      //将填充缓冲区写入通道， 但不改变position，也就起到了扩充通道的作用
       IOUtils.writeFully(fc, fill, size);
       need -= fillCapacity;
       size += fillCapacity;

@@ -35,6 +35,13 @@ import org.apache.hadoop.io.IOUtils;
 import com.google.common.base.Preconditions;
 
 /**
+ *
+ * EditsDoubleBuffer中包括两块缓存， 数据会先被写入到EditsDoubleBuffer的一块缓存
+ * 中， 而EditsDoubleBuffer的另一块缓存可能正在进行磁盘的同步操作（就是将缓存中的文
+ * 件写入磁盘的操作） 。 EditsDoubleBuffer这样的设计会保证输出流进行磁盘同步操作的同
+ * 时， 并不影响数据写入的功能。
+ *
+ *
  * A double-buffer for edits. New edits are written into the first buffer
  * while the second is available to be flushed. Each time the double-buffer
  * is flushed, the two internal buffers are swapped. This allows edits
@@ -46,8 +53,14 @@ public class EditsDoubleBuffer {
   protected static final Logger LOG =
       LoggerFactory.getLogger(EditsDoubleBuffer.class);
 
+
+  //正在写入的缓冲区
   private TxnBuffer bufCurrent; // current buffer for writing
+
+  //准备好同步的缓冲区
   private TxnBuffer bufReady; // buffer ready for flushing
+
+  //缓冲区的大小
   private final int initBufferSize;
 
   public EditsDoubleBuffer(int defaultBufferSize) {
@@ -79,20 +92,31 @@ public class EditsDoubleBuffer {
     IOUtils.cleanup(null, bufCurrent, bufReady);
     bufCurrent = bufReady = null;
   }
-  
+
+
+  // 将正在写入的缓存改变为同步缓存， 然后才可以进行同步操作。
   public void setReadyToFlush() {
+
     assert isFlushed() : "previous data not flushed yet";
+
+    //交换两个缓冲区
     TxnBuffer tmp = bufReady;
     bufReady = bufCurrent;
     bufCurrent = tmp;
   }
   
   /**
+   *
+   *
    * Writes the content of the "ready" buffer to the given output stream,
    * and resets it. Does not swap any buffers.
+   *
    */
   public void flushTo(OutputStream out) throws IOException {
+    //将同步缓存中的数据写入文件
     bufReady.writeTo(out); // write data to file
+
+    //将同步缓存中保存的数据清空
     bufReady.reset(); // erase all data in the buffer
   }
   

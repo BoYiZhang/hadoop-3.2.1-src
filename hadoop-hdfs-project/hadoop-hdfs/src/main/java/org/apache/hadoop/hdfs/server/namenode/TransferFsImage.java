@@ -210,6 +210,9 @@ public class TransferFsImage {
   }
 
   /**
+   *
+   * 请求NameNode从该节点下载图像。 允许可选的外部取消。
+   *
    * Requests that the NameNode download an image from this node.  Allows for
    * optional external cancelation.
    *

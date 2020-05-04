@@ -26,6 +26,14 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 
 /**
+ *
+ * FSEditLog类会调用FSEditLog.editLogStream字段的write()方法在editlog文件中记录一
+ * 个操作， 数据会先被写入到editlog文件输出流的缓存中， 然后FSEditLog类会调用
+ * editLogStream.flush()方法将缓存中的数据同步到磁盘上。 FSEditLog的editLogStream字段
+ * 是EditLogOutputStream类型的， EditLogOutputStream类是一个抽象类， 它定义了向持久化
+ * 存储上写editlog文件的相关接口。
+ *
+ *
  * A generic abstract class to support journaling of edits logs into 
  * a persistent storage.
  */

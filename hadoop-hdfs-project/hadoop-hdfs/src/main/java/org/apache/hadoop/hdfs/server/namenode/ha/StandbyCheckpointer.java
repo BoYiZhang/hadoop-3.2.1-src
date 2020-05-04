@@ -158,6 +158,24 @@ public class StandbyCheckpointer {
     thread.interrupt();
   }
 
+  /**
+   * 整个检查点执行操作的逻辑都是在doCheckpoint()方法中实现的。
+   *
+   * doCheckpoint()方法首先获取当前保存的fsimage的prevCheckpointTxId，
+   * 然后获取最近更新的editlog的thisCheckpointTxId，
+   * 只有新的thisCheckpointTxId大于prevCheckpointTxId，
+   * 也就是当前命名空间有更新， 但是并没有保存到新的fsimage文件中时，
+   * 才有必要进行一次 检查点操作。
+   *
+   * 判断完成后，
+   * doCheckpoint()会调用saveNamespace()方法将最新的命名空间保存到fsimage文件中。
+   *
+   * 之后构造一个线程， 将新产生的fsimage文件通过HTTP方式上传到AvtiveNamenode中。
+   *
+   * @param sendCheckpoint
+   * @throws InterruptedException
+   * @throws IOException
+   */
   private void doCheckpoint(boolean sendCheckpoint) throws InterruptedException, IOException {
     assert canceler != null;
     final long txid;
@@ -171,11 +189,17 @@ public class StandbyCheckpointer {
         "Standby Checkpointer should only attempt a checkpoint when " +
         "NN is in standby mode, but the edit logs are in an unexpected state";
 
+      //获取当前Standby Namenode上保存的最新的fsimage对象
       FSImage img = namesystem.getFSImage();
 
+      //获取fsimage中保存的txid， 也就是上一次进行检查点操作时保存的txid
       long prevCheckpointTxId = img.getStorage().getMostRecentCheckpointTxId();
+
+      //获取当前命名空间的最新的txid， 也就是收到的editlog的最新的txid
       long thisCheckpointTxId = img.getCorrectLastAppliedOrWrittenTxId();
       assert thisCheckpointTxId >= prevCheckpointTxId;
+
+      //如果相等则没有必要执行检查点操作， 当前fsimage已经是最新的了
       if (thisCheckpointTxId == prevCheckpointTxId) {
         LOG.info("A checkpoint was triggered but the Standby Node has not " +
             "received any transactions since the last checkpoint at txid {}. " +
@@ -185,13 +209,21 @@ public class StandbyCheckpointer {
 
       if (namesystem.isRollingUpgrade()
           && !namesystem.getFSImage().hasRollbackFSImage()) {
+
+        //如果当前Namenode正在执行升级操作， 则创建fsimage_rollback文件
         // if we will do rolling upgrade but have not created the rollback image
         // yet, name this checkpoint as fsimage_rollback
         imageType = NameNodeFile.IMAGE_ROLLBACK;
       } else {
+
+        //在正常情况下创建fsimage文件
         imageType = NameNodeFile.IMAGE;
       }
+
+      //调用saveNamespace()将当前命名空间保存到新的文件中
       img.saveNamespace(namesystem, imageType, canceler);
+
+
       txid = img.getStorage().getMostRecentCheckpointTxId();
       assert txid == thisCheckpointTxId : "expected to save checkpoint at txid=" +
           thisCheckpointTxId + " but instead saved at txid=" + txid;
@@ -215,6 +247,8 @@ public class StandbyCheckpointer {
       return;
     }
 
+
+    //构造一个线程， 通过HTTP将fsimage上传到Active Namenode中
     // Upload the saved checkpoint back to the active
     // Do this in a separate thread to avoid blocking transition to active, but don't allow more
     // than the expected number of tasks to run or queue up
@@ -232,9 +266,12 @@ public class StandbyCheckpointer {
             @Override
             public TransferFsImage.TransferResult call()
                 throws IOException, InterruptedException {
+
+
               CheckpointFaultInjector.getInstance().duringUploadInProgess();
               return TransferFsImage.uploadImageFromStorage(activeNNAddress, conf, namesystem
                   .getFSImage().getStorage(), imageType, txid, canceler);
+
             }
           });
       uploads.add(upload);
@@ -369,7 +406,10 @@ public class StandbyCheckpointer {
     }
 
     private void doWork() {
+
+      //间隔时长1000*Math.min(checkpointCheckPeriod, checkpointPeriod)
       final long checkPeriod = 1000 * checkpointConf.getCheckPeriod();
+      System.out.println("StandbyCheckpointer#doWork=>checkPeriod : "+ checkPeriod);
       // Reset checkpoint time so that we don't always checkpoint
       // on startup.
       lastCheckpointTime = monotonicNow();
@@ -390,9 +430,13 @@ public class StandbyCheckpointer {
           if (UserGroupInformation.isSecurityEnabled()) {
             UserGroupInformation.getCurrentUser().checkTGTAndReloginFromKeytab();
           }
-          
+
+
           final long now = monotonicNow();
+          //获得最后一次往JournalNode写入的txid和最近一次做检查点的txid的差值
           final long uncheckpointed = countUncheckpointedTxns();
+
+          //计算当前时间和上一次检查点操作时间的间隔
           final long secsSinceLast = (now - lastCheckpointTime) / 1000;
 
           // if we need a rollback checkpoint, always attempt to checkpoint
@@ -401,6 +445,11 @@ public class StandbyCheckpointer {
           if (needCheckpoint) {
             LOG.info("Triggering a rollback fsimage for rolling upgrade.");
           } else if (uncheckpointed >= checkpointConf.getTxnCount()) {
+
+            ///第一种符合合并的情况：
+            // 当最后一次往JournalNode写入的txid和最近一次做检查点的txid的差值
+            // 大于或者等于dfs.namenode.checkpoint.txns配置的数量(默认为100万)时做一次合并
+
             LOG.info("Triggering checkpoint because there have been {} txns " +
                 "since the last checkpoint, " +
                 "which exceeds the configured threshold {}",
@@ -410,9 +459,14 @@ public class StandbyCheckpointer {
             LOG.info("Triggering checkpoint because it has been {} seconds " +
                 "since the last checkpoint, which exceeds the configured " +
                 "interval {}", secsSinceLast, checkpointConf.getPeriod());
+
+            //第二种符合合并的情况：
+            // 当时间间隔大于或者等于dfs.namenode.checkpoint.period [一小时]
+            // 配置的时间时做合并
             needCheckpoint = true;
           }
 
+          //满足检查点执行条件， 则调用doCheckpoint()方法执行检查点操作
           if (needCheckpoint) {
             synchronized (cancelLock) {
               if (now < preventCheckpointsUntil) {
@@ -427,8 +481,9 @@ public class StandbyCheckpointer {
             // on all nodes, we build the checkpoint. However, we only ship the checkpoint if have a
             // rollback request, are the checkpointer, are outside the quiet period.
             final long secsSinceLastUpload = (now - lastUploadTime) / 1000;
-            boolean sendRequest = isPrimaryCheckPointer
-                || secsSinceLastUpload >= checkpointConf.getQuietPeriod();
+            boolean sendRequest = isPrimaryCheckPointer || secsSinceLastUpload >= checkpointConf.getQuietPeriod();
+
+
             doCheckpoint(sendRequest);
 
             // reset needRollbackCheckpoint to false only when we finish a ckpt

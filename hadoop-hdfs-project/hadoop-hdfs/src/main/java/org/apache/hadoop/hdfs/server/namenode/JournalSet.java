@@ -207,6 +207,8 @@ public class JournalSet implements JournalManager {
     mapJournalsAndReportErrors(new JournalClosure() {
       @Override
       public void apply(JournalAndStream jas) throws IOException {
+        //在所有editlog文件的存储路径上构造输出流， 并将这些输
+        //出流保存在FSEditLog的字段journalSet.journals中。
         jas.startLogSegment(txId, layoutVersion);
       }
     }, "starting log segment " + txId);
@@ -380,9 +382,13 @@ public class JournalSet implements JournalManager {
       JournalClosure closure, String status) throws IOException{
 
     List<JournalAndStream> badJAS = Lists.newLinkedList();
+    //遍历journals字段中保存的所有JournalAndStream对象
     for (JournalAndStream jas : journals) {
       try {
+
+        //在闭包对象上调用apply()方法前转请求
         closure.apply(jas);
+
       } catch (Throwable t) {
         if (jas.isRequired()) {
           final String msg = "Error: " + status + " failed for required journal ("
@@ -425,6 +431,9 @@ public class JournalSet implements JournalManager {
   }
 
   /**
+   *
+   *
+   *
    * An implementation of EditLogOutputStream that applies a requested method on
    * all the journals that are currently active.
    */
@@ -441,6 +450,9 @@ public class JournalSet implements JournalManager {
         @Override
         public void apply(JournalAndStream jas) throws IOException {
           if (jas.isActive()) {
+
+            //   提取出JournalAndStream对象中封装的EditLogOutputStream对象，
+            //   并在EditLogOutputStream对象上调用write()方法
             jas.getCurrentStream().write(op);
           }
         }

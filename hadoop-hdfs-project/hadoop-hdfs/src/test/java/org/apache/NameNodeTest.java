@@ -29,4 +29,13 @@ public class NameNodeTest {
         System.out.println(size);
     }
 
+    @Test
+    public void testFormat() throws Exception {
+
+        System.out.println(String.format("%s_%019d", "image", 123131));
+
+    }
+
+
+
 }

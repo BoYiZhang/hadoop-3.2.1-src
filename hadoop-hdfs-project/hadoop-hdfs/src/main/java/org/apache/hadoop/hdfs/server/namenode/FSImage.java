@@ -136,6 +136,7 @@ public class FSImage implements Closeable {
 
   /** Limit logging about edit loading to every 5 seconds max. */
   private static final long LOAD_EDIT_LOG_INTERVAL_MS = 5000;
+
   private final LogThrottlingHelper loadEditLogHelper =
       new LogThrottlingHelper(LOAD_EDIT_LOG_INTERVAL_MS);
 
@@ -691,6 +692,9 @@ public class FSImage implements Closeable {
       // otherwise we can load from both IMAGE and IMAGE_ROLLBACK
       nnfs = EnumSet.of(NameNodeFile.IMAGE, NameNodeFile.IMAGE_ROLLBACK);
     }
+
+
+
     final FSImageStorageInspector inspector = storage
         .readAndInspectDirs(nnfs, startOpt);
 
@@ -706,6 +710,8 @@ public class FSImage implements Closeable {
 
     Iterable<EditLogInputStream> editStreams = null;
 
+    //准备工作…
+    //获取editlog文件IO流
     initEditLog(startOpt);
 
     if (NameNodeLayoutVersion.supports(
@@ -743,12 +749,16 @@ public class FSImage implements Closeable {
     if (!editStreams.iterator().hasNext()) {
       LOG.info("No edit log streams selected.");
     }
-    
+
+    // 调用loadFSImageFile()方法， 加载fsimage文件
     FSImageFile imageFile = null;
     for (int i = 0; i < imageFiles.size(); i++) {
       try {
         imageFile = imageFiles.get(i);
+
+        // 加载fsimage文件
         loadFSImageFile(target, recovery, imageFile, startOpt);
+
         break;
       } catch (IllegalReservedPathException ie) {
         throw new IOException("Failed to load image from " + imageFile,
@@ -759,6 +769,8 @@ public class FSImage implements Closeable {
         imageFile = null;
       }
     }
+
+    //如果加载失败， 则抛出异常
     // Failed to load any images, error out
     if (imageFile == null) {
       FSEditLog.closeAllStreams(editStreams);
@@ -768,6 +780,8 @@ public class FSImage implements Closeable {
     prog.endPhase(Phase.LOADING_FSIMAGE);
     
     if (!rollingRollback) {
+
+      //调用loadEdit()方法加载并合并editlog
       long txnsAdvanced = loadEdits(editStreams, target, Long.MAX_VALUE,
           startOpt, recovery);
       needToSave |= needsResaveBasedOnStaleCheckpoint(imageFile.getFile(),
@@ -815,7 +829,11 @@ public class FSImage implements Closeable {
       // next to the image file
       boolean isRollingRollback = RollingUpgradeStartupOption.ROLLBACK
           .matches(startupOption);
+
+
       loadFSImage(imageFile.getFile(), target, recovery, isRollingRollback);
+
+
     } else if (NameNodeLayoutVersion.supports(
         LayoutVersion.Feature.FSIMAGE_CHECKSUM, getLayoutVersion())) {
       // In 0.22, we have the checksum stored in the VERSION file.
@@ -896,6 +914,19 @@ public class FSImage implements Closeable {
     return loadEdits(editStreams, target, Long.MAX_VALUE, null, null);
   }
 
+  /**
+   * FSImage.loadEdits()方法会构造一个FSEditLogLoader对象，
+   * 然后遍历Namenode所有存储路径上保存的editlog文件的输入流
+   * 并调用FSEditLogLoader.loadFSEdits()方法加载指定路径上的editlog文件。
+   *
+   * @param editStreams
+   * @param target
+   * @param maxTxnsToRead
+   * @param startOpt
+   * @param recovery
+   * @return
+   * @throws IOException
+   */
   public long loadEdits(Iterable<EditLogInputStream> editStreams,
       FSNamesystem target, long maxTxnsToRead,
       StartupOption startOpt, MetaRecoveryContext recovery)
@@ -903,12 +934,17 @@ public class FSImage implements Closeable {
     LOG.debug("About to load edits:\n  " + Joiner.on("\n  ").join(editStreams));
     StartupProgress prog = NameNode.getStartupProgress();
     prog.beginPhase(Phase.LOADING_EDITS);
-    
+
+    //记录命名空间中加载的最新的事务id
     long prevLastAppliedTxId = lastAppliedTxId;
     long remainingReadTxns = maxTxnsToRead;
-    try {    
+    try {
+
+      //构造FSEditLogLoader对象用于加栽editlog文件
       FSEditLogLoader loader = new FSEditLogLoader(target, lastAppliedTxId);
-      
+
+
+      //遍历所有存储路径上editlog文件对应的输入流
       // Load latest edits
       for (EditLogInputStream editIn : editStreams) {
         LogAction logAction = loadEditLogHelper.record();
@@ -922,13 +958,19 @@ public class FSImage implements Closeable {
               (lastAppliedTxId + 1) + logSuppressed);
         }
         try {
+
+          //调用FSEditLogLoader.loadFSEdits()从某个存储路径上的editlog文件加载修改操作
           remainingReadTxns -= loader.loadFSEdits(editIn, lastAppliedTxId + 1,
                   remainingReadTxns, startOpt, recovery);
         } finally {
+
+          // lastAppliedTxId记录从editlog加载的最新的事务id
           // Update lastAppliedTxId even in case of error, since some ops may
           // have been successfully applied before the error.
           lastAppliedTxId = loader.getLastAppliedTxId();
         }
+
+
         // If we are in recovery mode, we may have skipped over some txids.
         if (editIn.getLastTxId() != HdfsServerConstants.INVALID_TXID
             && recovery != null) {
@@ -939,6 +981,7 @@ public class FSImage implements Closeable {
         }
       }
     } finally {
+      //关闭所有editlog文件的输入流
       FSEditLog.closeAllStreams(editStreams);
     }
     prog.endPhase(Phase.LOADING_EDITS);
@@ -973,6 +1016,7 @@ public class FSImage implements Closeable {
     target.setBlockPoolId(this.getBlockPoolID());
 
     FSImageFormat.LoaderDelegator loader = FSImageFormat.newLoader(conf, target);
+
     loader.load(curFile, requireSameLayoutVersion);
 
     // Check that the image digest we loaded matches up with what
@@ -992,17 +1036,29 @@ public class FSImage implements Closeable {
   }
 
   /**
+   * 将 FS image 的内容保存到文件中。
    * Save the contents of the FS image to the file.
    */
   void saveFSImage(SaveNamespaceContext context, StorageDirectory sd,
       NameNodeFile dstType) throws IOException {
+
+    //获取当前命名空间中记录的最新事务的txid
     long txid = context.getTxId();
+
+    // fsimage文件
     File newFile = NNStorage.getStorageFile(sd, NameNodeFile.IMAGE_NEW, txid);
+
     File dstFile = NNStorage.getStorageFile(sd, dstType, txid);
-    
+
+    // FSImageFormatProtobuf.Saver类负责保存fsimage
     FSImageFormatProtobuf.Saver saver = new FSImageFormatProtobuf.Saver(context);
+
+    //压缩类
     FSImageCompression compression = FSImageCompression.createCompression(conf);
+
+    //调用Saver类保存fsimage文件
     long numErrors = saver.save(newFile, compression);
+
     if (numErrors > 0) {
       // The image is likely corrupted.
       LOG.error("Detected " + numErrors + " errors while saving FsImage " +
@@ -1010,8 +1066,10 @@ public class FSImage implements Closeable {
       exitAfterSave.set(true);
     }
 
+    //保存MD5校验值
     MD5FileUtils.saveMD5File(dstFile, saver.getSavedDigest());
     storage.setMostRecentCheckpointInfo(txid, Time.now());
+
   }
 
   /**
@@ -1034,6 +1092,13 @@ public class FSImage implements Closeable {
 
 
   /**
+   *
+   * 命名空间具体的保存操作是由FSImageSaver这个类来承担的，
+   * FSImageSaver是FSImage中的内部类， 也是一个线程类，
+   * 它的run()方法调用了saveFSImage()方法来保存fsimage文件。
+   *
+   *
+   *
    * FSImageSaver is being run in a separate thread when saving
    * FSImage. There is one thread per each copy of the image.
    *
@@ -1071,6 +1136,7 @@ public class FSImage implements Closeable {
       ShutdownHookManager.get().addShutdownHook(cancelCheckpointFinalizer,
           SHUTDOWN_HOOK_PRIORITY);
       try {
+        //保存fsimage文件
         saveFSImage(context, sd, nnf);
       } catch (SaveNamespaceCancelledException snce) {
         LOG.info("Cancelled image saving for " + sd.getRoot() +
@@ -1161,6 +1227,8 @@ public class FSImage implements Closeable {
     boolean editLogWasOpen = editLog.isSegmentOpen();
     
     if (editLogWasOpen) {
+
+      //将当前edit_inprogress文件关闭， 并重命名
       editLog.endCurrentLogSegment(true);
     }
     long imageTxId = getCorrectLastAppliedOrWrittenTxId();
@@ -1170,12 +1238,16 @@ public class FSImage implements Closeable {
     }
     try {
       try {
+
+        //调用saveFSImageInAllDirs()方法将当前的命名空间保存到新的fsimage文件中
         saveFSImageInAllDirs(source, nnf, imageTxId, canceler);
         if (!source.isRollingUpgrade()) {
           updateStorageVersion();
         }
       } finally {
         if (editLogWasOpen) {
+
+          //开启新的editlog_inprogress文件用于记录请求
           editLog.startLogSegmentAndWriteHeaderTxn(imageTxId + 1,
               source.getEffectiveLayoutVersion());
           // Take this opportunity to note the current transaction.
@@ -1221,8 +1293,28 @@ public class FSImage implements Closeable {
     currentlyCheckpointing.remove(txid);
   }
 
+
+  /**
+   * Namenode可以定义多个存储路径来保存fsimage文件，
+   *
+   * 1. 对于每一个存储路径，saveFSImageInAllDirs()方法都会启动一个线程负责在这个路径上保存fsimage文件。
+   *
+   * 2. 同时， 为了防止保存过程中出现错误， 命名空间信息首先会被保存在一个fsimage.ckpt文件中，
+   * 当保存操作全部完成之后， 才会将fsimage.ckpt重命名为fsimage文件。
+   *
+   * 3. 之后saveFSImageInAllDirs()方法会清理Namenode元数据存储文件夹中过期的editlog文件和
+   * fsimage文件。
+   *
+   * @param source
+   * @param nnf
+   * @param txid
+   * @param canceler
+   * @throws IOException
+   */
   private synchronized void saveFSImageInAllDirs(FSNamesystem source,
       NameNodeFile nnf, long txid, Canceler canceler) throws IOException {
+
+
     StartupProgress prog = NameNode.getStartupProgress();
     prog.beginPhase(Phase.SAVING_CHECKPOINT);
     if (storage.getNumStorageDirs(NameNodeDirType.IMAGE) == 0) {
@@ -1231,24 +1323,42 @@ public class FSImage implements Closeable {
     if (canceler == null) {
       canceler = new Canceler();
     }
-    SaveNamespaceContext ctx = new SaveNamespaceContext(
-        source, txid, canceler);
+
+
+    //构造保存命名空间操作的上下文
+    SaveNamespaceContext ctx = new SaveNamespaceContext(source, txid, canceler);
     
     try {
+
+
+
+      //在每一个保存路径上启动一个线程， 该线程使用FSImageSaver类保存fsimage文件
       List<Thread> saveThreads = new ArrayList<Thread>();
       // save images into current
-      for (Iterator<StorageDirectory> it
-             = storage.dirIterator(NameNodeDirType.IMAGE); it.hasNext();) {
+      for (Iterator<StorageDirectory> it = storage.dirIterator(NameNodeDirType.IMAGE); it.hasNext();) {
         StorageDirectory sd = it.next();
+
+
+        // 命名空间具体的保存操作是由FSImageSaver这个类来承担的，
+        // FSImageSaver是FSImage中的内部类， 也是一个线程类，
+        // 它的run()方法调用了saveFSImage()方法来保存fsimage文件。
         FSImageSaver saver = new FSImageSaver(ctx, sd, nnf);
+
         Thread saveThread = new Thread(saver, saver.toString());
+
+
         saveThreads.add(saveThread);
         saveThread.start();
       }
+
+      //等待所有线程执行完毕
       waitForThreads(saveThreads);
+
+
       saveThreads.clear();
       storage.reportErrorsOnDirectories(ctx.getErrorSDs());
-  
+
+      //保存文件失败则抛出异常
       if (storage.getNumStorageDirs(NameNodeDirType.IMAGE) == 0) {
         throw new IOException(
           "Failed to save in any storage directories while saving namespace.");
@@ -1258,23 +1368,37 @@ public class FSImage implements Closeable {
         ctx.checkCancelled(); // throws
         assert false : "should have thrown above!";
       }
-  
+
+
+      // 将fsimage.ckpt 改名为 fsimage
       renameCheckpoint(txid, NameNodeFile.IMAGE_NEW, nnf, false);
-  
+
+
+
       // Since we now have a new checkpoint, we can clean up some
       // old edit logs and checkpoints.
       // Do not purge anything if we just wrote a corrupted FsImage.
       if (!exitAfterSave.get()) {
+
+        //我们已经完成了fsimage的保存， 那么可以将存储上的一部分editlog和fsimage删除
+        //如果没有成功,则失败.
         purgeOldStorage(nnf);
         archivalManager.purgeCheckpoints(NameNodeFile.IMAGE_NEW);
       }
     } finally {
       // Notify any threads waiting on the checkpoint to be canceled
       // that it is complete.
+
+
+      //通知所有等待的线程
       ctx.markComplete();
       ctx = null;
     }
+
+
     prog.endPhase(Phase.SAVING_CHECKPOINT);
+
+
   }
 
   /**

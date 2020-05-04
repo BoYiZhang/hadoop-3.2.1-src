@@ -160,6 +160,13 @@ public class FSEditLogLoader {
   }
 
   /**
+   *
+   * FSEditLogLoader.loadFSEdits()
+   * 会使用EditLogFileInputStream对象读取并加载editlog文件，
+   *
+   * 可以归纳为从ediltLog文件中读取一个操作， 并使用
+   * FSEditLogOp对象封装， 然后调用applyEditLogOp()方法修改Namenode的命名空间。
+   *
    * Load an edit log, and apply the changes to the in-memory structure
    * This is where we apply edits that we've been writing to disk all
    * along.
@@ -179,8 +186,12 @@ public class FSEditLogLoader {
             + " maxTxnsToRead = " + maxTxnsToRead +
             LogThrottlingHelper.getLogSupressionMessage(preLogAction));
       }
+
+
       long numEdits = loadEditRecords(edits, false, expectedStartingTxId,
           maxTxnsToRead, startOpt, recovery);
+
+
       long endTime = timer.monotonicNow();
       LogAction postLogAction = loadEditsLogHelper.record("post", endTime,
           numEdits, edits.length(), endTime - startTime);
@@ -238,6 +249,8 @@ public class FSEditLogLoader {
     try {
       while (true) {
         try {
+
+          //从editlog文件中读取一个操作
           FSEditLogOp op;
           try {
             op = in.readOp();
@@ -261,6 +274,8 @@ public class FSEditLogLoader {
             in.resync();
             continue;
           }
+
+
           recentOpcodeOffsets[(int)(numEdits % recentOpcodeOffsets.length)] =
             in.getPosition();
           if (op.hasTransactionId()) {
@@ -284,8 +299,12 @@ public class FSEditLogLoader {
               LOG.trace("op=" + op + ", startOpt=" + startOpt
                   + ", numEdits=" + numEdits + ", totalEdits=" + totalEdits);
             }
+
+            //在当前命名空间中执行对应的修改操作
             long inodeId = applyEditLogOp(op, fsDir, startOpt,
                 in.getVersion(true), lastInodeId);
+
+
             if (lastInodeId < inodeId) {
               lastInodeId = inodeId;
             }
