@@ -69,6 +69,18 @@ public class FSDirAttrOp {
     return fsd.getAuditFileInfo(iip);
   }
 
+  /**
+   * setOwner()方法的逻辑非常简单， 它在内部调用unprotectedSetOwner()方法， 这里之所
+   * 以叫作unprotected， 是因为在这个方法内， 对于INode的修改操作并没有通过editlog记录。
+   *
+   * @param fsd
+   * @param pc
+   * @param src
+   * @param username
+   * @param group
+   * @return
+   * @throws IOException
+   */
   static FileStatus setOwner(
       FSDirectory fsd, FSPermissionChecker pc, String src, String username,
       String group) throws IOException {

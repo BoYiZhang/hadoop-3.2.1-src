@@ -481,6 +481,10 @@ class FSDirWriteFileOp {
   }
 
   /**
+   * addBlock()方法用于在指定的INode节点上添加一个数据块， 它通过namesystem获取
+   * BlockManager对象， 并在BlockManager对象上调用addBlockCollection()方法将一个Block添
+   * 加到BlockManager的blockMap字段中保存， 之后调用INodeFile.addBlock()方法将Block对
+   * 象添加到INode对象的blocks字段中保存
    * Add a block to the file. Returns a reference to the added block.
    */
   private static BlockInfo addBlock(FSDirectory fsd, String path,
@@ -505,19 +509,29 @@ class FSDirWriteFileOp {
         fsd.updateCount(inodesInPath, 0, fileINode.getPreferredBlockSize(),
             numLocations, true);
         blockInfo = new BlockInfoStriped(block, ecPolicy);
+
+        //构造BLock对象
         blockInfo.convertToBlockUnderConstruction(
             HdfsServerConstants.BlockUCState.UNDER_CONSTRUCTION, targets);
       } else {
+
+        // 检查空间是否够用
         // check quota limits and updated space consumed
         fsd.updateCount(inodesInPath, 0, fileINode.getPreferredBlockSize(),
             fileINode.getFileReplication(), true);
 
         short numLocations = fileINode.getFileReplication();
+
+        //构造BLock对象
         blockInfo = new BlockInfoContiguous(block, numLocations);
         blockInfo.convertToBlockUnderConstruction(
             HdfsServerConstants.BlockUCState.UNDER_CONSTRUCTION, targets);
       }
+
+      //使用BlockManager添加Block
       fsd.getBlockManager().addBlockCollection(blockInfo, fileINode);
+
+      //将Block与文件对应的INode对象关联起来
       fileINode.addBlock(blockInfo);
 
       if(NameNode.stateChangeLog.isDebugEnabled()) {

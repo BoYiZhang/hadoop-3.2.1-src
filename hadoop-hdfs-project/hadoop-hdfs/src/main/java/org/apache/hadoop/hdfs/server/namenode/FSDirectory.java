@@ -159,7 +159,11 @@ public class FSDirectory implements Closeable {
         .isdir(true)
         .build();
 
+
+  //整个文件系统目录树的根节点， 是INodeDirectory类型的
   INodeDirectory rootDir;
+
+  //Namenode的门面类， 这个类主要支持对数据块进行操作的一些方法， 例如addBlock()
   private final FSNamesystem namesystem;
   private volatile boolean skipQuotaCheck = false; //skip while consuming edits
   private final int maxComponentLength;
@@ -167,7 +171,10 @@ public class FSDirectory implements Closeable {
   private final int lsLimit;  // max list limit
   private final int contentCountLimit; // max content summary counts per run
   private final long contentSleepMicroSec;
+
+  //记录根目录下所有的INode,并维护INodeId ->INode的映射关系。
   private final INodeMap inodeMap; // Synchronized by dirLock
+
   private long yieldCount = 0; // keep track of lock yield count.
   private int quotaInitThreads;
 
@@ -263,6 +270,9 @@ public class FSDirectory implements Closeable {
    * 缓存经常使用的文件名称
    * Caches frequently used file names used in {@link INode} to reuse 
    * byte[] objects and reduce heap usage.
+   *
+   * 将常用的name缓存下来， 以降低byte[]的使用， 并降低JVM heap的使用。
+   *
    */
   private final NameCache<ByteArray> nameCache;
 
@@ -1308,12 +1318,14 @@ public class FSDirectory implements Closeable {
     // The rename code disables the quota when it's restoring to the
     // original location because a quota violation would cause the the item
     // to go "poof".  The fs limits must be bypassed for the same reason.
+    // 检查是否有足够的空间
     if (checkQuota) {
       final String parentPath = existing.getPath();
       verifyMaxComponentLength(inode.getLocalNameBytes(), parentPath);
       verifyMaxDirItems(parent, parentPath);
     }
     // always verify inode name
+    //检查INode的名称
     verifyINodeName(inode.getLocalNameBytes());
 
     final QuotaCounts counts = inode
@@ -1322,8 +1334,10 @@ public class FSDirectory implements Closeable {
     updateCount(existing, pos, counts, checkQuota);
 
     boolean isRename = (inode.getParent() != null);
-    final boolean added = parent.addChild(inode, true,
-        existing.getLatestSnapshotId());
+
+    //将INode添加到父节点的孩子节点列表中
+    final boolean added = parent.addChild(inode, true, existing.getLatestSnapshotId());
+
     if (!added) {
       updateCountNoQuotaCheck(existing, pos, counts.negation());
       return null;
