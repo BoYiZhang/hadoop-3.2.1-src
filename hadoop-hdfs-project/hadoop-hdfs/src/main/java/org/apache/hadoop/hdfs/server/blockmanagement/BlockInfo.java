@@ -33,6 +33,10 @@ import org.apache.hadoop.util.LightWeightGSet;
 import static org.apache.hadoop.hdfs.server.namenode.INodeId.INVALID_INODE_ID;
 
 /**
+ *
+ * BlockInfo类扩展自Block类， 是Block类的补充说明。
+ *
+ *
  * For a given block (or an erasure coding block group), BlockInfo class
  * maintains 1) the {@link BlockCollection} it is part of, and 2) datanodes
  * where the replicas of the block, or blocks belonging to the erasure coding
@@ -273,6 +277,11 @@ public abstract class BlockInfo extends Block
   }
 
   /**
+   * 当客户端对数据块进行追加写操作时会调用这个方法，
+   *
+   * 它将一个BlockInfo对象转换为 BlockUnderConstructionFeature 对象，
+   * 也就是将该BlockInfo对应的数据块状态变为了构建中状态
+   *
    * Add/Update the under construction feature.
    */
   public void convertToBlockUnderConstruction(BlockUCState s,

@@ -300,8 +300,12 @@ public final class FSImageFormatPBINode {
     }
 
     private INodeFile loadINodeFile(INodeSection.INode n) {
+
       assert n.getType() == INodeSection.INode.Type.FILE;
+
+      //从fsimage中获取INodeFile信息
       INodeSection.INodeFile f = n.getFile();
+
       List<BlockProto> bp = f.getBlocksList();
       BlockType blockType = PBHelperClient.convert(f.getBlockType());
       LoaderContext state = parent.getLoaderContext();
@@ -346,6 +350,7 @@ public final class FSImageFormatPBINode {
             loadXAttrs(f.getXAttrs(), state.getStringTable())));
       }
 
+      // 如果当前INodeFile处于构建状态， 则将最后一个数据块设置为构建状态
       // under-construction information
       if (f.hasFileUC()) {
         INodeSection.FileUnderConstructionFeature uc = f.getFileUC();
@@ -363,6 +368,8 @@ public final class FSImageFormatPBINode {
             ucBlk = new BlockInfoContiguous(lastBlk,
                 replication);
           }
+
+          //设置最后一个数据块为BlockInfoUnderConstruction
           ucBlk.convertToBlockUnderConstruction(
               HdfsServerConstants.BlockUCState.UNDER_CONSTRUCTION, null);
           file.setBlock(file.numBlocks() - 1, ucBlk);

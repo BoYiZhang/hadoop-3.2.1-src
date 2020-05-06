@@ -89,8 +89,13 @@ public class Block implements Writable, Comparable<Block> {
     return m.matches() ? Long.parseLong(m.group(1)) : 0;
   }
 
+  // blockId唯一地标识这个Block对象；
   private long blockId;
+
+  // numBytes是这个数据块的大小（单位是字节） ;
   private long numBytes;
+
+  //generationStamp是这个数据块的时间戳（联想GenerationStamp这个类）
   private long generationStamp;
 
   public Block() {this(0, 0, 0);}

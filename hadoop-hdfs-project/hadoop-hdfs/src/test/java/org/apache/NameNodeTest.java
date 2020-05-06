@@ -1,19 +1,11 @@
 package org.apache;
 
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hdfs.server.namenode.INode;
-import org.apache.hadoop.hdfs.server.namenode.INodeFile;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class NameNodeTest {
+
 
     @Test
     public void testNamenode() throws Exception {
@@ -24,7 +16,7 @@ public class NameNodeTest {
 
     @Test
     public void testSize() throws Exception {
-        long size = 1 << 48 ;
+        long size = Integer.MAX_VALUE ;
 
         System.out.println(size);
     }
@@ -35,6 +27,33 @@ public class NameNodeTest {
         System.out.println(String.format("%s_%019d", "image", 123131));
 
     }
+
+
+
+
+    //compute actual length
+    @Test
+    public  void actualArrayLength() {
+        int recommended= 3 ;
+
+
+        int MAX_ARRAY_LENGTH = 1 << 30; //prevent int overflow problem
+        int MIN_ARRAY_LENGTH = 1;
+
+
+        if (recommended > MAX_ARRAY_LENGTH) {
+            System.out.println(MAX_ARRAY_LENGTH);
+        } else if (recommended < MIN_ARRAY_LENGTH) {
+            System.out.println(MIN_ARRAY_LENGTH);
+        } else {
+            int a = Integer.highestOneBit(recommended);
+            System.out.println(a);
+            System.out.println(recommended);
+            System.out.println("result : "  +  ( (a == recommended) ? a: a << 1 ) );
+            System.out.println("-------------------------------");
+        }
+    }
+
 
 
 

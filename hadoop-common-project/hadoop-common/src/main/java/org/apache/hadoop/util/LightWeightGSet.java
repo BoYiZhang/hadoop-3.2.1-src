@@ -159,12 +159,15 @@ public class LightWeightGSet<K, E extends K> implements GSet<K, E> {
     }
 
     // find index
+    // 很简单,就是通过hash值与数组长度取余,计算出下标就行了.
     final int index = getIndex(element);
 
     // remove if it already exists
+    // 移除已经存在的key
     final E existing = remove(index, element);
 
     // insert the element to the head of the linked list
+    // 将element加入到链表的头里面, 并将数组的槽位制定到数组中.
     modification++;
     size++;
     e.setNext(entries[index]);

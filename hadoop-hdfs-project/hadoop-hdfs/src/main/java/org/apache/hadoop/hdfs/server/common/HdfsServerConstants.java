@@ -283,15 +283,58 @@ public interface HdfsServerConstants {
    * Block replica states, which it can go through while being constructed.
    */
   enum ReplicaState {
-    /** Replica is finalized. The state when replica is not modified. */
+
+    /**
+     * Datanode上的副本已完成写操作， 不再修改。
+     * FINALIZED状态的副本使用FinalizedReplica类描述
+     *
+     * Replica is finalized. The state when replica is not modified.
+     * */
     FINALIZED(0),
-    /** Replica is being written to. */
+
+    /**
+     * RBW （ ReplicaBeingWritten ）
+     * 刚刚被创建或者追加写的副本， 处于写操作的数
+     * 据流管道中， 正在被写入， 且已写入副本的内容还是可读的。
+     * RBW状态的副本使用ReplicaBeingWritten类描述。
+     *
+     * Replica is being written to. */
     RBW(1),
-    /** Replica is waiting to be recovered. */
+
+
+    /**
+     * RWR（ ReplicaWaitingToBeRecovered）
+     *
+     * 如果一个Datanode挂掉并且重启之后，
+     * 所有RBW状态的副本都将转换为RWR状态。 RWR状态的副本不会出现在数据流
+     * 管道中， 结果就是等着进行租约恢复操作。
+     * RWR状态的副本使用ReplicaWaitingToBeRecovered类描述
+     *
+     * Replica is waiting to be recovered. */
     RWR(2),
-    /** Replica is under recovery. */
+
+    /**
+     * RUR （ReplicaUnderRecovery）
+     *
+     * 租约（Lease） 过期之后发生租约恢复和数据块
+     * 恢复（Block recovery ） 时副本所处的状态。
+     * RUR状态的副本使用ReplicaUnderRecovery类描述
+     *
+     * Replica is under recovery. */
     RUR(3),
-    /** Temporary replica: created for replication and relocation only. */
+
+
+    /**
+     * TEMPORARY （ ReplicaInPipeline） :
+     * Datanode之间传输副本（ 例如cluster rebalance） 时，
+     * 正在传输的副本就处于TEMPORARY状态。
+     *
+     * 和RBW状态的副本不同的是， TEMPORARY状态的副本内容是不可读的，
+     * 如果Datanode重启， 会直接删除处于TEMPORARY状态的副本。
+     *
+     * TEMPORARY状态的副本使用ReplicaInPipeline类描述。
+     *
+     * Temporary replica: created for replication and relocation only. */
     TEMPORARY(4);
 
     private static final ReplicaState[] cachedValues = ReplicaState.values();
@@ -326,6 +369,17 @@ public interface HdfsServerConstants {
    */
   enum BlockUCState {
     /**
+     *
+     * 数据块的length（ 长度） 和gs（ 时间戳） 不再发生变化，
+     * 并且Namenode 已经收到至少一个Datanode报告有FINALIZED状态的副本（ replica）
+     *
+     * （ Datanode上的副本状态发生变化时会通过blockReceivedAndDeleted()方法向Namenode报告） 。
+     *
+     * 一个COMPLETE状态的数据块会在Namenode的内存中保存所有FINALIZED副本的位置。
+     *
+     * 只有当HDFS文件的所有数据块都处于COMPLETE状态时， 该HDFS文件才能被关闭。
+     *
+     *
      * Block construction completed.<br>
      * The block has at least the configured minimal replication number
      * of {@link ReplicaState#FINALIZED} replica(s), and is not going to be
@@ -335,11 +389,25 @@ public interface HdfsServerConstants {
      */
     COMPLETE,
     /**
+     *
+     * 文件被创建或者进行追加写操作时， 正在被写入的数据块就处于UNDER_CONSTRUCTION状态。
+     *
+     * 处于该状态的数据块的长度（ length） 和时间戳（ gs） 都是可变的，
+     * 但是处于该状态的数据块对于读取操作来说是可见的
+     *
      * The block is under construction.<br>
      * It has been recently allocated for write or append.
      */
     UNDER_CONSTRUCTION,
     /**
+     *
+     * 如果一个文件的最后一个数据块处于UNDER_CONSTRUCTION状态时，
+     *
+     * 客户端异常退出， 该文件的租约（lease） 超过softLimit过期，
+     * 该数据块就需要进行租约恢复（Lease recovery） 和数据块恢复
+     * （Block recovery） 流程释放租约并关闭文件， 那么正在进行租约恢复和数据块
+     * 恢复流程的数据块就处于UNDER_RECOVERY状态。
+     *
      * The block is under recovery.<br>
      * When a file lease expires its last block may not be {@link #COMPLETE}
      * and needs to go through a recovery procedure, 
@@ -347,6 +415,19 @@ public interface HdfsServerConstants {
      */
     UNDER_RECOVERY,
     /**
+     *
+     * 客户端在写文件时，
+     * 每次请求新的数据块（addBlock RPC请求）或者关闭文件时，
+     * 都会顺带对上一个数据块进行提交（commit）操作
+     * （上一个数据块从 UNDER_CONSTRUCTION 状态转换成COMMITTED状态） 。
+     *
+     * COMMITTED状态的数据块表明客户端已经把该数据块的所有数据都发送到了
+     * Datanode组成的数据流管道（pipeline） 中，
+     *
+     * 并且已经收到了下游的ACK响应，
+     * 但是Namenode还没有收到任何一个Datanode汇报有FINALIZED副本
+     *
+     *
      * The block is committed.<br>
      * The client reported that all bytes are written to data-nodes
      * with the given generation stamp and block length, but no 
