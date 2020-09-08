@@ -968,7 +968,7 @@ public class NameNode extends ReconfigurableBase implements
     // 根据配置确认是否开启了HA
     String namenodeId = HAUtil.getNameNodeId(conf, nsId);
 
-    //fs.defaultFS
+    //fs.defaultFS  localhost:8020
     clientNamenodeAddress = NameNodeUtils.getClientNamenodeAddress(
         conf, nsId);
 
@@ -990,7 +990,7 @@ public class NameNode extends ReconfigurableBase implements
     try {
 
       initializeGenericKeys(conf, nsId, namenodeId);
-
+      //执行初始化操作!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       initialize(getConf());
       try {
         haContext.writeLock();
@@ -1200,11 +1200,14 @@ public class NameNode extends ReconfigurableBase implements
    * @return true if formatting was aborted, false otherwise
    * @throws IOException
    */
-  private static boolean format(Configuration conf, boolean force,
-      boolean isInteractive) throws IOException {
+  private static boolean format(Configuration conf, boolean force,  boolean isInteractive) throws IOException {
+    // nsId =  null
     String nsId = DFSUtil.getNamenodeNameServiceId(conf);
+    // namenodeId =  null
     String namenodeId = HAUtil.getNameNodeId(conf, nsId);
+
     initializeGenericKeys(conf, nsId, namenodeId);
+    //读取配置dfs.namenode.support.allow.format  namenode是否可以格式化: 默认true
     checkAllowFormat(conf);
 
     if (UserGroupInformation.isSecurityEnabled()) {
@@ -1214,22 +1217,31 @@ public class NameNode extends ReconfigurableBase implements
     }
     
     Collection<URI> nameDirsToFormat = FSNamesystem.getNamespaceDirs(conf);
+
+    // list<URI> 0 : file:/tools/hadoop-3.2.1/data/namenode
     List<URI> sharedDirs = FSNamesystem.getSharedEditsDirs(conf);
+
+
     List<URI> dirsToPrompt = new ArrayList<URI>();
+
+
     dirsToPrompt.addAll(nameDirsToFormat);
     dirsToPrompt.addAll(sharedDirs);
-    List<URI> editDirsToFormat = 
-                 FSNamesystem.getNamespaceEditsDirs(conf);
+
+    // list<URI> 0 : file:/tools/hadoop-3.2.1/data/namenode
+    List<URI> editDirsToFormat =  FSNamesystem.getNamespaceEditsDirs(conf);
 
     // if clusterID is not provided - see if you can find the current one
     String clusterId = StartupOption.FORMAT.getClusterId();
     if(clusterId == null || clusterId.equals("")) {
-      //Generate a new cluster id
+      //Generate a new cluster id   生成新的id  举例: CID-UUID  ==>  CID-d5e21420-46b8-41fb-acc7-8562be611472
       clusterId = NNStorage.newClusterID();
     }
     System.out.println("Formatting using clusterid: " + clusterId);
-    
+    // 构建 FSImage
     FSImage fsImage = new FSImage(conf, nameDirsToFormat, editDirsToFormat);
+
+    //构建 FSNamesystem
     try {
       FSNamesystem fsn = new FSNamesystem(conf, fsImage);
       fsImage.getEditLog().initJournalsForWrite();
@@ -1253,7 +1265,10 @@ public class NameNode extends ReconfigurableBase implements
         return true; // aborted
       }
 
+      //
       fsImage.format(fsn, clusterId, force);
+
+
     } catch (IOException ioe) {
       LOG.warn("Encountered exception during format: ", ioe);
       fsImage.close();
@@ -1685,7 +1700,6 @@ public class NameNode extends ReconfigurableBase implements
     if (conf == null)
       conf = new HdfsConfiguration();
 
-
     // Parse out some generic args into Configuration.
     GenericOptionsParser hParser = new GenericOptionsParser(conf, argv);
     argv = hParser.getRemainingArgs();
@@ -1797,11 +1811,13 @@ public class NameNode extends ReconfigurableBase implements
    */
   public static void initializeGenericKeys(Configuration conf,
       String nameserviceId, String namenodeId) {
-    if ((nameserviceId != null && !nameserviceId.isEmpty()) || 
-        (namenodeId != null && !namenodeId.isEmpty())) {
+
+    if ((nameserviceId != null && !nameserviceId.isEmpty()) ||  (namenodeId != null && !namenodeId.isEmpty())) {
+
       if (nameserviceId != null) {
         conf.set(DFS_NAMESERVICE_ID, nameserviceId);
       }
+
       if (namenodeId != null) {
         conf.set(DFS_HA_NAMENODE_ID_KEY, namenodeId);
       }
@@ -1810,6 +1826,7 @@ public class NameNode extends ReconfigurableBase implements
           NAMENODE_SPECIFIC_KEYS);
       DFSUtil.setGenericConf(conf, nameserviceId, null,
           NAMESERVICE_SPECIFIC_KEYS);
+
     }
     
     // If the RPC address is set use it to (re-)configure the default FS
@@ -1834,6 +1851,7 @@ public class NameNode extends ReconfigurableBase implements
   /**
    */
   public static void main(String argv[]) throws Exception {
+    //参数校验
     if (DFSUtil.parseHelpArgument(argv, NameNode.USAGE, System.out, true)) {
       System.exit(0);
     }

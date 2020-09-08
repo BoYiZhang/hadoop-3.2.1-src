@@ -212,6 +212,7 @@ class LowRedundancyBlocks implements Iterable<BlockInfo> {
                           int expectedReplicas) {
     assert curReplicas >= 0 : "Negative replicas!";
     if (curReplicas >= expectedReplicas) {
+      //数据块的副本数量足够， 但是没有均匀地分布在不同的机架上， 返回优先级3
       // Block has enough copies, but not enough racks
       return QUEUE_REPLICAS_BADLY_DISTRIBUTED;
     }
@@ -473,6 +474,10 @@ class LowRedundancyBlocks implements Iterable<BlockInfo> {
   }
 
   /**
+   *
+   * 就是从 priorityQueues 优先级队列中取出 blockToProcess个元素，
+   * 并按照优先级放入 blocksToReconstruct 返回值列表中，
+   *
    * Get a list of block lists without sufficient redundancy. The index of
    * block lists represents its replication priority. Iterates each block list
    * in priority order beginning with the highest priority list. Iterators use

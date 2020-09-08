@@ -24,7 +24,7 @@ public class NameNodeTest {
     @Test
     public void testFormat() throws Exception {
 
-        System.out.println(String.format("%s_%019d", "image", 123131));
+        NameNode.main(new String[]{"-format"});
 
     }
 

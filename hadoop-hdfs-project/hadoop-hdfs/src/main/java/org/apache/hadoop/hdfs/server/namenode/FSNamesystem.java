@@ -427,8 +427,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * perm=&lt;permissions (optional)&gt;
    * </code>
    */
-  public static final Log auditLog = LogFactory.getLog(
-      FSNamesystem.class.getName() + ".audit");
+  public static final Log auditLog = LogFactory.getLog( FSNamesystem.class.getName() + ".audit");
 
   private final int maxCorruptFileBlocksReturn;
   private final boolean isPermissionEnabled;
@@ -825,13 +824,13 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         throw new IOException("Invalid configuration: a shared edits dir " +
             "must not be specified if HA is not enabled.");
       }
-
+      //  构建 BlockManager
       // block manager needs the haEnabled initialized
       this.blockManager = new BlockManager(this, haEnabled, conf);
 
       this.datanodeStatistics = blockManager.getDatanodeManager().getDatanodeStatistics();
 
-      // Get the checksum type from config
+      // Get the checksum type from config : CRC32C
       String checksumTypeStr = conf.get(DFS_CHECKSUM_TYPE_KEY,
           DFS_CHECKSUM_TYPE_DEFAULT);
 
@@ -2803,7 +2802,16 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     blockManager.setBlockPoolId(bpid);
   }
 
+
   /**
+   *
+   * getAdditionalBlock()方法首先会检查文件系统状态，
+   * 然后为新添加的数据块选择存放副本的Datanode，
+   *
+   * 最后构造Block对象并调用FSDirectory.addBlock()方法将Block对象加入
+   * 文件对应的INode对象中。
+   *
+   *
    * The client would like to obtain an additional block for the indicated
    * filename (which is being written-to).  Return an array that consists
    * of the block, plus a set of machines.  The first on this list should
@@ -2849,8 +2857,11 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     LocatedBlock lb;
     try {
       checkOperation(OperationCategory.WRITE);
+
+      //保存block
       lb = FSDirWriteFileOp.storeAllocatedBlock(
           this, src, fileId, clientName, previous, targets);
+
     } finally {
       writeUnlock(operationName);
     }

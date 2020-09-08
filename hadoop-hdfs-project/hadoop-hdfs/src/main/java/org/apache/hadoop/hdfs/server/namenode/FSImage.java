@@ -1137,6 +1137,9 @@ public class FSImage implements Closeable {
           SHUTDOWN_HOOK_PRIORITY);
       try {
         //保存fsimage文件
+        System.out.println("context : "+ context);
+        System.out.println("sd : "+ sd);
+        System.out.println("nnf : "+ nnf);
         saveFSImage(context, sd, nnf);
       } catch (SaveNamespaceCancelledException snce) {
         LOG.info("Cancelled image saving for " + sd.getRoot() +

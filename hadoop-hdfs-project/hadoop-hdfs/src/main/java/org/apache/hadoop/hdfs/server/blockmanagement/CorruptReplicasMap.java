@@ -33,29 +33,59 @@ import org.apache.hadoop.ipc.Server;
 import com.google.common.annotations.VisibleForTesting;
 
 /**
+ *
+ * CorruptReplicasMap类用于保存损坏的数据块副本（corruptReplica） 集合。 客户端发
+ * 现损坏的数据块时会通过ClientProtocol.reportBadBlocks()方法向Namenode汇报损坏的数据
+ * 块副本， 数据节点会通过DatanodeProtocol.reportBadBlocks()方法汇报损坏的数据块副本，
+ * 之后BlockManager会将损坏的副本加入这个数据结构中
+ *
+ *
+ * 存储文件系统中所有损坏的blocks
+ * 只有当blocks的所有副本都损坏的时候,才认为这个block是损坏的.
+ *
+ * 在报告bolck的副本信息时,会忽略到损坏的副本
+ *
+ * 当发现有号的block, 这些坏的block会被删除.
+ *
  * Stores information about all corrupt blocks in the File System.
- * A Block is considered corrupt only if all of its replicas are
- * corrupt. While reporting replicas of a Block, we hide any corrupt
- * copies. These copies are removed once Block is found to have 
- * expected number of good replicas.
+ *  * A Block is considered corrupt only if all of its replicas are
+ *  * corrupt. While reporting replicas of a Block, we hide any corrupt
+ *  * copies. These copies are removed once Block is found to have
+ *  * expected number of good replicas.
  * Mapping: Block -> TreeSet<DatanodeDescriptor> 
  */
 
 @InterfaceAudience.Private
 public class CorruptReplicasMap{
 
-  /** The corruption reason code */
+  /**
+   * 副本损坏的原因
+   *
+   * The corruption reason code
+   * */
   public enum Reason {
+    // 没有指明
     NONE,                // not specified.
+
+    // 通配情况
     ANY,                 // wildcard reason
+
+    // Datanode上副本的时间戳与Namenode上数据块的时间戳不一致
     GENSTAMP_MISMATCH,   // mismatch in generation stamps
+
+    // Datanode上副本的大小与Namenode上数据块的大小不一致
     SIZE_MISMATCH,       // mismatch in sizes
+
+    // 无效的状态
     INVALID_STATE,       // invalid state
+
+    // 客户端或者数据节点汇报
     CORRUPTION_REPORTED  // client or datanode reported the corruption
   }
 
-  private final Map<Block, Map<DatanodeDescriptor, Reason>> corruptReplicasMap =
-    new HashMap<Block, Map<DatanodeDescriptor, Reason>>();
+
+  // CorruptReplicasMap底层的 HashMap 结构
+  private final Map<Block, Map<DatanodeDescriptor, Reason>> corruptReplicasMap = new HashMap<Block, Map<DatanodeDescriptor, Reason>>();
 
   private final LongAdder totalCorruptBlocks = new LongAdder();
   private final LongAdder totalCorruptECBlockGroups = new LongAdder();

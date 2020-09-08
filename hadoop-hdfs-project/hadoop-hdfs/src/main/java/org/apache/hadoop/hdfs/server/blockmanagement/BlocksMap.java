@@ -41,6 +41,9 @@ import org.apache.hadoop.util.LightWeightGSet;
  * 还是获取数据块保存在哪些数据节点上，
  * 都需要通过BlocksMap对象
  *
+ *  <blockInfo, Inode>
+ *
+ *
  * This class maintains the map from a block to its metadata.
  * block's metadata currently includes blockCollection it belongs to and
  * the datanodes that store the block.

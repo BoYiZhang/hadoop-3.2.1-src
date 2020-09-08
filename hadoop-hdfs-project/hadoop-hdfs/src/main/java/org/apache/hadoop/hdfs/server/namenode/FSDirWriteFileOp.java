@@ -223,6 +223,8 @@ class FSDirWriteFileOp {
   static LocatedBlock storeAllocatedBlock(FSNamesystem fsn, String src,
       long fileId, String clientName, ExtendedBlock previous,
       DatanodeStorageInfo[] targets) throws IOException {
+
+
     long offset;
     // Run the full analysis again, since things could have changed
     // while chooseTarget() was executing.
@@ -256,9 +258,14 @@ class FSDirWriteFileOp {
     // allocate new block, record block locations in INode.
     Block newBlock = fsn.createNewBlock(blockType);
     INodesInPath inodesInPath = INodesInPath.fromINode(pendingFile);
+
+
+    //保存 block
     saveAllocatedBlock(fsn, src, inodesInPath, newBlock, targets, blockType);
 
     persistNewBlock(fsn, src, pendingFile);
+
+
     offset = pendingFile.computeFileSize();
 
     // Return located block
@@ -776,6 +783,8 @@ class FSDirWriteFileOp {
   }
 
   /**
+   *
+   * 将分配的块保存为给定的待处理文件名
    * Save allocated block at the given pending filename
    *
    * @param fsn FSNamesystem
@@ -790,8 +799,12 @@ class FSDirWriteFileOp {
       INodesInPath inodesInPath, Block newBlock, DatanodeStorageInfo[] targets,
       BlockType blockType) throws IOException {
     assert fsn.hasWriteLock();
+
+    //保存Block
     BlockInfo b = addBlock(fsn.dir, src, inodesInPath, newBlock, targets,
         blockType);
+
+
     logAllocatedBlock(src, b);
     DatanodeStorageInfo.incrementBlocksScheduled(targets);
   }

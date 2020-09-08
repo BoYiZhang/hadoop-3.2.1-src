@@ -127,25 +127,36 @@ public class NameNodeHttpServer {
    * Http Policy is decided.
    */
   void start() throws IOException {
+
+    //获取测了测
     HttpConfig.Policy policy = DFSUtil.getHttpPolicy(conf);
+
+    //获取服务器host
     final String infoHost = bindAddress.getHostName();
 
+    // 获取绑定地址
     final InetSocketAddress httpAddr = bindAddress;
+
+    //构建https服务地址  0.0.0.0:9871
     final String httpsAddrString = conf.getTrimmed(
         DFSConfigKeys.DFS_NAMENODE_HTTPS_ADDRESS_KEY,
         DFSConfigKeys.DFS_NAMENODE_HTTPS_ADDRESS_DEFAULT);
+    //构建 网络InetSocketAddress 服务:
     InetSocketAddress httpsAddr = NetUtils.createSocketAddr(httpsAddrString);
 
     if (httpsAddr != null) {
       // If DFS_NAMENODE_HTTPS_BIND_HOST_KEY exists then it overrides the
       // host name portion of DFS_NAMENODE_HTTPS_ADDRESS_KEY.
-      final String bindHost =
-          conf.getTrimmed(DFSConfigKeys.DFS_NAMENODE_HTTPS_BIND_HOST_KEY);
+
+      // 绑定地址 如果dfs.namenode.https-bind-host已经绑定了地址的话,将会覆盖掉之前创建的
+      //
+      final String bindHost = conf.getTrimmed(DFSConfigKeys.DFS_NAMENODE_HTTPS_BIND_HOST_KEY);
       if (bindHost != null && !bindHost.isEmpty()) {
         httpsAddr = new InetSocketAddress(bindHost, httpsAddr.getPort());
       }
     }
 
+    //
     HttpServer2.Builder builder = DFSUtil.httpServerTemplateForNNAndJN(conf,
         httpAddr, httpsAddr, "hdfs",
         DFSConfigKeys.DFS_NAMENODE_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY,
@@ -161,6 +172,7 @@ public class NameNodeHttpServer {
 
     builder.configureXFrame(xFrameEnabled).setXFrameOption(xFrameOptionValue);
 
+    //构建http 服务
     httpServer = builder.build();
 
     if (policy.isHttpsEnabled()) {

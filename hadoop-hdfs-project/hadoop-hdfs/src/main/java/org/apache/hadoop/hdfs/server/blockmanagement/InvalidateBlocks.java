@@ -44,16 +44,23 @@ import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 
 /**
+ *
+ * InvalidateBlocks类用于保存等待删除的数据块副本集合， InvalidateBlocks中的副本来
+ * 自于corruptReplicas和excessReplicateMap这两个集合。 它使用 HashMap 保存了
+ * Datanode（使用DatanodeInfo标识） 到该Datanode上所有等待删除的副本集合的映射。 这
+ * 里使用LightWeightHashSet对象保存一个Datanode上所有等待删除的副本集合，
+ * LightWeightHashSet 是Hadoop定义的占用较少内存的Hashset的实现。
+ *
+ *
+ *
  * Keeps a Collection for every named machine containing blocks
  * that have recently been invalidated and are thought to live
  * on the machine in question.
  */
 @InterfaceAudience.Private
 class InvalidateBlocks {
-  private final Map<DatanodeInfo, LightWeightHashSet<Block>>
-      nodeToBlocks = new HashMap<>();
-  private final Map<DatanodeInfo, LightWeightHashSet<Block>>
-      nodeToECBlocks = new HashMap<>();
+  private final Map<DatanodeInfo, LightWeightHashSet<Block>> nodeToBlocks = new HashMap<>();
+  private final Map<DatanodeInfo, LightWeightHashSet<Block>> nodeToECBlocks = new HashMap<>();
   private final LongAdder numBlocks = new LongAdder();
   private final LongAdder numECBlocks = new LongAdder();
   private final int blockInvalidateLimit;

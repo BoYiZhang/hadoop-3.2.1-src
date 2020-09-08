@@ -286,8 +286,7 @@ public class INodeFile extends INodeWithAdditionalFields
      * @param storagePolicyID     存储策略
      * @return
      */
-    static long toLong(long preferredBlockSize, long layoutRedundancy,
-        byte storagePolicyID) {
+    static long toLong(long preferredBlockSize, long layoutRedundancy,  byte storagePolicyID) {
       long h = 0;
       if (preferredBlockSize == 0) {
         preferredBlockSize = PREFERRED_BLOCK_SIZE.BITS.getMin();
