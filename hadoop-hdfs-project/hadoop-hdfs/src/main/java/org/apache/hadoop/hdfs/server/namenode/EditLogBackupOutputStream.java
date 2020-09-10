@@ -35,6 +35,7 @@ import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 
 /**
+ *
  * An implementation of the abstract class {@link EditLogOutputStream},
  * which streams edits to a backup node.
  * 

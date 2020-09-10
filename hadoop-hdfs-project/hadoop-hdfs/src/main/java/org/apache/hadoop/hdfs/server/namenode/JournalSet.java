@@ -177,8 +177,8 @@ public class JournalSet implements JournalManager {
   // COW implementation is necessary since some users (eg the web ui) call
   // getAllJournalStreams() and then iterate. Since this is rarely
   // mutated, there is no performance concern.
-  private final List<JournalAndStream> journals =
-      new CopyOnWriteArrayList<JournalSet.JournalAndStream>();
+  private final List<JournalAndStream> journals =  new CopyOnWriteArrayList<JournalSet.JournalAndStream>();
+
   final int minimumRedundantJournals;
 
   private boolean closed;
@@ -259,9 +259,11 @@ public class JournalSet implements JournalManager {
   @Override
   public void selectInputStreams(Collection<EditLogInputStream> streams,
       long fromTxId, boolean inProgressOk, boolean onlyDurableTxns) {
+
     final PriorityQueue<EditLogInputStream> allStreams = 
         new PriorityQueue<EditLogInputStream>(64,
             EDIT_LOG_INPUT_STREAM_COMPARATOR);
+
     for (JournalAndStream jas : journals) {
       if (jas.isDisabled()) {
         LOG.info("Skipping jas " + jas + " since it's disabled");
@@ -275,6 +277,7 @@ public class JournalSet implements JournalManager {
             ". Skipping.", ioe);
       }
     }
+
     chainAndMakeRedundantStreams(streams, allStreams, fromTxId);
   }
   

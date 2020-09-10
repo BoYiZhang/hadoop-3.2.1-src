@@ -405,22 +405,25 @@ public class FSEditLog implements LogsPurgeable {
     List<EditLogInputStream> streams = new ArrayList<EditLogInputStream>();
 
 
-    //传入了参数segmentTxId，
+    // 传入了参数segmentTxId，
     // 这个参数会作为这次 操作的transactionId，
     // 值为editlog已经记录的最新的transactionId加1(这里是 31+1=32)。
     //
-    // selectInputStreams()方法会判断有没有一个以segmentTxId(32)开 始的日志，如果没有则表示当前transactionId 的值选择正确，可以打开新的editlog文件记录以segmentTxId开始的日志段落。 如果方法找到了包含这个transactionId的editlog文件，则表示出现了两个日志 transactionId交叉的情况，抛出异常。
+    // selectInputStreams()方法会判断有没有一个以segmentTxId(32)开 始的日志，如果没有则表示当前transactionId 的值选择正确，
+    // 可以打开新的editlog文件记录以segmentTxId开始的日志段落。
+    // 如果方法找到了包含这个transactionId的editlog文件，则表示出现了两个日志 transactionId交叉的情况，抛出异常。
     journalSet.selectInputStreams(streams, segmentTxId, true, false);
 
 
     //这里判断，有没有包含这个新的segmentTxId的editlog文件，如果有则抛出异常
     if (!streams.isEmpty()) {
+
       String error = String.format("Cannot start writing at txid %s " +
         "when there is a stream available for read: %s",
         segmentTxId, streams.get(0));
-      IOUtils.cleanupWithLogger(LOG,
-          streams.toArray(new EditLogInputStream[0]));
+      IOUtils.cleanupWithLogger(LOG, streams.toArray(new EditLogInputStream[0]));
       throw new IllegalStateException(error);
+
     }
 
 
@@ -1619,8 +1622,7 @@ public class FSEditLog implements LogsPurgeable {
         "Bad state: %s", state);
     
     if (writeEndTxn) {
-      logEdit(LogSegmentOp.getInstance(cache.get(), 
-          FSEditLogOpCodes.OP_END_LOG_SEGMENT));
+      logEdit(LogSegmentOp.getInstance(cache.get(), FSEditLogOpCodes.OP_END_LOG_SEGMENT));
     }
     // always sync to ensure all edits are flushed.
     logSyncAll();

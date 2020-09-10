@@ -24,7 +24,7 @@ public class NameNodeTest {
     @Test
     public void testFormat() throws Exception {
 
-        NameNode.main(new String[]{"-format"});
+//        NameNode.main(new String[]{"-format"});
 
     }
 

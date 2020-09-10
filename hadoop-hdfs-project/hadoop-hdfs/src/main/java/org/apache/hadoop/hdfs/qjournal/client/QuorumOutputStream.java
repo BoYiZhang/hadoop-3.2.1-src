@@ -27,6 +27,7 @@ import org.apache.hadoop.io.DataOutputBuffer;
 /**
  * EditLogOutputStream implementation that writes to a quorum of
  * remote journals.
+ *
  */
 class QuorumOutputStream extends EditLogOutputStream {
   private final AsyncLoggerSet loggers;

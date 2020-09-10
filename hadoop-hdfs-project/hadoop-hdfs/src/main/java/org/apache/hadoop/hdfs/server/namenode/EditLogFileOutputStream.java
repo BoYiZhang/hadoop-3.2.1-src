@@ -37,12 +37,9 @@ import org.apache.hadoop.io.IOUtils;
 import com.google.common.annotations.VisibleForTesting;
 
 /**
- *
- *
- * 向本地文件系统中保存的editlog文件写数据的输出流， 向
- * EditLogFileOutputStream写数据时， 数据首先被写入到输出流的缓冲区中， 当显式地调用
+ * 向本地文件系统中保存的editlog文件写数据的输出流，
+ * 向EditLogFileOutputStream写数据时， 数据首先被写入到输出流的缓冲区中， 当显式地调用
  * flush()操作后， 数据才会从缓冲区同步到editlog文件中
- *
  *
  * An implementation of the abstract class {@link EditLogOutputStream}, which
  * stores edits in a local file.
@@ -53,17 +50,17 @@ public class EditLogFileOutputStream extends EditLogOutputStream {
       LoggerFactory.getLogger(EditLogFileOutputStream.class);
   public static final int MIN_PREALLOCATION_LENGTH = 1024 * 1024;
 
-  //输出流对应的editlog文件。
+  // 输出流对应的editlog文件。
   private File file;
 
-  //editlog文件对应的输出流。
+  // editlog文件对应的输出流。
   private FileOutputStream fp; // file stream for storing edit logs
 
-  //editlog文件对应的输出流通道。
+  // editlog文件对应的输出流通道。
   private FileChannel fc; // channel of the file stream for sync
 
 
-  //一个具有两块缓存的缓冲区， 数据必须先写入缓存， 然后再由缓存同步到磁盘上。
+  // 一个具有两块缓存的缓冲区， 数据必须先写入缓存， 然后再由缓存同步到磁盘上。
   private EditsDoubleBuffer doubleBuf;
 
 
@@ -106,17 +103,26 @@ public class EditLogFileOutputStream extends EditLogOutputStream {
     shouldSyncWritesAndSkipFsync = conf.getBoolean(
             DFSConfigKeys.DFS_NAMENODE_EDITS_NOEDITLOGCHANNELFLUSH,
             DFSConfigKeys.DFS_NAMENODE_EDITS_NOEDITLOGCHANNELFLUSH_DEFAULT);
-
+    // /tools/hadoop-3.2.1/data/namenode/current/edits_inprogress_0000000000000000483
     file = name;
+    // size 524288  : 512 kb
     doubleBuf = new EditsDoubleBuffer(size);
+
     RandomAccessFile rp;
+
     if (shouldSyncWritesAndSkipFsync) {
+
       rp = new RandomAccessFile(name, "rws");
+
     } else {
+
       rp = new RandomAccessFile(name, "rw");
     }
+
     fp = new FileOutputStream(rp.getFD()); // open for append
+
     fc = rp.getChannel();
+
     fc.position(fc.size());
   }
 
