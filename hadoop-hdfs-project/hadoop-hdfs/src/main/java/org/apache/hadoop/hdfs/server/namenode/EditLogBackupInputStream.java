@@ -31,6 +31,7 @@ import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
  * @see org.apache.hadoop.hdfs.server.protocol.NamenodeProtocol#journal
  * (org.apache.hadoop.hdfs.server.protocol.NamenodeRegistration,
  *  int, int, byte[])
+ *
  */
 class EditLogBackupInputStream extends EditLogInputStream {
   final String address; // sender address

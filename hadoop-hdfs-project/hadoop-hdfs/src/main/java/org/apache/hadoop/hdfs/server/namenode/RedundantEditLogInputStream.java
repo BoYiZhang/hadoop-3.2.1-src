@@ -37,6 +37,7 @@ import org.apache.hadoop.log.LogThrottlingHelper.LogAction;
  * We will currently try each edit log stream exactly once.  In other words, we
  * don't handle the "ping pong" scenario where different edit logs contain a
  * different subset of the available edits.
+ *
  */
 class RedundantEditLogInputStream extends EditLogInputStream {
   public static final Logger LOG = LoggerFactory.getLogger(

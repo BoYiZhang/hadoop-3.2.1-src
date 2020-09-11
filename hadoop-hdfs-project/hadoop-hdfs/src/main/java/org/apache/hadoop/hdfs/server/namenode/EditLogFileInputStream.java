@@ -53,6 +53,7 @@ import com.google.common.base.Throwables;
  * An implementation of the abstract class {@link EditLogInputStream}, which
  * reads edits from a file. That file may be either on the local disk or
  * accessible via a URL.
+ *
  */
 @InterfaceAudience.Private
 public class EditLogFileInputStream extends EditLogInputStream {
@@ -146,6 +147,7 @@ public class EditLogFileInputStream extends EditLogInputStream {
     this.firstTxId = firstTxId;
     this.lastTxId = lastTxId;
     this.isInProgress = isInProgress;
+    // 最大值 50 * 1024 * 1024  ==> 50M  ???????
     this.maxOpSize = DFSConfigKeys.DFS_NAMENODE_MAX_OP_SIZE_DEFAULT;
   }
 
@@ -214,7 +216,9 @@ public class EditLogFileInputStream extends EditLogInputStream {
     FSEditLogOp op = null;
     switch (state) {
     case UNINIT:
+
       try {
+        // 执行初始化操作
         init(true);
       } catch (Throwable e) {
         LOG.error("caught exception initializing " + this, e);
@@ -226,6 +230,7 @@ public class EditLogFileInputStream extends EditLogInputStream {
       Preconditions.checkState(state != State.UNINIT);
       return nextOpImpl(skipBrokenEdits);
     case OPEN:
+      //读取 FSEditLogOp类型操作
       op = reader.readOp(skipBrokenEdits);
       if ((op != null) && (op.hasTransactionId())) {
         long txId = op.getTransactionId();

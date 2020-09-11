@@ -1184,6 +1184,7 @@ public class FSEditLog implements LogsPurgeable {
    * Add delete file record to edit log
    */
   void logDelete(String src, long timestamp, boolean toLogRpcIds) {
+    // 构造DeleteOp对象
     DeleteOp op = DeleteOp.getInstance(cache.get())
       .setPath(src)
       .setTimestamp(timestamp);
