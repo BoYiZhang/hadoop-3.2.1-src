@@ -20,4 +20,9 @@
         <name>fs.defaultFS</name>
         <value>hdfs://localhost:8020</value>
     </property>
+
+    <property>
+        <name>dfs.namenode.max.extra.edits.segments.retained</name>
+        <value>10</value>
+    </property>
 </configuration>

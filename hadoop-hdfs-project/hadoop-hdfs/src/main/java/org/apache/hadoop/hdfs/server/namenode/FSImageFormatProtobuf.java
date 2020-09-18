@@ -571,9 +571,9 @@ public final class FSImageFormatProtobuf {
 
       // 保存INode信息是由FSImageFormatPBINode.Saver.serializeINodeSection()方法实现的
       saver.serializeINodeSection(sectionOutputStream);
-
+      // 保存info目录信息
       saver.serializeINodeDirectorySection(sectionOutputStream);
-
+      // 租约管理
       saver.serializeFilesUCSection(sectionOutputStream);
 
       return saver.getNumImageErrors();
@@ -625,24 +625,23 @@ public final class FSImageFormatProtobuf {
      * @throws IOException on fatal error.
      *
      */
-    private long saveInternal(FileOutputStream fout,
-        FSImageCompression compression, String filePath) throws IOException {
+    private long saveInternal(FileOutputStream fout, FSImageCompression compression, String filePath) throws IOException {
 
 
       StartupProgress prog = NameNode.getStartupProgress();
 
       //构造输出流， 一边写入数据， 一边写入校验值
       MessageDigest digester = MD5Hash.getDigester();
-
+      //  layoutVersion :  -65
       int layoutVersion = context.getSourceNamesystem().getEffectiveLayoutVersion();
-
+      //  构建 underlyingOutputStream
       underlyingOutputStream = new DigestOutputStream(new BufferedOutputStream(fout), digester);
-
+      //写入头信息
       underlyingOutputStream.write(FSImageUtil.MAGIC_HEADER);
-
+      //打开 文件通道 : /tools/hadoop-3.2.1/data/namenode/current/fsimage.ckpt_0000000000000000494
       fileChannel = fout.getChannel();
 
-      // FileSummary为fsimage文件的描述部分， 也是protobuf定义的
+      // FileSummary为fsimage文件的描述部分， 也是protobuf定义的    FILE_VERSION : 1
       FileSummary.Builder b = FileSummary.newBuilder()
           .setOndiskVersion(FSImageUtil.FILE_VERSION)
           .setLayoutVersion(

@@ -648,10 +648,22 @@ public final class FSImageFormatPBINode {
         FileUnderConstructionEntry e = b.build();
         e.writeDelimitedTo(out);
       }
-      parent.commitSection(summary,
-          FSImageFormatProtobuf.SectionName.FILES_UNDERCONSTRUCTION);
+      parent.commitSection(summary, FSImageFormatProtobuf.SectionName.FILES_UNDERCONSTRUCTION);
     }
 
+    /**
+     * save()方法首先将当前INode对象分为目录、 文件以及符号链接等几类，
+     * 然后调用各个类型对应的save()重载方法。 重载方法的实现也非常简单，
+     * 就是构造不同的protobuf Builder类， 然后设置相应字段的值，
+     * 并将序列化之后的对象写入fsimage文件的输出流中。 这里以INodeFile为例，
+     * 首先构造protobuf Builder类——INodeSection.INodeFile.Builder，
+     * 然后设置blocks——也就是当前文件有哪些数据块， 如果当前的INodeFile处于构建状态，
+     * 则设置对应的构建信息。 最后将序列化后的inode信息写入输出流中。
+     *
+     * @param out
+     * @param n
+     * @throws IOException
+     */
     private void save(OutputStream out, INode n) throws IOException {
       if (n.isDirectory()) {
         save(out, n.asDirectory());

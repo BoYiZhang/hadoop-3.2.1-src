@@ -1141,8 +1141,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
 
       // 加载 FSImage 文件
-      final boolean staleImage
-          = fsImage.recoverTransitionRead(startOpt, this, recovery);
+      final boolean staleImage  = fsImage.recoverTransitionRead(startOpt, this, recovery);
 
       if (RollingUpgradeStartupOption.ROLLBACK.matches(startOpt)) {
         rollingUpgradeInfo = null;

@@ -35,4 +35,13 @@
       <name>dfs.permissions</name>
       <value>false</value>
     </property>
+    <property>
+        <name>dfs.namenode.max.extra.edits.segments.retained</name>
+        <value>10</value>
+    </property>
+    <property>
+        <name>dfs.namenode.checkpoint.txns</name>
+        <value>3</value>
+    </property>
+
 </configuration>

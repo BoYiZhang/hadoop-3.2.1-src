@@ -1241,9 +1241,11 @@ public class FSImage implements Closeable {
     }
     try {
       try {
-
+        //✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨
         //调用saveFSImageInAllDirs()方法将当前的命名空间保存到新的fsimage文件中
         saveFSImageInAllDirs(source, nnf, imageTxId, canceler);
+        //✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨
+
         if (!source.isRollingUpgrade()) {
           updateStorageVersion();
         }
@@ -1332,8 +1334,6 @@ public class FSImage implements Closeable {
     SaveNamespaceContext ctx = new SaveNamespaceContext(source, txid, canceler);
     
     try {
-
-
 
       //在每一个保存路径上启动一个线程， 该线程使用FSImageSaver类保存fsimage文件
       List<Thread> saveThreads = new ArrayList<Thread>();
