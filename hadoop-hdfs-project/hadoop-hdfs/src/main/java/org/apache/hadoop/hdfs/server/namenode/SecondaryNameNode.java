@@ -355,9 +355,14 @@ public class SecondaryNameNode implements Runnable,
         final long monotonicNow = Time.monotonicNow();
         final long now = Time.now();
 
+        //  是否超过最大事务数限制[默认100万]
+        //  或者两次checkpoint超过1小时
         if (shouldCheckpointBasedOnCount() ||
             monotonicNow >= lastCheckpointTime + 1000 * checkpointConf.getPeriod()) {
+
+          // 执行 checkpoint 操作
           doCheckpoint();
+
           lastCheckpointTime = monotonicNow;
           lastCheckpointWallclockTime = now;
         }
@@ -469,20 +474,28 @@ public class SecondaryNameNode implements Runnable,
   @VisibleForTesting
   public void startInfoServer() throws IOException {
     final InetSocketAddress httpAddr = getHttpAddress(conf);
+
+    // 默认: dfs.namenode.secondary.http-address : 0.0.0.0:9869
     final String httpsAddrString = conf.getTrimmed(
         DFSConfigKeys.DFS_NAMENODE_SECONDARY_HTTPS_ADDRESS_KEY,
         DFSConfigKeys.DFS_NAMENODE_SECONDARY_HTTPS_ADDRESS_DEFAULT);
     InetSocketAddress httpsAddr = NetUtils.createSocketAddr(httpsAddrString);
 
+
+    // 构架http服务
     HttpServer2.Builder builder = DFSUtil.httpServerTemplateForNNAndJN(conf,
         httpAddr, httpsAddr, "secondary", DFSConfigKeys.
             DFS_SECONDARY_NAMENODE_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY,
         DFSConfigKeys.DFS_SECONDARY_NAMENODE_KEYTAB_FILE_KEY);
 
+    // dfs.xframe.enabled : 默认 true
+    // 如果为true，则通过返回设置为SAMEORIGIN的X_FRAME_OPTIONS标题值来启用防止单击劫持的保护。
+    // Clickjacking保护可防止攻击者使用透明或不透明层诱骗用户单击另一页上的按钮或链接。
     final boolean xFrameEnabled = conf.getBoolean(
         DFSConfigKeys.DFS_XFRAME_OPTION_ENABLED,
         DFSConfigKeys.DFS_XFRAME_OPTION_ENABLED_DEFAULT);
 
+    // dfs.xframe.value : SAMEORIGIN   可选:  DENY  SAMEORIGIN    ALLOW-FROM
     final String xFrameOptionValue = conf.getTrimmed(
         DFSConfigKeys.DFS_XFRAME_OPTION_VALUE,
         DFSConfigKeys.DFS_XFRAME_OPTION_VALUE_DEFAULT);
@@ -502,8 +515,12 @@ public class SecondaryNameNode implements Runnable,
     HttpConfig.Policy policy = DFSUtil.getHttpPolicy(conf);
     int connIdx = 0;
     if (policy.isHttpEnabled()) {
+
+
       InetSocketAddress httpAddress =
           infoServer.getConnectorAddress(connIdx++);
+
+      // dfs.namenode.secondary.http-address
       conf.set(DFSConfigKeys.DFS_NAMENODE_SECONDARY_HTTP_ADDRESS_KEY,
           NetUtils.getHostPortString(httpAddress));
     }
@@ -528,15 +545,21 @@ public class SecondaryNameNode implements Runnable,
     
     // Tell the namenode to start logging transactions in a new edit file
     // Returns a token that would be used to upload the merged image.
+
+    // 告诉namenode在新的edits文件中开始记录事务 , 如果处于安全模式则失败.
+    // 返回一个token用于merge image
     CheckpointSignature sig = namenode.rollEditLog();
     
     boolean loadImage = false;
     boolean isFreshCheckpointer = (checkpointImage.getNamespaceID() == 0);
+
     boolean isSameCluster =
         (dstStorage.versionSupportsFederation(NameNodeLayoutVersion.FEATURES)
             && sig.isSameCluster(checkpointImage)) ||
         (!dstStorage.versionSupportsFederation(NameNodeLayoutVersion.FEATURES)
             && sig.namespaceIdMatches(checkpointImage));
+
+
     if (isFreshCheckpointer ||
         (isSameCluster &&
          !sig.storageVersionMatches(checkpointImage.getStorage()))) {
@@ -556,10 +579,12 @@ public class SecondaryNameNode implements Runnable,
       namenode.getEditLogManifest(sig.mostRecentCheckpointTxId + 1);
 
     // Fetch fsimage and edits. Reload the image if previous merge failed.
+    // 拉取fsimage和edits, 如果merge失败则重新加载image
     loadImage |= downloadCheckpointFiles(
         fsName, checkpointImage, sig, manifest) |
         checkpointImage.hasMergeError();
     try {
+      //执行merge操作
       doMerge(sig, manifest, loadImage, checkpointImage, namesystem);
     } catch (IOException ioe) {
       // A merge error occurred. The in-memory file system state may be
@@ -574,8 +599,11 @@ public class SecondaryNameNode implements Runnable,
     //
     // Upload the new image into the NameNode. Then tell the Namenode
     // to make this new uploaded image as the most current image.
-    //
+    //  上传新的image 到NameNode
+    //  告诉Namenode将上传的image作为最新的image
     long txid = checkpointImage.getLastAppliedTxId();
+
+    //上传凑在哦.
     TransferFsImage.uploadImageFromStorage(fsName, conf, dstStorage,
         NameNodeFile.IMAGE, txid);
 
@@ -669,6 +697,7 @@ public class SecondaryNameNode implements Runnable,
   }
 
   /**
+   *
    * main() has some simple utility methods.
    * @param argv Command line parameters.
    * @exception Exception if the filesystem does not exist.

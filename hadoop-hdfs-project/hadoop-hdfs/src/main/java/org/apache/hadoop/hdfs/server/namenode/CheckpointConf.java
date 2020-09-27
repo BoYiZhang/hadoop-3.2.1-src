@@ -55,19 +55,35 @@ public class CheckpointConf {
   private double quietMultiplier;
 
   public CheckpointConf(Configuration conf) {
+
+    // dfs.namenode.checkpoint.check.period : 60 s
+    // SecondaryNameNode和CheckpointNode将每隔'dfs.namenode.checkpoint.period'秒以查询未选中的事务数。
     checkpointCheckPeriod = conf.getTimeDuration(
         DFS_NAMENODE_CHECKPOINT_CHECK_PERIOD_KEY,
         DFS_NAMENODE_CHECKPOINT_CHECK_PERIOD_DEFAULT, TimeUnit.SECONDS);
-        
+
+
+    // dfs.namenode.checkpoint.period : 3600  : 两个连续checkpoint的最大延时
     checkpointPeriod = conf.getTimeDuration(DFS_NAMENODE_CHECKPOINT_PERIOD_KEY,
         DFS_NAMENODE_CHECKPOINT_PERIOD_DEFAULT, TimeUnit.SECONDS);
+
+    // dfs.namenode.checkpoint.txns  100万
     checkpointTxnCount = conf.getLong(DFS_NAMENODE_CHECKPOINT_TXNS_KEY, 
                                   DFS_NAMENODE_CHECKPOINT_TXNS_DEFAULT);
+
+    // dfs.namenode.checkpoint.max-retries : 3次
     maxRetriesOnMergeError = conf.getInt(DFS_NAMENODE_CHECKPOINT_MAX_RETRIES_KEY,
                                   DFS_NAMENODE_CHECKPOINT_MAX_RETRIES_DEFAULT);
+
+    // dfs.namenode.legacy-oiv-image.dir
+    // 在standby namenode和secondary namenode的检查点期间，保存fsimage的命名空间的位置。
     legacyOivImageDir = conf.get(DFS_NAMENODE_LEGACY_OIV_IMAGE_DIR_KEY);
+
+    // dfs.namenode.checkpoint.check.quiet-multiplier :  1.5
     quietMultiplier = conf.getDouble(DFS_NAMENODE_CHECKPOINT_QUIET_MULTIPLIER_KEY,
       DFS_NAMENODE_CHECKPOINT_QUIET_MULTIPLIER_DEFAULT);
+
+
     warnForDeprecatedConfigs(conf);
   }
   
