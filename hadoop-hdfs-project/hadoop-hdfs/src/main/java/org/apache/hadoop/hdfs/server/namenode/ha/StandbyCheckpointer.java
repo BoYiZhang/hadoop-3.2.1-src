@@ -172,6 +172,7 @@ public class StandbyCheckpointer {
    *
    * 之后构造一个线程， 将新产生的fsimage文件通过HTTP方式上传到AvtiveNamenode中。
    *
+   *
    * @param sendCheckpoint
    * @throws InterruptedException
    * @throws IOException
@@ -407,7 +408,7 @@ public class StandbyCheckpointer {
 
     private void doWork() {
 
-      //间隔时长1000*Math.min(checkpointCheckPeriod, checkpointPeriod)
+      //间隔时长 1小时
       final long checkPeriod = 1000 * checkpointConf.getCheckPeriod();
       System.out.println("StandbyCheckpointer#doWork=>checkPeriod : "+ checkPeriod);
       // Reset checkpoint time so that we don't always checkpoint
@@ -415,7 +416,9 @@ public class StandbyCheckpointer {
       lastCheckpointTime = monotonicNow();
       lastUploadTime = monotonicNow();
       while (shouldRun) {
+
         boolean needRollbackCheckpoint = namesystem.isNeedRollbackFsImage();
+
         if (!needRollbackCheckpoint) {
           try {
             Thread.sleep(checkPeriod);
