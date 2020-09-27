@@ -232,23 +232,21 @@ public class FSImage implements Closeable {
    * @throws IOException
    * @return true if the image needs to be saved or false otherwise
    */
-  boolean recoverTransitionRead(StartupOption startOpt, FSNamesystem target,
-      MetaRecoveryContext recovery)
+  boolean recoverTransitionRead(StartupOption startOpt, FSNamesystem target,  MetaRecoveryContext recovery)
       throws IOException {
-    assert startOpt != StartupOption.FORMAT : 
-      "NameNode formatting should be performed before reading the image";
-    
+    assert startOpt != StartupOption.FORMAT :   "NameNode formatting should be performed before reading the image";
+    //  According to configuration imageDirs & editsDirs is  ==>  file:/tools/hadoop-3.2.1/data/namenode
     Collection<URI> imageDirs = storage.getImageDirectories();
     Collection<URI> editsDirs = editLog.getEditURIs();
 
-    // none of the data dirs exist
+    // none of the data dirs exist :
     if((imageDirs.size() == 0 || editsDirs.size() == 0) 
                              && startOpt != StartupOption.IMPORT)  
       throw new IOException(
           "All specified directories are not accessible or do not exist.");
     
-    // 1. For each data directory calculate its state and 
-    // check whether all is consistent before transitioning.
+    // 1. For each data directory calculate its state and check whether all is consistent before transitioning.
+    // 对于每个数据目录，计算其状态，并在转换之前检查所有内容是否一致。
     Map<StorageDirectory, StorageState> dataDirStates = 
              new HashMap<StorageDirectory, StorageState>();
     boolean isFormatted = recoverStorageDirs(startOpt, storage, dataDirStates);
@@ -295,7 +293,7 @@ public class FSImage implements Closeable {
     
     storage.processStartupOptionsForUpgrade(startOpt, layoutVersion);
 
-    // 2. Format unformatted dirs.
+    // 2. Format unformatted dirs.  格式化未格式化的目录。
     for (Iterator<StorageDirectory> it = storage.dirIterator(); it.hasNext();) {
       StorageDirectory sd = it.next();
       StorageState curState = dataDirStates.get(sd);
@@ -330,7 +328,7 @@ public class FSImage implements Closeable {
       }
     }
 
-    // 3. Do transitions
+    // 3. Do transitions 转换
     switch(startOpt) {
     case UPGRADE:
     case UPGRADEONLY:
@@ -386,7 +384,7 @@ public class FSImage implements Closeable {
     // mutate the shared dir below in the actual loop.
     for (Iterator<StorageDirectory> it = 
                       storage.dirIterator(); it.hasNext();) {
-      StorageDirectory sd = it.next();
+      StorageDirectory sd = it.next();  // sd :  Storage Directory root= /tools/hadoop-3.2.1/data/namenode; location= null
       StorageState curState;
       if (startOpt == StartupOption.METADATAVERSION) {
         /* All we need is the layout version. */
@@ -667,7 +665,6 @@ public class FSImage implements Closeable {
   /**
    * Choose latest image from one of the directories,
    * load it and merge with the edits.
-   * 
    * Saving and loading fsimage should never trigger symlink resolution. 
    * The paths that are persisted do not have *intermediate* symlinks 
    * because intermediate symlinks are resolved at the time files, 
@@ -682,7 +679,7 @@ public class FSImage implements Closeable {
   private boolean loadFSImage(FSNamesystem target, StartupOption startOpt,
       MetaRecoveryContext recovery)
       throws IOException {
-    final boolean rollingRollback
+    final boolean rollingRollback  // rollingRollback
         = RollingUpgradeStartupOption.ROLLBACK.matches(startOpt);
     final EnumSet<NameNodeFile> nnfs;
     if (rollingRollback) {
@@ -692,18 +689,18 @@ public class FSImage implements Closeable {
       // otherwise we can load from both IMAGE and IMAGE_ROLLBACK
       nnfs = EnumSet.of(NameNodeFile.IMAGE, NameNodeFile.IMAGE_ROLLBACK);
     }
-
-
-
-    final FSImageStorageInspector inspector = storage
-        .readAndInspectDirs(nnfs, startOpt);
+    // nnfs : IMAGE  IMAGE_ROLLBACK
+    // inspector(foundImages)      FSImageFile(file=/tools/hadoop-3.2.1/data/namenode/current/fsimage_0000000000000000500, cpktTxId=0000000000000000500)
+    //                             FSImageFile(file=/tools/hadoop-3.2.1/data/namenode/current/fsimage_0000000000000000494, cpktTxId=0000000000000000494)
+    final FSImageStorageInspector inspector = storage.readAndInspectDirs(nnfs, startOpt);
 
     isUpgradeFinalized = inspector.isUpgradeFinalized();
+    // FSImageFile ==> FSImageFile(file=/tools/hadoop-3.2.1/data/namenode/current/fsimage_0000000000000000500, cpktTxId=0000000000000000500)
     List<FSImageFile> imageFiles = inspector.getLatestImages();
 
     StartupProgress prog = NameNode.getStartupProgress();
     prog.beginPhase(Phase.LOADING_FSIMAGE);
-    File phaseFile = imageFiles.get(0).getFile();
+    File phaseFile = imageFiles.get(0).getFile(); // phaseFile :    /tools/hadoop-3.2.1/data/namenode/current/fsimage_0000000000000000500
     prog.setFile(Phase.LOADING_FSIMAGE, phaseFile.getAbsolutePath());
     prog.setSize(Phase.LOADING_FSIMAGE, phaseFile.length());
     boolean needToSave = inspector.needToSave();
@@ -782,8 +779,8 @@ public class FSImage implements Closeable {
     if (!rollingRollback) {
 
       //调用loadEdit()方法加载并合并editlog
-      long txnsAdvanced = loadEdits(editStreams, target, Long.MAX_VALUE,
-          startOpt, recovery);
+      long txnsAdvanced = loadEdits(editStreams, target, Long.MAX_VALUE,  startOpt, recovery);
+      //  超过后面的限制则进行FSImage合并操作: dfs.namenode.checkpoint.period : 3600 s , dfs.namenode.checkpoint.txns: 100万
       needToSave |= needsResaveBasedOnStaleCheckpoint(imageFile.getFile(),
           txnsAdvanced);
     } else {
@@ -829,8 +826,8 @@ public class FSImage implements Closeable {
       // next to the image file
       boolean isRollingRollback = RollingUpgradeStartupOption.ROLLBACK
           .matches(startupOption);
-
-
+      // imageFile: FSImageFile(file=/tools/hadoop-3.2.1/data/namenode/current/fsimage_0000000000000000500, cpktTxId=0000000000000000500)
+      // 走这个方法啊....
       loadFSImage(imageFile.getFile(), target, recovery, isRollingRollback);
 
 
@@ -845,8 +842,8 @@ public class FSImage implements Closeable {
             NNStorage.DEPRECATED_MESSAGE_DIGEST_PROPERTY +
             " not set for storage directory " + sdForProperties.getRoot());
       }
-      loadFSImage(imageFile.getFile(), new MD5Hash(md5), target, recovery,
-          false);
+      // 加载FSImage 文件
+      loadFSImage(imageFile.getFile(), new MD5Hash(md5), target, recovery, false);
     } else {
       // We don't have any record of the md5sum
       loadFSImage(imageFile.getFile(), null, target, recovery, false);
@@ -987,10 +984,10 @@ public class FSImage implements Closeable {
     prog.endPhase(Phase.LOADING_EDITS);
     return lastAppliedTxId - prevLastAppliedTxId;
   }
-
   /**
-   * Load the image namespace from the given image file, verifying
-   * it against the MD5 sum stored in its associated .md5 file.
+   * imageFile : /tools/hadoop-3.2.1/data/namenode/current/fsimage_0000000000000000500
+   *
+   * Load the image namespace from the given image file, verifying it against the MD5 sum stored in its associated .md5 file.
    */
   private void loadFSImage(File imageFile, FSNamesystem target,
       MetaRecoveryContext recovery, boolean requireSameLayoutVersion)
@@ -1014,9 +1011,9 @@ public class FSImage implements Closeable {
     // BlockPoolId is required when the FsImageLoader loads the rolling upgrade
     // information. Make sure the ID is properly set.
     target.setBlockPoolId(this.getBlockPoolID());
-
+    //获取加载器 FSImageFormat.LoaderDelegator
     FSImageFormat.LoaderDelegator loader = FSImageFormat.newLoader(conf, target);
-
+    //加载文件
     loader.load(curFile, requireSameLayoutVersion);
 
     // Check that the image digest we loaded matches up with what

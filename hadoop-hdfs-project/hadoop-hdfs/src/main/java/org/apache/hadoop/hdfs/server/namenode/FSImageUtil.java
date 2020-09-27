@@ -50,6 +50,8 @@ public final class FSImageUtil {
     return true;
   }
 
+
+  // 加载  fsiamge 摘要
   public static FileSummary loadSummary(RandomAccessFile file)
       throws IOException {
     final int FILE_LENGTH_FIELD_SIZE = 4;

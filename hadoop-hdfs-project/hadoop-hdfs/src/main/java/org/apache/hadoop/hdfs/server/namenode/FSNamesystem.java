@@ -1121,6 +1121,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     return Collections.unmodifiableList(auditLoggers);
   }
 
+
+  // if start namenode  StartupOption value is :  REGULAR
   private void loadFSImage(StartupOption startOpt) throws IOException {
     final FSImage fsImage = getFSImage();
 
@@ -1132,7 +1134,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       startOpt = StartupOption.REGULAR;
     }
 
-
+    //
     boolean success = false;
     writeLock();
     try {
@@ -1146,6 +1148,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       if (RollingUpgradeStartupOption.ROLLBACK.matches(startOpt)) {
         rollingUpgradeInfo = null;
       }
+
       final boolean needToSave = staleImage && !haEnabled && !isRollingUpgrade(); 
       LOG.info("Need to save fs image? " + needToSave
           + " (staleImage=" + staleImage + ", haEnabled=" + haEnabled
