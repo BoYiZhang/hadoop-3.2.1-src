@@ -292,20 +292,33 @@ public class FSDirectory implements Closeable {
     this.inodeId = new INodeId();
     rootDir = createRoot(ns);
     inodeMap = INodeMap.newInstance(rootDir);
-    this.isPermissionEnabled = conf.getBoolean(
-      DFSConfigKeys.DFS_PERMISSIONS_ENABLED_KEY,
-      DFSConfigKeys.DFS_PERMISSIONS_ENABLED_DEFAULT);
+
+    // 权限: 默认开启 ==> dfs.permissions.enabled : true
+    this.isPermissionEnabled = conf.getBoolean(  DFSConfigKeys.DFS_PERMISSIONS_ENABLED_KEY, DFSConfigKeys.DFS_PERMISSIONS_ENABLED_DEFAULT);
+
+
+    // dfs.permissions.ContentSummary.subAccess : false
     this.isPermissionContentSummarySubAccess = conf.getBoolean(
         DFSConfigKeys.DFS_PERMISSIONS_CONTENT_SUMMARY_SUBACCESS_KEY,
         DFSConfigKeys.DFS_PERMISSIONS_CONTENT_SUMMARY_SUBACCESS_DEFAULT);
+
+
     this.fsOwnerShortUserName =
       UserGroupInformation.getCurrentUser().getShortUserName();
+
+
+    /// dfs.permissions.superusergroup  : supergroup
     this.supergroup = conf.get(
       DFSConfigKeys.DFS_PERMISSIONS_SUPERUSERGROUP_KEY,
       DFSConfigKeys.DFS_PERMISSIONS_SUPERUSERGROUP_DEFAULT);
+
+
+    // dfs.namenode.acls.enabled : false
     this.aclsEnabled = conf.getBoolean(
         DFSConfigKeys.DFS_NAMENODE_ACLS_ENABLED_KEY,
         DFSConfigKeys.DFS_NAMENODE_ACLS_ENABLED_DEFAULT);
+
+
     LOG.info("ACLs enabled? " + aclsEnabled);
     this.posixAclInheritanceEnabled = conf.getBoolean(
         DFSConfigKeys.DFS_NAMENODE_POSIX_ACL_INHERITANCE_ENABLED_KEY,
@@ -331,6 +344,7 @@ public class FSDirectory implements Closeable {
         DFS_NAMENODE_ACCESSTIME_PRECISION_KEY,
         DFS_NAMENODE_ACCESSTIME_PRECISION_DEFAULT);
 
+    //dfs.storage.policy.enabled : true
     this.storagePolicyEnabled =
         conf.getBoolean(DFS_STORAGE_POLICY_ENABLED_KEY,
                         DFS_STORAGE_POLICY_ENABLED_DEFAULT);
@@ -339,26 +353,38 @@ public class FSDirectory implements Closeable {
         conf.getBoolean(DFS_QUOTA_BY_STORAGETYPE_ENABLED_KEY,
                         DFS_QUOTA_BY_STORAGETYPE_ENABLED_DEFAULT);
 
+    // dfs.ls.limit : 1000
     int configuredLimit = conf.getInt(
         DFSConfigKeys.DFS_LIST_LIMIT, DFSConfigKeys.DFS_LIST_LIMIT_DEFAULT);
+
     this.lsLimit = configuredLimit>0 ?
         configuredLimit : DFSConfigKeys.DFS_LIST_LIMIT_DEFAULT;
+
+    // dfs.content-summary.limit : 5000
     this.contentCountLimit = conf.getInt(
         DFSConfigKeys.DFS_CONTENT_SUMMARY_LIMIT_KEY,
         DFSConfigKeys.DFS_CONTENT_SUMMARY_LIMIT_DEFAULT);
+
+    //dfs.content-summary.sleep-microsec 500
     this.contentSleepMicroSec = conf.getLong(
         DFSConfigKeys.DFS_CONTENT_SUMMARY_SLEEP_MICROSEC_KEY,
         DFSConfigKeys.DFS_CONTENT_SUMMARY_SLEEP_MICROSEC_DEFAULT);
     
     // filesystem limits
+    // 路径最大长度: dfs.namenode.fs-limits.max-component-length : 255
     this.maxComponentLength = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_MAX_COMPONENT_LENGTH_KEY,
         DFSConfigKeys.DFS_NAMENODE_MAX_COMPONENT_LENGTH_DEFAULT);
 
     // 目录最大数量 1024 * 1024 = 1048576  ≈ 100 万
+    // dfs.namenode.fs-limits.max-directory-items :  1024 * 1024
     this.maxDirItems = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_MAX_DIRECTORY_ITEMS_KEY,
         DFSConfigKeys.DFS_NAMENODE_MAX_DIRECTORY_ITEMS_DEFAULT);
+
+
+    // dfs.namenode.fs-limits.max-xattrs-per-inod: 32
+    // inode的属性最大限制 32
     this.inodeXAttrsLimit = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_MAX_XATTRS_PER_INODE_KEY,
         DFSConfigKeys.DFS_NAMENODE_MAX_XATTRS_PER_INODE_DEFAULT);
@@ -383,11 +409,15 @@ public class FSDirectory implements Closeable {
             + DFSConfigKeys.DFS_NAMENODE_MAX_DIRECTORY_ITEMS_KEY
             + " to a value less than 1 or greater than " + MAX_DIR_ITEMS);
 
+
+    // dfs.namenode.name.cache.threshold: 10
+    // 经常访问的文件的访问次数超过此阈值的次数被缓存在FSDirectory nameCache中。
     int threshold = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_NAME_CACHE_THRESHOLD_KEY,
         DFSConfigKeys.DFS_NAMENODE_NAME_CACHE_THRESHOLD_DEFAULT);
     NameNode.LOG.info("Caching file names occurring more than " + threshold
         + " times");
+
     nameCache = new NameCache<ByteArray>(threshold);
     namesystem = ns;
     this.editLog = ns.getEditLog();
@@ -1286,6 +1316,7 @@ public class FSDirectory implements Closeable {
   }
 
   /**
+   * 将子级添加到INodesInPath指定的路径的末尾。
    * Add a child to the end of the path specified by INodesInPath.
    * @param existing the INodesInPath containing all the ancestral INodes
    * @param inode the new INode to add
