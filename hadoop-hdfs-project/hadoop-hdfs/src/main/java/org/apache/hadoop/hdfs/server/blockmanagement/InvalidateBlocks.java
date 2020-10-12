@@ -59,10 +59,13 @@ import org.slf4j.Logger;
  */
 @InterfaceAudience.Private
 class InvalidateBlocks {
+
   private final Map<DatanodeInfo, LightWeightHashSet<Block>> nodeToBlocks = new HashMap<>();
   private final Map<DatanodeInfo, LightWeightHashSet<Block>> nodeToECBlocks = new HashMap<>();
+
   private final LongAdder numBlocks = new LongAdder();
   private final LongAdder numECBlocks = new LongAdder();
+
   private final int blockInvalidateLimit;
   private final BlockIdManager blockIdManager;
 

@@ -67,7 +67,7 @@ public class CorruptReplicasMap{
     // 没有指明
     NONE,                // not specified.
 
-    // 通配情况
+    // 未知原因
     ANY,                 // wildcard reason
 
     // Datanode上副本的时间戳与Namenode上数据块的时间戳不一致
@@ -79,7 +79,7 @@ public class CorruptReplicasMap{
     // 无效的状态
     INVALID_STATE,       // invalid state
 
-    // 客户端或者数据节点汇报
+    // client或datanode报告了损坏
     CORRUPTION_REPORTED  // client or datanode reported the corruption
   }
 

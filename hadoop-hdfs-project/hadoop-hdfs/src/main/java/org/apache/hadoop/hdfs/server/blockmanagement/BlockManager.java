@@ -345,13 +345,8 @@ public class BlockManager implements BlockStatsMXBean {
    * CorruptReplicasMap类的实例， 保存损坏的数据块副本（corruptReplica） ，
    * Datanode的数据块扫描器发现的错误的数据块副本会放入这个集合中。
    *
-   *
    * CorruptReplicasMap保存的是损坏的数据块副本与保存这个副本的Datanode的对应关系（Block ->Datanode的映射关系） ，
    * 注意这里同时还保存了这个副本损坏的原因。
-   *
-   *
-   *
-   *
    * */
   final CorruptReplicasMap corruptReplicas = new CorruptReplicasMap();
 
@@ -361,10 +356,8 @@ public class BlockManager implements BlockStatsMXBean {
    * For a striped block to invalidate, we should track its individual internal
    * blocks.
    *
-   *
    * invalidateBlocks:
    * InvalidateBlocks类的实例， 保存等待删除的数据块副本。
-   * 等待删除的数据块副本来自corruptReplicas和excessReplicateMap这两个集合，
    * 加入这个队列中的数据块副本会由Namenode通过名字节点指令向对应的Datanode下发删除指令。
    *
    */
@@ -406,11 +399,11 @@ public class BlockManager implements BlockStatsMXBean {
   private final ExcessRedundancyMap excessRedundancyMap = new ExcessRedundancyMap();
 
   /**
+   * 等待复制的数据块副本集合
    * Store set of Blocks that need to be replicated 1 or more times.
    * We also store pending reconstruction-orders.
    */
-  public final LowRedundancyBlocks neededReconstruction =
-      new LowRedundancyBlocks();
+  public final LowRedundancyBlocks neededReconstruction =  new LowRedundancyBlocks();
 
   @VisibleForTesting
   final PendingReconstructionBlocks pendingReconstruction;
@@ -4846,6 +4839,7 @@ public class BlockManager implements BlockStatsMXBean {
             //统计任务.
             computeDatanodeWork();
 
+            //处理重试挂起任务
             processPendingReconstructions();
 
             // 删除那些已经不是stale状态的副本。

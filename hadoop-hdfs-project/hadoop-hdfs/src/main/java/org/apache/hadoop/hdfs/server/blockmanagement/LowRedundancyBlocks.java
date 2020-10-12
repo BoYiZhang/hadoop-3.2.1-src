@@ -229,6 +229,7 @@ class LowRedundancyBlocks implements Iterable<BlockInfo> {
   private int getPriorityContiguous(int curReplicas, int readOnlyReplicas,
       int outOfServiceReplicas, int expectedReplicas) {
     if (curReplicas == 0) {
+      // //当前数据块没有有效的副本， 并且有些副本所在的Datanode正处于离线中， 优先级 0
       // If there are zero non-decommissioned replicas but there are
       // some out of service replicas, then assign them highest priority
       if (outOfServiceReplicas > 0) {
@@ -240,17 +241,20 @@ class LowRedundancyBlocks implements Iterable<BlockInfo> {
         return QUEUE_HIGHEST_PRIORITY;
       }
       //all we have are corrupt blocks
+      //当前数据块的所有副本都是损坏的， 优先级4
       return QUEUE_WITH_CORRUPT_BLOCKS;
     } else if (curReplicas == 1) {
-      // only one replica, highest risk of loss
-      // highest priority
+      // only one replica, highest risk of loss  highest priority
+      //只有一个有效副本， 数据块可能随时丢失， 优先级0
       return QUEUE_HIGHEST_PRIORITY;
     } else if ((curReplicas * 3) < expectedReplicas) {
-      //can only afford one replica loss
-      //this is considered very insufficiently redundant blocks.
+      //can only afford one replica loss this is considered very insufficiently redundant blocks.
+
+      //当前副本数小于期望副本数的三分之一， 优先级1
       return QUEUE_VERY_LOW_REDUNDANCY;
     } else {
       //add to the normal queue for insufficiently redundant blocks
+      //正常备份状态， 优先级2
       return QUEUE_LOW_REDUNDANCY;
     }
   }
