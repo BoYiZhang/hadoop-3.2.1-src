@@ -28,8 +28,7 @@ import org.apache.hadoop.io.*;
 import javax.annotation.Nonnull;
 
 /**************************************************
- * A Block is a Hadoop FS primitive, identified by a
- * long.
+ * A Block is a Hadoop FS primitive, identified by a long.
  *
  **************************************************/
 @InterfaceAudience.Private
@@ -95,7 +94,7 @@ public class Block implements Writable, Comparable<Block> {
   // numBytes是这个数据块的大小（单位是字节） ;
   private long numBytes;
 
-  //generationStamp是这个数据块的时间戳（联想GenerationStamp这个类）
+  //generationStamp是这个数据块的时间戳
   private long generationStamp;
 
   public Block() {this(0, 0, 0);}

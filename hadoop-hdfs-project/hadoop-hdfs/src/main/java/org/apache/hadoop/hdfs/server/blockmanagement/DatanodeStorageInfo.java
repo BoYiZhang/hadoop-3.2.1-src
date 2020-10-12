@@ -87,15 +87,29 @@ public class DatanodeStorageInfo {
     storageType = storage.getStorageType();
   }
 
+  //  Datanode 的信息
   private final DatanodeDescriptor dn;
+
+  // 存储策略id
   private final String storageID;
+
+  //数据存储类型
   private StorageType storageType;
+
+  //状态[三种] : NORMAL  READ_ONLY_SHARED[用于调试]  FAILED
   private State state;
 
+  //容量
   private long capacity;
+
   private long dfsUsed;
+
+
   private long nonDfsUsed;
+
+  //剩余容量
   private volatile long remaining;
+
   private long blockPoolUsed;
 
   private final FoldedTreeSet<BlockInfo> blocks = new FoldedTreeSet<>();
