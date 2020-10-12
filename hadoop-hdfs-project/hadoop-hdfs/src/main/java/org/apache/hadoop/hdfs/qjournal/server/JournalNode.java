@@ -62,7 +62,9 @@ import java.util.Map;
 /**
  * The JournalNode is a daemon which allows namenodes using
  * the QuorumJournalManager to log and retrieve edits stored
- * remotely. It is a thin wrapper around a local edit log
+ * remotely.
+ *
+ * It is a thin wrapper around a local edit log
  * directory with the addition of facilities to participate
  * in the quorum protocol.
  */

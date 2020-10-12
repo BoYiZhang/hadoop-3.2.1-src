@@ -82,6 +82,10 @@ import com.google.protobuf.TextFormat;
  * A JournalNode can manage journals for several clusters at once.
  * Each such journal is entirely independent despite being hosted by
  * the same JVM.
+ *
+ * 一个JournalNode可以同时管理多个机器的 journals
+ * 尽管由同一个JVM托管，每个这样的日志都是完全独立的。
+ *
  */
 public class Journal implements Closeable {
   static final Logger LOG = LoggerFactory.getLogger(Journal.class);
