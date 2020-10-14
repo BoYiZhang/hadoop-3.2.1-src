@@ -41,30 +41,49 @@ import static org.apache.hadoop.hdfs.DFSUtilClient.percent2String;
 @InterfaceAudience.Private
 @InterfaceStability.Evolving
 public class DatanodeInfo extends DatanodeID implements Node {
+  //容量
   private long capacity;
+  //使用的空间
   private long dfsUsed;
+  //非hadoop文件系统所使用的空间
   private long nonDfsUsed;
+  //剩余空间
   private long remaining;
+  //数据块池使用量
   private long blockPoolUsed;
+  //缓存容量
   private long cacheCapacity;
+  //缓存使用量
   private long cacheUsed;
+  //上次更新时间
   private long lastUpdate;
+
   private long lastUpdateMonotonic;
+
+  // xceiver数量
   private int xceiverCount;
+
+  //地址
   private volatile String location = NetworkTopology.DEFAULT_RACK;
+
+  //软件版本
   private String softwareVersion;
+
   private List<String> dependentHostNames = new LinkedList<>();
+
   private String upgradeDomain;
+
   public static final DatanodeInfo[] EMPTY_ARRAY = {};
+
   private int numBlocks;
 
   // Datanode administrative states
   public enum AdminStates {
-    NORMAL("In Service"),
-    DECOMMISSION_INPROGRESS("Decommission In Progress"),
-    DECOMMISSIONED("Decommissioned"),
-    ENTERING_MAINTENANCE("Entering Maintenance"),
-    IN_MAINTENANCE("In Maintenance");
+    NORMAL("In Service"), //服务中
+    DECOMMISSION_INPROGRESS("Decommission In Progress"), //退役中
+    DECOMMISSIONED("Decommissioned"),   //退役
+    ENTERING_MAINTENANCE("Entering Maintenance"), //这维护中
+    IN_MAINTENANCE("In Maintenance"); //维护中
 
     final String value;
 

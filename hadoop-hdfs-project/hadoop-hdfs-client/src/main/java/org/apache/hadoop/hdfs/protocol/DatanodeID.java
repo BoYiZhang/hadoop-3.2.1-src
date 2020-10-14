@@ -44,16 +44,39 @@ public class DatanodeID implements Comparable<DatanodeID> {
   public static final DatanodeID EMPTY_DATANODE_ID = new DatanodeID("null",
       "null", "null", 0, 0, 0, 0);
 
+  // IP地址
   private String ipAddr;     // IP address
+
+
   private ByteString ipAddrBytes; // ipAddr ByteString to save on PB serde
+
+  // Datanode声明的hostname
   private String hostName;   // hostname claimed by datanode
+
+
   private ByteString hostNameBytes; // hostName ByteString to save on PB serde
+
+  //真实连接的hostname
   private String peerHostName; // hostname from the actual connection
+
+  //数据传输端口
   private int xferPort;      // data streaming port
+
+
+  // info服务端口
   private int infoPort;      // info server port
+
+  // info服务端口
   private int infoSecurePort; // info server port
+
+  // IPC服务端口
   private int ipcPort;       // IPC server port
+
+
+  //数据传输地址
   private String xferAddr;
+
+
 
   /**
    * UUID identifying a given datanode. For upgraded Datanodes this is the

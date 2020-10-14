@@ -22,6 +22,8 @@ import org.apache.hadoop.fs.StorageType;
 import java.util.UUID;
 
 /**
+ *
+ * 类捕获Datanode中存储的信息
  * Class captures information of a storage in Datanode.
  */
 public class DatanodeStorage {

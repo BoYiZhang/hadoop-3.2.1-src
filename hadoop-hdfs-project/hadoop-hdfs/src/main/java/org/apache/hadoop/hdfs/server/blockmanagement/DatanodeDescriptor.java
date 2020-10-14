@@ -152,27 +152,23 @@ public class DatanodeDescriptor extends DatanodeInfo {
   private final LeavingServiceStatus leavingServiceStatus =
       new LeavingServiceStatus();
 
-  protected final Map<String, DatanodeStorageInfo> storageMap =
-      new HashMap<>();
+  protected final Map<String, DatanodeStorageInfo> storageMap = new HashMap<>();
 
   /**
    * The blocks which we want to cache on this DataNode.
    */
-  private final CachedBlocksList pendingCached = 
-      new CachedBlocksList(this, CachedBlocksList.Type.PENDING_CACHED);
+  private final CachedBlocksList pendingCached =   new CachedBlocksList(this, CachedBlocksList.Type.PENDING_CACHED);
 
   /**
    * The blocks which we know are cached on this datanode.
    * This list is updated by periodic cache reports.
    */
-  private final CachedBlocksList cached = 
-      new CachedBlocksList(this, CachedBlocksList.Type.CACHED);
+  private final CachedBlocksList cached =   new CachedBlocksList(this, CachedBlocksList.Type.CACHED);
 
   /**
    * The blocks which we want to uncache on this DataNode.
    */
-  private final CachedBlocksList pendingUncached = 
-      new CachedBlocksList(this, CachedBlocksList.Type.PENDING_UNCACHED);
+  private final CachedBlocksList pendingUncached =  new CachedBlocksList(this, CachedBlocksList.Type.PENDING_UNCACHED);
 
   /**
    * The time when the last batch of caching directives was sent, in
@@ -182,6 +178,7 @@ public class DatanodeDescriptor extends DatanodeInfo {
 
   // isAlive == heartbeats.contains(this)
   // This is an optimization, because contains takes O(n) time on Arraylist
+  // isAlive记录当前Datanode是否有效；
   private boolean isAlive = false;
   private boolean needKeyUpdate = false;
   private boolean forceRegistration = false;
@@ -195,11 +192,10 @@ public class DatanodeDescriptor extends DatanodeInfo {
   private long bandwidth;
 
   /** A queue of blocks to be replicated by this datanode */
-  private final BlockQueue<BlockTargetPair> replicateBlocks =
-      new BlockQueue<>();
+  private final BlockQueue<BlockTargetPair> replicateBlocks = new BlockQueue<>();
+
   /** A queue of blocks to be erasure coded by this datanode */
-  private final BlockQueue<BlockECReconstructionInfo> erasurecodeBlocks =
-      new BlockQueue<>();
+  private final BlockQueue<BlockECReconstructionInfo> erasurecodeBlocks =  new BlockQueue<>();
   /** A queue of blocks to be recovered by this datanode */
   private final BlockQueue<BlockInfo> recoverBlocks = new BlockQueue<>();
   /** A set of blocks to be invalidated by this datanode */
@@ -208,9 +204,11 @@ public class DatanodeDescriptor extends DatanodeInfo {
 
   /* Variables for maintaining number of blocks scheduled to be written to
    * this storage. This count is approximate and might be slightly bigger
-   * in case of errors (e.g. datanode does not report if an error occurs
-   * while writing the block).
+   * in case of errors (e.g. datanode does not report if an error occurs  while writing the block).
    */
+  // currApproxBlocksScheduled等几个成员变量用于估计Datanode的负载，
+  // 在写文件操作分配数据块或进行数据块复制时， 根据节点负载信息， 选择比较空
+  // 闲的节点作为目标节点
   private EnumCounters<StorageType> currApproxBlocksScheduled
       = new EnumCounters<>(StorageType.class);
   private EnumCounters<StorageType> prevApproxBlocksScheduled
