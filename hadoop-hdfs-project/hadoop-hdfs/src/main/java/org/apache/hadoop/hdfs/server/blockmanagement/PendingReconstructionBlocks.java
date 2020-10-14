@@ -57,9 +57,8 @@ class PendingReconstructionBlocks {
   //
   // It might take anywhere between 5 to 10 minutes before
   // a request is timed out.
-  //
-  private long timeout =
-      DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_DEFAULT * 1000;
+  // 5 * 60 * 1000 = 5分钟
+  private long timeout = DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_DEFAULT * 1000;
   private final static long DEFAULT_RECHECK_INTERVAL = 5 * 60 * 1000;
 
   PendingReconstructionBlocks(long timeoutPeriod) {
@@ -235,6 +234,8 @@ class PendingReconstructionBlocks {
   /*
    * A periodic thread that scans for blocks that never finished
    * their reconstruction request.
+   *
+   * 一个周期性线程，它扫描从未完成其重建请求的块。
    */
   class PendingReconstructionMonitor implements Runnable {
     @Override
@@ -251,17 +252,19 @@ class PendingReconstructionBlocks {
     }
 
     /**
+     * 遍历所有项并检测超时项
      * Iterate through all items and detect timed-out items
      */
     void pendingReconstructionCheck() {
       synchronized (pendingReconstructions) {
-        Iterator<Map.Entry<BlockInfo, PendingBlockInfo>> iter =
-            pendingReconstructions.entrySet().iterator();
+        Iterator<Map.Entry<BlockInfo, PendingBlockInfo>> iter =  pendingReconstructions.entrySet().iterator();
         long now = monotonicNow();
         LOG.debug("PendingReconstructionMonitor checking Q");
         while (iter.hasNext()) {
           Map.Entry<BlockInfo, PendingBlockInfo> entry = iter.next();
           PendingBlockInfo pendingBlock = entry.getValue();
+
+          // timeout 默认5分钟
           if (now > pendingBlock.getTimeStamp() + timeout) {
             BlockInfo block = entry.getKey();
             synchronized (timedOutItems) {

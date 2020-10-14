@@ -262,7 +262,7 @@ class FSDirWriteFileOp {
 
     //保存 block
     saveAllocatedBlock(fsn, src, inodesInPath, newBlock, targets, blockType);
-
+    //持久化新的block信息
     persistNewBlock(fsn, src, pendingFile);
 
 
@@ -808,7 +808,7 @@ class FSDirWriteFileOp {
     logAllocatedBlock(src, b);
     DatanodeStorageInfo.incrementBlocksScheduled(targets);
   }
-
+  // src : /spark-examples_2.11-2.3.1.jar._COPYING_      b = blk_1073741828_1004
   private static void logAllocatedBlock(String src, BlockInfo b) {
     if (!NameNode.stateChangeLog.isInfoEnabled()) {
       return;

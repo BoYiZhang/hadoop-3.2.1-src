@@ -490,14 +490,24 @@ public class BlockManager implements BlockStatsMXBean {
   /** Storages accessible from multiple DNs. */
   private final ProvidedStorageMap providedStorageMap;
 
-  public BlockManager(final Namesystem namesystem, boolean haEnabled,
-      final Configuration conf) throws IOException {
+  public BlockManager(final Namesystem namesystem, boolean haEnabled, final Configuration conf) throws IOException {
+
+    //设置Namesystem对象
     this.namesystem = namesystem;
+
+    // 构建 DatanodeManager
     datanodeManager = new DatanodeManager(this, namesystem, conf);
+
+    // 获取心跳管理器 HeartbeatManager
     heartbeatManager = datanodeManager.getHeartbeatManager();
+
+    // 构建BlockIdManager 对象
     this.blockIdManager = new BlockIdManager(this);
+
+    // dfs.namenode.blocks.per.postponedblocks.rescan : 10000
     blocksPerPostpondedRescan = (int)Math.min(Integer.MAX_VALUE,
         datanodeManager.getBlocksPerPostponedMisreplicatedBlocksRescan());
+    // 0
     rescannedMisreplicatedBlocks =
         new ArrayList<Block>(blocksPerPostpondedRescan);
     startupDelayBlockDeletionInMs = conf.getLong(
@@ -509,13 +519,17 @@ public class BlockManager implements BlockStatsMXBean {
         blockIdManager);
 
     // Compute the map capacity by allocating 2% of total memory
-    blocksMap = new BlocksMap(
-        LightWeightGSet.computeCapacity(2.0, "BlocksMap"));
+    blocksMap = new BlocksMap(  LightWeightGSet.computeCapacity(2.0, "BlocksMap"));
+
+
     placementPolicies = new BlockPlacementPolicies(
       conf, datanodeManager.getFSClusterStats(),
       datanodeManager.getNetworkTopology(),
       datanodeManager.getHost2DatanodeMap());
+
     storagePolicySuite = BlockStoragePolicySuite.createDefaultSuite();
+
+    // dfs.namenode.reconstruction.pending.timeout-sec : 300
     pendingReconstruction = new PendingReconstructionBlocks(conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY,
         DFSConfigKeys.DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_DEFAULT)
@@ -523,20 +537,27 @@ public class BlockManager implements BlockStatsMXBean {
 
     createSPSManager(conf);
 
+    // 构建createBlockTokenSecretManager
     blockTokenSecretManager = createBlockTokenSecretManager(conf);
 
     providedStorageMap = new ProvidedStorageMap(namesystem, this, conf);
 
+    // dfs.corruptfilesreturned.max  500
     this.maxCorruptFilesReturned = conf.getInt(
       DFSConfigKeys.DFS_DEFAULT_MAX_CORRUPT_FILES_RETURNED_KEY,
       DFSConfigKeys.DFS_DEFAULT_MAX_CORRUPT_FILES_RETURNED);
+
+    // 副本数:  dfs.replication  3
     this.defaultReplication = conf.getInt(DFSConfigKeys.DFS_REPLICATION_KEY,
         DFSConfigKeys.DFS_REPLICATION_DEFAULT);
 
+    // 副本最大值: dfs.replication.max  512
     final int maxR = conf.getInt(DFSConfigKeys.DFS_REPLICATION_MAX_KEY,
         DFSConfigKeys.DFS_REPLICATION_MAX_DEFAULT);
-    final int minR = conf.getInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_MIN_KEY,
-        DFSConfigKeys.DFS_NAMENODE_REPLICATION_MIN_DEFAULT);
+
+    // 副本最小值 : dfs.namenode.replication.min 1
+    final int minR = conf.getInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_MIN_KEY, DFSConfigKeys.DFS_NAMENODE_REPLICATION_MIN_DEFAULT);
+
     if (minR <= 0)
       throw new IOException("Unexpected configuration parameters: "
           + DFSConfigKeys.DFS_NAMENODE_REPLICATION_MIN_KEY
@@ -551,32 +572,47 @@ public class BlockManager implements BlockStatsMXBean {
           + " = " + minR + " > "
           + DFSConfigKeys.DFS_REPLICATION_MAX_KEY
           + " = " + maxR);
+
+    //设置副本的最大值 512 和 最小值  1      short 最值: 3万多...
     this.minReplication = (short)minR;
     this.maxReplication = (short)maxR;
 
+
+    // dfs.namenode.replication.max-streams : 2
     this.maxReplicationStreams =
         conf.getInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_MAX_STREAMS_KEY,
             DFSConfigKeys.DFS_NAMENODE_REPLICATION_MAX_STREAMS_DEFAULT);
+
+    // dfs.namenode.replication.max-streams-hard-limit  4
     this.replicationStreamsHardLimit =
         conf.getInt(
             DFSConfigKeys.DFS_NAMENODE_REPLICATION_STREAMS_HARD_LIMIT_KEY,
             DFSConfigKeys.DFS_NAMENODE_REPLICATION_STREAMS_HARD_LIMIT_DEFAULT);
+
+
     this.blocksInvalidateWorkPct = DFSUtil.getInvalidateWorkPctPerIteration(conf);
+
+    // dfs.namenode.replication.work.multiplier.per.iteration : 2
     this.blocksReplWorkMultiplier = DFSUtil.getReplWorkMultiplier(conf);
 
+    // dfs.namenode.redundancy.interval.seconds  3
     this.redundancyRecheckIntervalMs = conf.getTimeDuration(
         DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY,
         DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_DEFAULT,
         TimeUnit.SECONDS, TimeUnit.MILLISECONDS);
-
+    // dfs.namenode.storageinfo.defragment.interval.ms : 10 * 60 * 1000
     this.storageInfoDefragmentInterval =
       conf.getLong(
           DFSConfigKeys.DFS_NAMENODE_STORAGEINFO_DEFRAGMENT_INTERVAL_MS_KEY,
           DFSConfigKeys.DFS_NAMENODE_STORAGEINFO_DEFRAGMENT_INTERVAL_MS_DEFAULT);
+
+    // dfs.namenode.storageinfo.defragment.timeout.ms : 4
     this.storageInfoDefragmentTimeout =
       conf.getLong(
           DFSConfigKeys.DFS_NAMENODE_STORAGEINFO_DEFRAGMENT_TIMEOUT_MS_KEY,
           DFSConfigKeys.DFS_NAMENODE_STORAGEINFO_DEFRAGMENT_TIMEOUT_MS_DEFAULT);
+
+    // dfs.namenode.storageinfo.defragment.ratio : 0.75f
     this.storageInfoDefragmentRatio =
       conf.getDouble(
           DFSConfigKeys.DFS_NAMENODE_STORAGEINFO_DEFRAGMENT_RATIO_KEY,
@@ -585,10 +621,12 @@ public class BlockManager implements BlockStatsMXBean {
     this.encryptDataTransfer =
         conf.getBoolean(DFSConfigKeys.DFS_ENCRYPT_DATA_TRANSFER_KEY,
             DFSConfigKeys.DFS_ENCRYPT_DATA_TRANSFER_DEFAULT);
-
+    // dfs.namenode.max-num-blocks-to-log : 1000 [对块报告后由NAMENODE打印到日志块的数量进行限制。]
     this.maxNumBlocksToLog =
         conf.getLong(DFSConfigKeys.DFS_MAX_NUM_BLOCKS_TO_LOG_KEY,
             DFSConfigKeys.DFS_MAX_NUM_BLOCKS_TO_LOG_DEFAULT);
+
+
     this.numBlocksPerIteration = conf.getInt(
         DFSConfigKeys.DFS_BLOCK_MISREPLICATION_PROCESSING_LIMIT,
         DFSConfigKeys.DFS_BLOCK_MISREPLICATION_PROCESSING_LIMIT_DEFAULT);
@@ -602,6 +640,7 @@ public class BlockManager implements BlockStatsMXBean {
           + DFSConfigKeys.DFS_NAMENODE_MAINTENANCE_REPLICATION_MIN_KEY
           + " = " + minMaintenanceR + " < 0");
     }
+
     if (minMaintenanceR > defaultReplication) {
       throw new IOException("Unexpected configuration parameters: "
           + DFSConfigKeys.DFS_NAMENODE_MAINTENANCE_REPLICATION_MIN_KEY
@@ -614,7 +653,11 @@ public class BlockManager implements BlockStatsMXBean {
     long heartbeatIntervalSecs = conf.getTimeDuration(
         DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY,
         DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_DEFAULT, TimeUnit.SECONDS);
+
+
     long blockRecoveryTimeout = getBlockRecoveryTimeout(heartbeatIntervalSecs);
+
+
     pendingRecoveryBlocks = new PendingRecoveryBlocks(blockRecoveryTimeout);
 
     this.blockReportLeaseManager = new BlockReportLeaseManager(conf);
@@ -624,8 +667,17 @@ public class BlockManager implements BlockStatsMXBean {
     int queueSize = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_BLOCKREPORT_QUEUE_SIZE_KEY,
         DFSConfigKeys.DFS_NAMENODE_BLOCKREPORT_QUEUE_SIZE_DEFAULT);
+
     blockReportThread = new BlockReportProcessingThread(queueSize);
 
+
+//    defaultReplication         = 3      默认副本 3
+//    maxReplication             = 512    最大副本 512
+//    minReplication             = 1      最小副本 1
+//    maxReplicationStreams      = 2      最大复制流限制(可能会影响到datanode)
+//    redundancyRecheckInterval  = 3000ms 检查频率
+//    encryptDataTransfer        = false  是否颁发块加密密钥。
+//    maxNumBlocksToLog          = 1000   块报告期间要记录信息的最大块数。
     LOG.info("defaultReplication         = {}", defaultReplication);
     LOG.info("maxReplication             = {}", maxReplication);
     LOG.info("minReplication             = {}", minReplication);
@@ -746,13 +798,19 @@ public class BlockManager implements BlockStatsMXBean {
   }
 
   public void activate(Configuration conf, long blockTotal) {
+
     pendingReconstruction.start();
     datanodeManager.activate(conf);
+
     this.redundancyThread.setName("RedundancyMonitor");
     this.redundancyThread.start();
+
+
     storageInfoDefragmenterThread.setName("StorageInfoMonitor");
     storageInfoDefragmenterThread.start();
+
     this.blockReportThread.start();
+
     mxBeanName = MBeans.register("NameNode", "BlockStats", this);
     bmSafeMode.activate(blockTotal);
   }
@@ -1928,13 +1986,19 @@ public class BlockManager implements BlockStatsMXBean {
    * @return total number of block for deletion
    */
   int computeInvalidateWork(int nodesToProcess) {
+
+    //获取要删除的block所在的datanode节点
     final List<DatanodeInfo> nodes = invalidateBlocks.getDatanodes();
+
+    //打乱排序
     Collections.shuffle(nodes);
 
+    //计算出需要操作的任务数量 (取 nodes 和 nodesToProcess 中的最小值 )
     nodesToProcess = Math.min(nodes.size(), nodesToProcess);
 
     int blockCnt = 0;
     for (DatanodeInfo dnInfo : nodes) {
+      //将要删除的块 加入到 datanode对应的 DatanodeDescriptor#invalidateBlocks 缓存中, 会通过心跳的方式发送给具体的datanode执行删除操作.
       int blocks = invalidateWorkForOneNode(dnInfo);
       if (blocks > 0) {
         blockCnt += blocks;
@@ -2016,9 +2080,12 @@ public class BlockManager implements BlockStatsMXBean {
 
 
     // Step 2: choose target nodes for each reconstruction task
-    //         为每个reconstruction 任务, 选择目标节点
+    //         为每个 reconstruction 任务, 选择目标节点
     final Set<Node> excludedNodes = new HashSet<>();
     for(BlockReconstructionWork rw : reconWork){
+
+      // 从目标中排除所有包含的节点。
+      // 此列表包括停用或损坏的节点。
       // Exclude all of the containing nodes from being targets.
       // This list includes decommissioning or corrupt nodes.
       excludedNodes.clear();
@@ -2027,6 +2094,7 @@ public class BlockManager implements BlockStatsMXBean {
       }
 
       // choose replication targets: NOT HOLDING THE GLOBAL LOCK
+      // 选择复制目标：不保持全局锁
       final BlockPlacementPolicy placementPolicy =
           placementPolicies.getPolicy(rw.getBlock().getBlockType());
       rw.chooseTargets(placementPolicy, storagePolicySuite, excludedNodes);
@@ -2099,9 +2167,13 @@ public class BlockManager implements BlockStatsMXBean {
     List<DatanodeStorageInfo> liveReplicaNodes = new ArrayList<>();
     NumberReplicas numReplicas = new NumberReplicas();
     List<Byte> liveBlockIndices = new ArrayList<>();
+
+    //选取源block节点
     final DatanodeDescriptor[] srcNodes = chooseSourceDatanodes(block,
         containingNodes, liveReplicaNodes, numReplicas,
         liveBlockIndices, priority);
+
+
     short requiredRedundancy = getExpectedLiveRedundancyNum(block,
         numReplicas);
     if(srcNodes == null || srcNodes.length == 0) {
@@ -2156,6 +2228,7 @@ public class BlockManager implements BlockStatsMXBean {
           containingNodes, liveReplicaNodes, additionalReplRequired,
           priority, indices);
     } else {
+      //构建副本任务
       return new ReplicationWork(block, bc, srcNodes,
           containingNodes, liveReplicaNodes, additionalReplRequired,
           priority);
@@ -2468,6 +2541,7 @@ public class BlockManager implements BlockStatsMXBean {
    * and put them back into the neededReconstruction queue
    */
   void processPendingReconstructions() {
+    // 获取超时的BlockInfo 信息
     BlockInfo[] timedOutItems = pendingReconstruction.getTimedOutBlocks();
     if (timedOutItems != null) {
       namesystem.writeLock();
@@ -2483,6 +2557,7 @@ public class BlockManager implements BlockStatsMXBean {
           }
           NumberReplicas num = countNodes(timedOutItems[i]);
           if (isNeededReconstruction(bi, num)) {
+            // 重新加入neededReconstruction
             neededReconstruction.add(bi, num.liveReplicas(),
                 num.readOnlyReplicas(), num.outOfServiceReplicas(),
                 getExpectedRedundancyNum(bi));
@@ -2790,9 +2865,12 @@ public class BlockManager implements BlockStatsMXBean {
   }
 
   /**
+   * 重新扫描延迟/挂起的blocks 清单.
    * Rescan the list of blocks which were previously postponed.
    */
   void rescanPostponedMisreplicatedBlocks() {
+
+    //如果没有延迟/挂起的任务,退出...
     if (getPostponedMisreplicatedBlocksCount() == 0) {
       return;
     }
@@ -2804,7 +2882,7 @@ public class BlockManager implements BlockStatsMXBean {
       for (int i=0; i < blocksPerPostpondedRescan && it.hasNext(); i++) {
         Block b = it.next();
         it.remove();
-
+        //获取block信息
         BlockInfo bi = getStoredBlock(b);
         if (bi == null) {
           LOG.debug("BLOCK* rescanPostponedMisreplicatedBlocks: " +
@@ -2812,9 +2890,12 @@ public class BlockManager implements BlockStatsMXBean {
               "in block map.", b);
           continue;
         }
+        // 处理BlockInfo, 并返回响应结果
         MisReplicationResult res = processMisReplicatedBlock(bi);
         LOG.debug("BLOCK* rescanPostponedMisreplicatedBlocks: " +
             "Re-scanned block {}, result is {}", b, res);
+
+        // 将无法正常处理的BlockInfo放入到rescannedMisreplicatedBlocks队列中
         if (res == MisReplicationResult.POSTPONE) {
           rescannedMisreplicatedBlocks.add(b);
         }
@@ -2838,6 +2919,8 @@ public class BlockManager implements BlockStatsMXBean {
     // Modify the (block-->datanode) map, according to the difference
     // between the old and new block report.
     //
+
+    //reportDiffSorted()方法获取需要更新的不同队列
     Collection<BlockInfoToAdd> toAdd = new LinkedList<>();
     Collection<BlockInfo> toRemove = new TreeSet<>();
     Collection<Block> toInvalidate = new LinkedList<>();
@@ -2874,6 +2957,7 @@ public class BlockManager implements BlockStatsMXBean {
                      toAdd, toRemove, toInvalidate, toCorrupt, toUC);
 
 
+    //调用对应方法处理不同的队列
     DatanodeDescriptor node = storageInfo.getDatanodeDescriptor();
     // Process the blocks on each queue
     for (StatefulBlockInfo b : toUC) { 
@@ -3061,6 +3145,7 @@ public class BlockManager implements BlockStatsMXBean {
       Collection<StatefulBlockInfo> toUC) { // add to under-construction list
 
     // The blocks must be sorted and the storagenodes blocks must be sorted
+    // blocks必须排序，storagenodes blocks 必须排序
     Iterator<BlockInfo> storageBlocksIterator = storageInfo.getBlockIterator();
     DatanodeDescriptor dn = storageInfo.getDatanodeDescriptor();
     BlockInfo storageBlock = null;
@@ -3095,23 +3180,27 @@ public class BlockManager implements BlockStatsMXBean {
         if (storageBlock == null ||
             (cmp = Long.compare(replicaID, storageBlock.getBlockId())) < 0) {
           // Check if block is available in NN but not yet on this storage
+          // 检查block在NN中是否可用，但此存储器上还没有
           BlockInfo nnBlock = blocksMap.getStoredBlock(new Block(replicaID));
           if (nnBlock != null) {
             reportDiffSortedInner(storageInfo, replica, reportedState,
                                   nnBlock, toAdd, toCorrupt, toUC);
           } else {
+            // 在任何地方都找不到副本，因此应该使其无效
             // Replica not found anywhere so it should be invalidated
             toInvalidate.add(new Block(replica));
           }
           break;
         } else if (cmp == 0) {
           // Replica matched current storageblock
+          // 副本与当前存储块匹配
           reportDiffSortedInner(storageInfo, replica, reportedState,
                                 storageBlock, toAdd, toCorrupt, toUC);
           storageBlock = null;
         } else {
           // replica has higher ID than storedBlock
           // Remove all stored blocks with IDs lower than replica
+          // replica 的ID高于storedBlock 删除ID低于replica的所有存储块
           do {
             toRemove.add(storageBlock);
             storageBlock = storageBlocksIterator.hasNext()
@@ -3542,7 +3631,7 @@ public class BlockManager implements BlockStatsMXBean {
     if (!isPopulatingReplQueues()) {
       return storedBlock;
     }
-
+    // 处理低冗余/额外冗余
     // handle low redundancy/extra redundancy
     short fileRedundancy = getExpectedRedundancyNum(storedBlock);
     if (!isNeededReconstruction(storedBlock, num, pendingNum)) {
@@ -3557,6 +3646,7 @@ public class BlockManager implements BlockStatsMXBean {
     }
     // If the file redundancy has reached desired value
     // we can remove any corrupt replicas the block may have
+    // 如果副本已达到所需的冗余值，则可以删除副本
     int corruptReplicasCount = corruptReplicas.numCorruptReplicas(storedBlock);
     int numCorruptNodes = num.corruptReplicas();
     if (numCorruptNodes != corruptReplicasCount) {
@@ -3772,26 +3862,37 @@ public class BlockManager implements BlockStatsMXBean {
   }
 
   /**
+   * 处理一个异常block
+   * 根据需要将其加入到对应的队列中,并返回结果
+   *
    * Process a single possibly misreplicated block. This adds it to the
    * appropriate queues if necessary, and returns a result code indicating
    * what happened with it.
    */
   private MisReplicationResult processMisReplicatedBlock(BlockInfo block) {
+
+    //是否被删除
     if (block.isDeleted()) {
+      // 删除块
       // block does not belong to any file
       addToInvalidates(block);
       return MisReplicationResult.INVALID;
     }
+    //block正在构建
     if (!block.isComplete()) {
       // Incomplete blocks are never considered mis-replicated --
       // they'll be reached when they are completed or recovered.
       return MisReplicationResult.UNDER_CONSTRUCTION;
     }
+    // 计算当前冗余
     // calculate current redundancy
     short expectedRedundancy = getExpectedRedundancyNum(block);
+
+    //获取block的副本数
     NumberReplicas num = countNodes(block);
     final int numCurrentReplica = num.liveReplicas();
     // add to low redundancy queue if need to be
+    // 如果需要，添加到低冗余队列
     if (isNeededReconstruction(block, num)) {
       if (neededReconstruction.add(block, numCurrentReplica,
           num.readOnlyReplicas(), num.outOfServiceReplicas(),
@@ -3799,18 +3900,24 @@ public class BlockManager implements BlockStatsMXBean {
         return MisReplicationResult.UNDER_REPLICATED;
       }
     }
-
+    //是否需要进行额外的副本冗余
     if (shouldProcessExtraRedundancy(num, expectedRedundancy)) {
       if (num.replicasOnStaleNodes() > 0) {
         // If any of the replicas of this block are on nodes that are
         // considered "stale", then these replicas may in fact have
-        // already been deleted. So, we cannot safely act on the
+        // already been deleted.
+        //
+        // So, we cannot safely act on the
         // over-replication until a later point in time, when
         // the "stale" nodes have block reported.
+
+        //如果此块的任何副本位于被视为“stale”的节点上，则这些副本实际上可能已被删除。
+        //因此，在稍后的时间点（当“过时”节点报告了块）之前，我们无法安全地对过度复制进行操作。
         return MisReplicationResult.POSTPONE;
       }
       
       // extra redundancy block
+      //处理额外冗余块
       processExtraRedundancyBlock(block, expectedRedundancy, null, null);
       return MisReplicationResult.OVER_REPLICATED;
     }
@@ -4228,6 +4335,14 @@ public class BlockManager implements BlockStatsMXBean {
   }
 
   /**
+   * 增量块汇报
+   *
+   * 给出了一些关于报告块的增量信息。
+   *
+   * 这包括开始接收的块，完成时收到或删除。
+   *
+   * 必须使用此NameLock调用FSystem方法。
+   *
    * The given node is reporting incremental information about some blocks.
    * This includes blocks that are starting to be received, completed being
    * received, or deleted.
@@ -4636,6 +4751,7 @@ public class BlockManager implements BlockStatsMXBean {
           invalidateBlocks.remove(dn);
           return 0;
         }
+        //将要删除的块 加入到 datanode对应的 DatanodeDescriptor#invalidateBlocks 缓存中, 会通过心跳的方式发送给具体的datanode执行删除操作.
         toInvalidate = invalidateBlocks.invalidateWork(dnDescriptor);
         
         if (toInvalidate == null) {
@@ -4842,7 +4958,7 @@ public class BlockManager implements BlockStatsMXBean {
             //处理重试挂起任务
             processPendingReconstructions();
 
-            // 删除那些已经不是stale状态的副本。
+            // 重新扫描延迟/挂起的blocks 清单.
             rescanPostponedMisreplicatedBlocks();
           }
           TimeUnit.MILLISECONDS.sleep(redundancyRecheckIntervalMs);
@@ -5091,17 +5207,42 @@ public class BlockManager implements BlockStatsMXBean {
    * {@link BlockManager#processMisReplicatedBlock(BlockInfo)}.
    */
   enum MisReplicationResult {
-    /** The block should be invalidated since it belongs to a deleted file. */
+    /**
+     * 该块应无效，因为它属于已删除的文件
+     *
+     * The block should be invalidated since it belongs to a deleted file.
+     * */
     INVALID,
-    /** The block is currently under-replicated. */
+
+
+    /**
+     * 当前block未被复制
+     * The block is currently under-replicated.
+     * */
     UNDER_REPLICATED,
-    /** The block is currently over-replicated. */
+
+    /**
+     * 当前block副本过多
+     * The block is currently over-replicated.
+     * */
     OVER_REPLICATED,
-    /** A decision can't currently be made about this block. */
+
+    /**
+     * 无法处理当前block
+     * A decision can't currently be made about this block.
+     * */
     POSTPONE,
-    /** The block is under construction, so should be ignored. */
+
+    /**
+     * block正在构建,忽略
+     * The block is under construction, so should be ignored.
+     * */
     UNDER_CONSTRUCTION,
-    /** The block is properly replicated. */
+
+    /**
+     * block 已经完美复制. 即处理成功
+     * The block is properly replicated.
+     * */
     OK
   }
 

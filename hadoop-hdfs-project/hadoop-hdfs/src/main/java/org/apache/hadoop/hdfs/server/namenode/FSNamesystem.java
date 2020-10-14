@@ -2828,6 +2828,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       String src, long fileId, String clientName, ExtendedBlock previous,
       DatanodeInfo[] excludedNodes, String[] favoredNodes,
       EnumSet<AddBlockFlag> flags) throws IOException {
+
+
     final String operationName = "getAdditionalBlock";
     NameNode.stateChangeLog.debug("BLOCK* getAdditionalBlock: {}  inodeId {}" +
         " for {}", src, fileId, clientName);
@@ -2850,7 +2852,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       // This is a retry. Just return the last block.
       return onRetryBlock[0];
     }
-
+    //选取存储datanode节点
     DatanodeStorageInfo[] targets = FSDirWriteFileOp.chooseTargetForNewBlock(
         blockManager, src, excludedNodes, favoredNodes, flags, r);
 
@@ -3150,6 +3152,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     try {
       checkOperation(OperationCategory.WRITE);
       checkNameNodeSafeMode("Cannot delete " + src);
+
+      //执行内存中的删除操作,更新缓存信息
       toRemovedBlocks = FSDirDeleteOp.delete(
           this, pc, src, recursive, logRetryCache);
       ret = toRemovedBlocks != null;
@@ -3161,6 +3165,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     }
     getEditLog().logSync();
     if (toRemovedBlocks != null) {
+      // 删除bolck
       removeBlocks(toRemovedBlocks); // Incremental deletion of blocks
     }
     logAuditEvent(true, operationName, src);

@@ -927,6 +927,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
       String[] favoredNodes, EnumSet<AddBlockFlag> addBlockFlags)
       throws IOException {
     checkNNStartup();
+    // 请求namesystem 提交block
     LocatedBlock locatedBlock = namesystem.getAdditionalBlock(src, fileId,
         clientName, previous, excludedNodes, favoredNodes, addBlockFlags);
     if (locatedBlock != null) {
@@ -1149,6 +1150,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
 
     boolean ret = false;
     try {
+      //执行删除
       ret = namesystem.delete(src, recursive, cacheEntry != null);
     } finally {
       RetryCache.setState(cacheEntry, ret);

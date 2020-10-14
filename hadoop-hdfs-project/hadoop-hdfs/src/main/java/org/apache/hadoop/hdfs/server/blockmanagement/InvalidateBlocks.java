@@ -310,6 +310,7 @@ class InvalidateBlocks {
       if (getBlockSetsSize(dn) == 0) {
         remove(dn);
       }
+      //将要删除的块 加入到 datanode对应的 DatanodeDescriptor#invalidateBlocks 缓存中, 会通过心跳的方式发送给具体的datanode执行删除操作.
       dn.addBlocksToBeInvalidated(toInvalidate);
     }
     return toInvalidate;

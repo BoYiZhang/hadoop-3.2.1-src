@@ -43,10 +43,13 @@ class ReplicationWork extends BlockReconstructionWork {
     assert getSrcNodes().length > 0
         : "At least 1 source node should have been selected";
     try {
+
+      //选去目标节点
       DatanodeStorageInfo[] chosenTargets = blockplacement.chooseTarget(
           getSrcPath(), getAdditionalReplRequired(), getSrcNodes()[0],
           getLiveReplicaStorages(), false, excludedNodes, getBlockSize(),
           storagePolicySuite.getPolicy(getStoragePolicyID()), null);
+
       setTargets(chosenTargets);
     } finally {
       getSrcNodes()[0].decrementPendingReplicationWithoutTargets();
