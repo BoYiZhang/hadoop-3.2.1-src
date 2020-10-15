@@ -2746,8 +2746,9 @@ public class BlockManager implements BlockStatsMXBean {
    *
    * processReport()方法会判断当前块汇报是否是该数据节点的第一次块汇报，
    * 如果是则调用 processFirstBlockReport () 方法处理，
-   * 这个方法的效率会很高。 如果不是第一次块汇报，
-   * 则调用私有的proceeReport()方法处理。
+   * 这个方法的效率会很高。
+   *
+   * 如果不是第一次块汇报， 则调用私有的proceeReport()方法处理。
    *
    * The given storage is reporting all its blocks.
    * Update the (storage-->block list) and (block-->storage list) maps.
@@ -2968,8 +2969,9 @@ public class BlockManager implements BlockStatsMXBean {
     }
     int numBlocksLogged = 0;
     for (BlockInfoToAdd b : toAdd) {
-      addStoredBlock(b.stored, b.reported, storageInfo, null,
-          numBlocksLogged < maxNumBlocksToLog);
+
+      //保存block信息到blockinfo中 !!!!!!!!!!!!!!!!!
+      addStoredBlock(b.stored, b.reported, storageInfo, null, numBlocksLogged < maxNumBlocksToLog);
       numBlocksLogged++;
     }
     if (numBlocksLogged > maxNumBlocksToLog) {
@@ -3564,7 +3566,7 @@ public class BlockManager implements BlockStatsMXBean {
       return block;
     }
 
-    // 在block -> datanode映射中添加当前datanode
+    // 在block -> datanode  映射中添加当前datanode
     // add block to the datanode
     AddBlockResult result = storageInfo.addBlock(storedBlock, reportedBlock);
 

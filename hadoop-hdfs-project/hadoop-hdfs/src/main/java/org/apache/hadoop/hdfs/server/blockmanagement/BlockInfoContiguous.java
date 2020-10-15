@@ -37,6 +37,7 @@ public class BlockInfoContiguous extends BlockInfo {
   }
 
   /**
+   * 确保有足够的空间来存储.
    * Ensure that there is enough  space to include num more storages.
    * @return first free storage index.
    */
@@ -61,6 +62,7 @@ public class BlockInfoContiguous extends BlockInfo {
         reportedBlock.getBlockId(), this.getBlockId());
     // find the last null node
     int lastNode = ensureCapacity(1);
+    // 更新blockinfo信息. 保存在blockinfo汇总的storages 中
     setStorageInfo(lastNode, storage);
     return true;
   }
