@@ -119,8 +119,7 @@ public class DatanodeAdminManager {
    * reports or other events. Before being finally marking as decommissioned,
    * another check is done with the actual block map.
    */
-  private final TreeMap<DatanodeDescriptor, AbstractList<BlockInfo>>
-      outOfServiceNodeBlocks;
+  private final TreeMap<DatanodeDescriptor, AbstractList<BlockInfo>> outOfServiceNodeBlocks;
 
   /**
    * Tracking a node in outOfServiceNodeBlocks consumes additional memory. To
@@ -207,18 +206,23 @@ public class DatanodeAdminManager {
    */
   @VisibleForTesting
   public void startDecommission(DatanodeDescriptor node) {
+    //判断当前节点不为退役相关状态
     if (!node.isDecommissionInProgress() && !node.isDecommissioned()) {
-      // Update DN stats maintained by HeartbeatManager
+      // HeartbeatManager 设置DatanodeDescriptor.adminState状态
       hbManager.startDecommission(node);
       // hbManager.startDecommission will set dead node to decommissioned.
+      //退役中...
       if (node.isDecommissionInProgress()) {
         for (DatanodeStorageInfo storage : node.getStorageInfos()) {
           LOG.info("Starting decommission of {} {} with {} blocks",
               node, storage, storage.numBlocks());
         }
+        //设置退役/维护的开始时间
         node.getLeavingServiceStatus().setStartTime(monotonicNow());
+        //加入队列,准备开启退役...
         pendingNodes.add(node);
       }
+
     } else {
       LOG.trace("startDecommission: Node {} in {}, nothing to do.",
           node, node.getAdminState());
@@ -233,14 +237,18 @@ public class DatanodeAdminManager {
   public void stopDecommission(DatanodeDescriptor node) {
     if (node.isDecommissionInProgress() || node.isDecommissioned()) {
       // Update DN stats maintained by HeartbeatManager
+      // 将DatanodeDescriptor.adminState设置为null
       hbManager.stopDecommission(node);
       // extra redundancy blocks will be detected and processed when
       // the dead node comes back and send in its full block report.
       if (node.isAlive()) {
+        //由于节点重新上架， 需要对超出备份数目的数据块进行判断， 并进行删除操作
         blockManager.processExtraRedundancyBlocksOnInService(node);
       }
       // Remove from tracking in DatanodeAdminManager
       pendingNodes.remove(node);
+
+      //加入 退出 退役队列
       outOfServiceNodeBlocks.remove(node);
     } else {
       LOG.trace("stopDecommission: Node {} in {}, nothing to do.",
@@ -498,6 +506,8 @@ public class DatanodeAdminManager {
       // Check decommission or maintenance progress.
       namesystem.writeLock();
       try {
+
+        // 处理挂起节点
         processPendingNodes();
         check();
       } catch (Exception e) {

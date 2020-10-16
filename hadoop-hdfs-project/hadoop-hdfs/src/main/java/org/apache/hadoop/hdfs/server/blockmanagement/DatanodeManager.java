@@ -100,13 +100,18 @@ public class DatanodeManager {
    * <p>
    * Mapping: StorageID -> DatanodeDescriptor
    */
-  private final Map<String, DatanodeDescriptor> datanodeMap
-      = new HashMap<>();
+  private final Map<String, DatanodeDescriptor> datanodeMap  = new HashMap<>();
 
   /** Cluster network topology. */
   private final NetworkTopology networktopology;
 
-  /** Host names to datanode descriptors mapping. */
+  /**
+   * 保存了datanode的映射关系[两种]
+   * 1.  hostname --> ip地址
+   * 2.  ip地址 --> DatanodeDescriptor [ ]  , 一个ip上可能存在多个datanode[罕见情况：主机上有多个datanode]
+   * Host names to datanode descriptors mapping.
+   *
+   *  */
   private final Host2NodesMap host2DatanodeMap = new Host2NodesMap();
 
   private final DNSToSwitchMapping dnsToSwitchMapping;
@@ -177,8 +182,7 @@ public class DatanodeManager {
    * during rolling upgrades.
    * Software version -> Number of datanodes with this version
    */
-  private final HashMap<String, Integer> datanodesSoftwareVersions =
-    new HashMap<>(4, 0.75f);
+  private final HashMap<String, Integer> datanodesSoftwareVersions =  new HashMap<>(4, 0.75f);
 
   /**
    * True if we should process latency metrics from downstream peers.
@@ -209,69 +213,95 @@ public class DatanodeManager {
    */
   private final long timeBetweenResendingCachingDirectivesMs;
 
-  DatanodeManager(final BlockManager blockManager, final Namesystem namesystem,
-      final Configuration conf) throws IOException {
+  DatanodeManager(final BlockManager blockManager, final Namesystem namesystem,final Configuration conf) throws IOException {
+
     this.namesystem = namesystem;
     this.blockManager = blockManager;
 
+    // dfs.use.dfs.network.topology : true
     this.useDfsNetworkTopology = conf.getBoolean(
         DFSConfigKeys.DFS_USE_DFS_NETWORK_TOPOLOGY_KEY,
         DFSConfigKeys.DFS_USE_DFS_NETWORK_TOPOLOGY_DEFAULT);
+
+
     if (useDfsNetworkTopology) {
+      //默认使用 DFSNetworkTopology
       networktopology = DFSNetworkTopology.getInstance(conf);
     } else {
       networktopology = NetworkTopology.getInstance(conf);
     }
 
-    this.heartbeatManager = new HeartbeatManager(namesystem,
-        blockManager, conf);
-    this.datanodeAdminManager = new DatanodeAdminManager(namesystem,
-        blockManager, heartbeatManager);
+    //构建HeartbeatManager
+    this.heartbeatManager = new HeartbeatManager(namesystem, blockManager, conf);
+
+    //构建DatanodeAdminManager
+    this.datanodeAdminManager = new DatanodeAdminManager(namesystem, blockManager, heartbeatManager);
+
     this.fsClusterStats = newFSClusterStats();
+
+    // 启用慢速DataNode检测  : false
+    // dfs.datanode.peer.stats.enabled : false
     this.dataNodePeerStatsEnabled = conf.getBoolean(
         DFSConfigKeys.DFS_DATANODE_PEER_STATS_ENABLED_KEY,
         DFSConfigKeys.DFS_DATANODE_PEER_STATS_ENABLED_DEFAULT);
+    // 是否启用磁盘统计 0 不启用
+    // dfs.datanode.fileio.profiling.sampling.percentage : 0
     this.dataNodeDiskStatsEnabled = Util.isDiskStatsEnabled(conf.getInt(
         DFSConfigKeys.DFS_DATANODE_FILEIO_PROFILING_SAMPLING_PERCENTAGE_KEY,
         DFSConfigKeys.
             DFS_DATANODE_FILEIO_PROFILING_SAMPLING_PERCENTAGE_DEFAULT));
 
     final Timer timer = new Timer();
-    this.slowPeerTracker = dataNodePeerStatsEnabled ?
-        new SlowPeerTracker(conf, timer) : null;
+    //构建SlowPeerTracker对象 启用慢速DataNode检测
+    this.slowPeerTracker = dataNodePeerStatsEnabled ?  new SlowPeerTracker(conf, timer) : null;
 
-    this.slowDiskTracker = dataNodeDiskStatsEnabled ?
-        new SlowDiskTracker(conf, timer) : null;
+    //构建 SlowDiskTracker 对象 是否启用磁盘统计
+    this.slowDiskTracker = dataNodeDiskStatsEnabled ? new SlowDiskTracker(conf, timer) : null;
 
+    // dfs.datanode.address : 0.0.0.0:9866
     this.defaultXferPort = NetUtils.createSocketAddr(
           conf.getTrimmed(DFSConfigKeys.DFS_DATANODE_ADDRESS_KEY,
               DFSConfigKeys.DFS_DATANODE_ADDRESS_DEFAULT)).getPort();
+
+    // dfs.datanode.http.address : 0.0.0.0:9864
     this.defaultInfoPort = NetUtils.createSocketAddr(
           conf.getTrimmed(DFSConfigKeys.DFS_DATANODE_HTTP_ADDRESS_KEY,
               DFSConfigKeys.DFS_DATANODE_HTTP_ADDRESS_DEFAULT)).getPort();
+
+    // dfs.datanode.https.address : 0.0.0.0:9865
     this.defaultInfoSecurePort = NetUtils.createSocketAddr(
         conf.getTrimmed(DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_KEY,
             DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_DEFAULT)).getPort();
+
+    // dfs.datanode.ipc.address : 0.0.0.0:9867
     this.defaultIpcPort = NetUtils.createSocketAddr(
           conf.getTrimmed(DFSConfigKeys.DFS_DATANODE_IPC_ADDRESS_KEY,
               DFSConfigKeys.DFS_DATANODE_IPC_ADDRESS_DEFAULT)).getPort();
+
+    // dfs.namenode.hosts.provider.classname : default  HostConfigManager
     this.hostConfigManager = ReflectionUtils.newInstance(
         conf.getClass(DFSConfigKeys.DFS_NAMENODE_HOSTS_PROVIDER_CLASSNAME_KEY,
             HostFileManager.class, HostConfigManager.class), conf);
     try {
+      // 刷新配置重新加载hosts配置
       this.hostConfigManager.refresh();
     } catch (IOException e) {
       LOG.error("error reading hosts files: ", e);
     }
 
+    // net.topology.node.switch.mapping.impl :  default ScriptBasedMapping
     this.dnsToSwitchMapping = ReflectionUtils.newInstance(
         conf.getClass(DFSConfigKeys.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY, 
             ScriptBasedMapping.class, DNSToSwitchMapping.class), conf);
-    
+
+    // dfs.namenode.reject-unresolved-dn-topology-mapping : false
     this.rejectUnresolvedTopologyDN = conf.getBoolean(
         DFSConfigKeys.DFS_REJECT_UNRESOLVED_DN_TOPOLOGY_MAPPING_KEY,
         DFSConfigKeys.DFS_REJECT_UNRESOLVED_DN_TOPOLOGY_MAPPING_DEFAULT);
-    
+
+    // 如果dns-to-switch映射支持缓存，请在include列表中解析这些主机的网络位置，并将映射存储在缓存中；
+    // 因此，将来的解析调用将很快。
+
     // If the dns to switch mapping supports cache, resolve network
     // locations of those hosts in the include list and store the mapping
     // in the cache; so future calls to resolve will be fast.
@@ -283,53 +313,74 @@ public class DatanodeManager {
       dnsToSwitchMapping.resolve(locations);
     }
 
+    // dfs.heartbeat.interval  : 3 seconds
     heartbeatIntervalSeconds = conf.getTimeDuration(
         DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY,
         DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_DEFAULT, TimeUnit.SECONDS);
+
+    //
+    // dfs.namenode.heartbeat.recheck-interval : 5 minutes
     heartbeatRecheckInterval = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, 
         DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_DEFAULT); // 5 minutes
+
+    // 等待间隔 2 * 5*60*1000 + 10 * 1000 *   3  =  630 * 1000 = 630秒 = 10.5分钟
     this.heartbeatExpireInterval = 2 * heartbeatRecheckInterval
         + 10 * 1000 * heartbeatIntervalSeconds;
-
-    // Effected block invalidate limit is the bigger value between
-    // value configured in hdfs-site.xml, and 20 * HB interval.
+    // dfs.block.invalidate.limit : 1000
+    // 删除block的限制为 dfs.block.invalidate.limit:1000 与 20*心跳间隔  之间的最大值.  也就是说如果心跳间隔小与500秒一次的话, 那么限制数量为1000, 如果心跳间隔大于50s ,那么就是20*心跳间隔的时间.
+    // Effected block invalidate limit is the bigger value between value configured in hdfs-site.xml, and 20 * HB interval.
     final int configuredBlockInvalidateLimit = conf.getInt(
         DFSConfigKeys.DFS_BLOCK_INVALIDATE_LIMIT_KEY,
         DFSConfigKeys.DFS_BLOCK_INVALIDATE_LIMIT_DEFAULT);
     final int countedBlockInvalidateLimit = 20*(int)(heartbeatIntervalSeconds);
     this.blockInvalidateLimit = Math.max(countedBlockInvalidateLimit,
         configuredBlockInvalidateLimit);
+
     LOG.info(DFSConfigKeys.DFS_BLOCK_INVALIDATE_LIMIT_KEY
         + ": configured=" + configuredBlockInvalidateLimit
         + ", counted=" + countedBlockInvalidateLimit
         + ", effected=" + blockInvalidateLimit);
-
+    // dfs.namenode.datanode.registration.ip-hostname-check : true
+    // 当我们在配置datanode时，如果不是使用了主机名加dns解析或者hosts文件解析的方式，而是直接使用ip地址去配置slaves文件，那么就会产生这个错误。
     this.checkIpHostnameInRegistration = conf.getBoolean(
         DFSConfigKeys.DFS_NAMENODE_DATANODE_REGISTRATION_IP_HOSTNAME_CHECK_KEY,
         DFSConfigKeys.DFS_NAMENODE_DATANODE_REGISTRATION_IP_HOSTNAME_CHECK_DEFAULT);
     LOG.info(DFSConfigKeys.DFS_NAMENODE_DATANODE_REGISTRATION_IP_HOSTNAME_CHECK_KEY
         + "=" + checkIpHostnameInRegistration);
 
+
+    // dfs.namenode.avoid.read.stale.datanode false
     this.avoidStaleDataNodesForRead = conf.getBoolean(
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_READ_KEY,
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_READ_DEFAULT);
+
+    //dfs.namenode.avoid.write.stale.datanode false
     this.avoidStaleDataNodesForWrite = conf.getBoolean(
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_WRITE_KEY,
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_WRITE_DEFAULT);
     this.staleInterval = getStaleIntervalFromConf(conf, heartbeatExpireInterval);
+
+    // dfs.namenode.write.stale.datanode.ratio : 0.5f
     this.ratioUseStaleDataNodesForWrite = conf.getFloat(
         DFSConfigKeys.DFS_NAMENODE_USE_STALE_DATANODE_FOR_WRITE_RATIO_KEY,
         DFSConfigKeys.DFS_NAMENODE_USE_STALE_DATANODE_FOR_WRITE_RATIO_DEFAULT);
+
+
     Preconditions.checkArgument(
         (ratioUseStaleDataNodesForWrite > 0 && 
             ratioUseStaleDataNodesForWrite <= 1.0f),
         DFSConfigKeys.DFS_NAMENODE_USE_STALE_DATANODE_FOR_WRITE_RATIO_KEY +
         " = '" + ratioUseStaleDataNodesForWrite + "' is invalid. " +
         "It should be a positive non-zero float value, not greater than 1.0f.");
+
+
+    // dfs.namenode.path.based.cache.retry.interval.ms : 30_000L
     this.timeBetweenResendingCachingDirectivesMs = conf.getLong(
         DFSConfigKeys.DFS_NAMENODE_PATH_BASED_CACHE_RETRY_INTERVAL_MS,
         DFSConfigKeys.DFS_NAMENODE_PATH_BASED_CACHE_RETRY_INTERVAL_MS_DEFAULT);
+
+    // dfs.namenode.blocks.per.postponedblocks.rescan : 10_000
     this.blocksPerPostponedMisreplicatedBlocksRescan = conf.getLong(
         DFSConfigKeys.DFS_NAMENODE_BLOCKS_PER_POSTPONEDBLOCKS_RESCAN_KEY,
         DFSConfigKeys.DFS_NAMENODE_BLOCKS_PER_POSTPONEDBLOCKS_RESCAN_KEY_DEFAULT);
@@ -1175,9 +1226,12 @@ public class DatanodeManager {
    * checks if any of the hosts have changed states:
    */
   public void refreshNodes(final Configuration conf) throws IOException {
+
+    // 加载include文件与exclude文件至 hostConfigManager
     refreshHostsReader(conf);
     namesystem.writeLock();
     try {
+      //刷新所有的数据节点
       refreshDatanodes();
       countSoftwareVersions();
     } finally {
@@ -1191,6 +1245,7 @@ public class DatanodeManager {
     // Update the file names and refresh internal includes and excludes list.
     if (conf == null) {
       conf = new HdfsConfiguration();
+      //将更新的include/exclude文件加载至hostFileManager对象中保存
       this.hostConfigManager.setConf(conf);
     }
     this.hostConfigManager.refresh();
@@ -1214,22 +1269,32 @@ public class DatanodeManager {
       copy = new HashMap<>(datanodeMap);
     }
     for (DatanodeDescriptor node : copy.values()) {
+
       // Check if not include.
+      //不在include文件中
       if (!hostConfigManager.isIncluded(node)) {
+        //直接设置为已撤销状态， DatanodeDescriptor.isAllowed=false
+        //不会拷贝Datanode上的数据块
+        //所以， 在撤销节点时， 先在exclude文件中添加， 撤销结束后再从include文件中删除
         node.setDisallowed(true);
       } else {
-        long maintenanceExpireTimeInMS =
-            hostConfigManager.getMaintenanceExpirationTimeInMS(node);
+
+        // 以毫秒为单位获取维护过期时间。
+        long maintenanceExpireTimeInMS = hostConfigManager.getMaintenanceExpirationTimeInMS(node);
+
         if (node.maintenanceNotExpired(maintenanceExpireTimeInMS)) {
-          datanodeAdminManager.startMaintenance(
-              node, maintenanceExpireTimeInMS);
+          // 开始维护
+          datanodeAdminManager.startMaintenance(  node, maintenanceExpireTimeInMS);
         } else if (hostConfigManager.isExcluded(node)) {
+          ///开始退役
           datanodeAdminManager.startDecommission(node);
         } else {
+          //停止退役/维护操作
           datanodeAdminManager.stopMaintenance(node);
           datanodeAdminManager.stopDecommission(node);
         }
       }
+      // 更新..
       node.setUpgradeDomain(hostConfigManager.getUpgradeDomain(node));
     }
   }

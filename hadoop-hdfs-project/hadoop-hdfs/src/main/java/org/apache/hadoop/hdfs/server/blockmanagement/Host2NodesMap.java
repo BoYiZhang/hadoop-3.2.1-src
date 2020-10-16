@@ -31,9 +31,12 @@ import org.apache.hadoop.classification.InterfaceStability;
 @InterfaceAudience.Private
 @InterfaceStability.Evolving
 class Host2NodesMap {
+
+  // hostname --> ipAddr
   private HashMap<String, String> mapHost = new HashMap<String, String>();
-  private final HashMap<String, DatanodeDescriptor[]> map
-    = new HashMap<String, DatanodeDescriptor[]>();
+
+  // ipAddr --> DatanodeDescriptor
+  private final HashMap<String, DatanodeDescriptor[]> map   = new HashMap<String, DatanodeDescriptor[]>();
   private final ReadWriteLock hostmapLock = new ReentrantReadWriteLock();
 
   /** Check if node is already in the map. */
