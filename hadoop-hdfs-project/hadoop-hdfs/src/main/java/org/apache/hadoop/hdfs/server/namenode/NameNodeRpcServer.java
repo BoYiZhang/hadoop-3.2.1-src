@@ -239,8 +239,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   
   private static final Logger LOG = NameNode.LOG;
   private static final Logger stateChangeLog = NameNode.stateChangeLog;
-  private static final Logger blockStateChangeLog = NameNode
-      .blockStateChangeLog;
+  private static final Logger blockStateChangeLog = NameNode.blockStateChangeLog;
   
   // Dependencies from other parts of NN.
   protected final FSNamesystem namesystem;
@@ -1711,10 +1710,12 @@ public class NameNodeRpcServer implements NamenodeProtocols {
       LOG.info("Error report from " + dnName + ": " + msg);
     }
   }
-    
+  // 握手操作
   @Override // DatanodeProtocol, NamenodeProtocol
   public NamespaceInfo versionRequest() throws IOException {
+    //检测NN是否启动
     checkNNStartup();
+    // 获取getNamespaceInfo
     return namesystem.getNamespaceInfo();
   }
 

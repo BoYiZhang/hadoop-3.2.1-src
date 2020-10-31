@@ -345,19 +345,27 @@ public class LeaseManager {
    * Adds (or re-adds) the lease for the specified file.
    */
   synchronized Lease addLease(String holder, long inodeId) {
+    // 根据client的名字获取Lease信息
     Lease lease = getLease(holder);
     if (lease == null) {
+      //构造Lease对象
       lease = new Lease(holder);
+      //在LeaseManager.leases字段中添加Lease对象
       leases.put(holder, lease);
+      //在LeaseManager.sortedLease字段中添加Lease对象
       sortedLeases.add(lease);
     } else {
       renewLease(lease);
     }
+    //保存inodeId信息
     leasesById.put(inodeId, lease);
+
+    //保存租约中的文件信息
     lease.files.add(inodeId);
     return lease;
   }
 
+  // 移除租约
   synchronized void removeLease(long inodeId) {
     final Lease lease = leasesById.get(inodeId);
     if (lease != null) {
@@ -421,6 +429,7 @@ public class LeaseManager {
   }
   synchronized void renewLease(Lease lease) {
     if (lease != null) {
+      //释放租约
       sortedLeases.remove(lease);
       lease.renew();
       sortedLeases.add(lease);
@@ -520,7 +529,9 @@ public class LeaseManager {
         try {
           fsnamesystem.writeLockInterruptibly();
           try {
+            // fsnamesystem 是否是安全模式
             if (!fsnamesystem.isInSafeMode()) {
+              // 检查租约信息
               needSync = checkLeases();
             }
           } finally {
@@ -551,31 +562,49 @@ public class LeaseManager {
 
     long start = monotonicNow();
 
+    //遍历LeaseManager中的所有租约
+    // 因为sortedLeases 使用了优先级队列,时间最久的租约Lease就在第一个.
+    // 所以只需要判断第一个租约是否满足过期条件
+    // 如果租约没有超过硬限制时间， 则直接返回， 因为后面的租约并不需要判断
     while(!sortedLeases.isEmpty() &&
         sortedLeases.first().expiredHardLimit()
         && !isMaxLockHoldToReleaseLease(start)) {
+
+      //获取最老的Lease
       Lease leaseToCheck = sortedLeases.first();
       LOG.info("{} has expired hard limit", leaseToCheck);
 
+      //租约超时情况处理
       final List<Long> removing = new ArrayList<>();
+
       // need to create a copy of the oldest lease files, because
       // internalReleaseLease() removes files corresponding to empty files,
       // i.e. it needs to modify the collection being iterated over
       // causing ConcurrentModificationException
+
       Collection<Long> files = leaseToCheck.getFiles();
+      // 遍历超时租约中的所有文件， 对每一个文件进行租约恢复
       Long[] leaseINodeIds = files.toArray(new Long[files.size()]);
+
+      //获取文件系统根目录
       FSDirectory fsd = fsnamesystem.getFSDirectory();
       String p = null;
+
+      // 获取当前的内部租赁持有人名称。
       String newHolder = getInternalLeaseHolder();
+
       for(Long id : leaseINodeIds) {
         try {
+          //获取inode文件所在的路径
           INodesInPath iip = INodesInPath.fromINode(fsd.getInode(id));
           p = iip.getPath();
+          // 进行完整性检查以确保路径正确
           // Sanity check to make sure the path is correct
           if (!p.startsWith("/")) {
             throw new IOException("Invalid path in the lease " + p);
           }
           final INodeFile lastINode = iip.getLastINode().asFile();
+          // 是否已经删除该文件
           if (fsnamesystem.isFileDeleted(lastINode)) {
             // INode referred by the lease could have been deleted.
             removeLease(lastINode.getId());
@@ -583,6 +612,7 @@ public class LeaseManager {
           }
           boolean completed = false;
           try {
+            //调用Fsnamesystem.internalReleaseLease()对文件进行租约恢复
             completed = fsnamesystem.internalReleaseLease(
                 leaseToCheck, p, iip, newHolder);
           } catch (IOException e) {
@@ -598,15 +628,19 @@ public class LeaseManager {
               LOG.debug("Started block recovery {} lease {}", p, leaseToCheck);
             }
           }
+          //由于进行了恢复操作， 需要在editlog中同步记录
           // If a lease recovery happened, we need to sync later.
           if (!needSync && !completed) {
+
             needSync = true;
           }
         } catch (IOException e) {
           LOG.warn("Removing lease with an invalid path: {},{}", p,
               leaseToCheck, e);
+          //租约恢复出现异常， 则加入removing队列中
           removing.add(id);
         }
+
         if (isMaxLockHoldToReleaseLease(start)) {
           LOG.debug("Breaking out of checkLeases after {} ms.",
               fsnamesystem.getMaxLockHoldToReleaseLeaseMs());
@@ -614,6 +648,7 @@ public class LeaseManager {
         }
       }
 
+     //租约恢复异常， 则直接删除
       for(Long id : removing) {
         removeLease(leaseToCheck, id);
       }

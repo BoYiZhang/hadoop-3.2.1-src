@@ -1060,14 +1060,19 @@ public class DatanodeManager {
    *    denied because the datanode does not match includes/excludes
    * @throws UnresolvedTopologyException if the registration request is 
    *    denied because resolving datanode network location fails.
+   *
    */
   public void registerDatanode(DatanodeRegistration nodeReg)
       throws DisallowedDatanodeException, UnresolvedTopologyException {
+
+    //获取 remote 端 的ip
     InetAddress dnAddress = Server.getRemoteIp();
     if (dnAddress != null) {
+      // 主要在RPC内部调用，更新ip和对等主机名
       // Mostly called inside an RPC, update ip and peer hostname
       String hostname = dnAddress.getHostName();
       String ip = dnAddress.getHostAddress();
+
       if (checkIpHostnameInRegistration && !isNameResolved(dnAddress)) {
         // Reject registration of unresolved datanode to prevent performance
         // impact of repetitive DNS lookups later.
@@ -1076,39 +1081,59 @@ public class DatanodeManager {
         LOG.warn("Unresolved datanode registration: " + message);
         throw new DisallowedDatanodeException(nodeReg, message);
       }
+
+
       // update node registration with the ip and hostname from rpc request
       nodeReg.setIpAddr(ip);
       nodeReg.setPeerHostName(hostname);
     }
     
     try {
+
       nodeReg.setExportedKeys(blockManager.getBlockKeys());
-  
-      // Checks if the node is not on the hosts list.  If it is not, then
-      // it will be disallowed from registering. 
+
+      // 判断是否在include中,如果没有则不允许注册
+      // Checks if the node is not on the hosts list.
+      // If it is not, then it will be disallowed from registering.
       if (!hostConfigManager.isIncluded(nodeReg)) {
         throw new DisallowedDatanodeException(nodeReg);
       }
         
-      NameNode.stateChangeLog.info("BLOCK* registerDatanode: from "
-          + nodeReg + " storage " + nodeReg.getDatanodeUuid());
-  
+      NameNode.stateChangeLog.info("BLOCK* registerDatanode: from " + nodeReg + " storage " + nodeReg.getDatanodeUuid());
+
+
+
       DatanodeDescriptor nodeS = getDatanode(nodeReg.getDatanodeUuid());
-      DatanodeDescriptor nodeN = host2DatanodeMap.getDatanodeByXferAddr(
-          nodeReg.getIpAddr(), nodeReg.getXferPort());
-        
+
+
+
+      DatanodeDescriptor nodeN = host2DatanodeMap.getDatanodeByXferAddr(nodeReg.getIpAddr(), nodeReg.getXferPort());
+
+
+
       if (nodeN != null && nodeN != nodeS) {
+
+
         NameNode.LOG.info("BLOCK* registerDatanode: " + nodeN);
-        // nodeN previously served a different data storage, 
-        // which is not served by anybody anymore.
+
+        // nodeN以前提供了一个不同的数据存储，现在任何人都不能使用它。
+        // nodeN previously served a different data storage,  which is not served by anybody anymore.
         removeDatanode(nodeN);
-        // physically remove node from datanodeMap
+
+
+        // 从datanodeMap物理删除节点
         wipeDatanode(nodeN);
         nodeN = null;
       }
-  
+
+
       if (nodeS != null) {
+
         if (nodeN == nodeS) {
+
+          // 刚刚重新启动同一个datanode以服务于相同的数据存储。
+          // 我们不需要移除旧的数据块，增量将在下一个块报告上从datanode计算出来
+          //
           // The same datanode has been just restarted to serve the same data 
           // storage. We do not need to remove old data blocks, the delta will
           // be calculated on the next block report from the datanode
@@ -1133,14 +1158,18 @@ public class DatanodeManager {
         
         boolean success = false;
         try {
+
           // update cluster map
           getNetworkTopology().remove(nodeS);
+
           if(shouldCountVersion(nodeS)) {
             decrementVersionCount(nodeS.getSoftwareVersion());
           }
+
           nodeS.updateRegInfo(nodeReg);
 
           nodeS.setSoftwareVersion(nodeReg.getSoftwareVersion());
+
           nodeS.setDisallowed(false); // Node is in the include list
 
           // resolve network location
@@ -1153,13 +1182,22 @@ public class DatanodeManager {
             nodeS.setDependentHostNames(
                 getNetworkDependenciesWithDefault(nodeS));
           }
+
+
           getNetworkTopology().add(nodeS);
+
+
           resolveUpgradeDomain(nodeS);
 
           // also treat the registration message as a heartbeat
           heartbeatManager.register(nodeS);
+
+
           incrementVersionCount(nodeS.getSoftwareVersion());
+
+
           startAdminOperationIfNecessary(nodeS);
+
           success = true;
         } finally {
           if (!success) {
@@ -1171,10 +1209,12 @@ public class DatanodeManager {
         return;
       }
 
-      DatanodeDescriptor nodeDescr 
-        = new DatanodeDescriptor(nodeReg, NetworkTopology.DEFAULT_RACK);
+      DatanodeDescriptor nodeDescr  = new DatanodeDescriptor(nodeReg, NetworkTopology.DEFAULT_RACK);
+
       boolean success = false;
       try {
+
+
         // resolve network location
         if(this.rejectUnresolvedTopologyDN) {
           nodeDescr.setNetworkLocation(resolveNetworkLocation(nodeDescr));
@@ -1185,19 +1225,34 @@ public class DatanodeManager {
           nodeDescr.setDependentHostNames(
               getNetworkDependenciesWithDefault(nodeDescr));
         }
+
         nodeDescr.setSoftwareVersion(nodeReg.getSoftwareVersion());
+
         resolveUpgradeDomain(nodeDescr);
 
+
         // register new datanode
+
         addDatanode(nodeDescr);
+
+
         blockManager.getBlockReportLeaseManager().register(nodeDescr);
+
+
+
+        // 还可以将注册消息视为心跳，无需更新其时间戳，因为它是在创建描述符时完成的
+
         // also treat the registration message as a heartbeat
         // no need to update its timestamp
         // because its is done when the descriptor is created
         heartbeatManager.addDatanode(nodeDescr);
         heartbeatManager.updateDnStat(nodeDescr);
+
+
         incrementVersionCount(nodeReg.getSoftwareVersion());
+
         startAdminOperationIfNecessary(nodeDescr);
+
         success = true;
       } finally {
         if (!success) {
@@ -1207,15 +1262,22 @@ public class DatanodeManager {
         }
       }
     } catch (InvalidTopologyException e) {
+
+      // 如果网络位置无效，请清除缓存的映射，以便以后有机会使用正确的网络位置重新添加此DataNode。
+
       // If the network location is invalid, clear the cached mappings
       // so that we have a chance to re-add this DataNode with the
       // correct network location later.
       List<String> invalidNodeNames = new ArrayList<>(3);
+
+      // 清除IP或主机名中节点的缓存
       // clear cache for nodes in IP or Hostname
       invalidNodeNames.add(nodeReg.getIpAddr());
       invalidNodeNames.add(nodeReg.getHostName());
       invalidNodeNames.add(nodeReg.getPeerHostName());
+
       dnsToSwitchMapping.reloadCachedMappings(invalidNodeNames);
+
       throw e;
     }
   }

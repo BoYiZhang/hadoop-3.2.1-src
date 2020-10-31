@@ -91,8 +91,7 @@ public class DatanodeProtocolServerSideTranslatorPB implements
   }
 
   @Override
-  public RegisterDatanodeResponseProto registerDatanode(
-      RpcController controller, RegisterDatanodeRequestProto request)
+  public RegisterDatanodeResponseProto registerDatanode(RpcController controller, RegisterDatanodeRequestProto request)
       throws ServiceException {
     DatanodeRegistration registration = PBHelper.convert(request
         .getRegistration());

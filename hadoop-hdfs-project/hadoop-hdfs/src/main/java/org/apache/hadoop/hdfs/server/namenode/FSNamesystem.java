@@ -2963,15 +2963,18 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     String src = iip.getPath();
     INode inode = iip.getLastINode();
     assert hasReadLock();
+    // HDFS文件不存在， 则抛出异常
     if (inode == null) {
       throw new FileNotFoundException("File does not exist: "
           + leaseExceptionString(src, fileId, holder));
     }
+    // INode是一个目录， 则抛出异常
     if (!inode.isFile()) {
       throw new LeaseExpiredException("INode is not a regular file: "
           + leaseExceptionString(src, fileId, holder));
     }
     final INodeFile file = inode.asFile();
+    //文件不处于构建中状态， 则抛出异常
     if (!file.isUnderConstruction()) {
       throw new LeaseExpiredException("File is not open for writing: "
           + leaseExceptionString(src, fileId, holder));
@@ -2984,6 +2987,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
           + leaseExceptionString(src, fileId, holder));
     }
     final String owner = file.getFileUnderConstructionFeature().getClientName();
+    // 租约信息 与LeaseManager记录的 不匹配， 则抛出异常
     if (holder != null && !owner.equals(holder)) {
       throw new LeaseExpiredException("Client (=" + holder
           + ") is not the lease owner (=" + owner + ": "
@@ -3521,9 +3525,11 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         blockManager.hasMinStorage(penultimateBlock);
 
     switch(lastBlockState) {
+    // 如果文件拥有的所有数据块都处于COMPLETE状态， 则可以直接关闭文件， 释放租约
     case COMPLETE:
       assert false : "Already checked that the last block is incomplete";
       break;
+    //在文件的所有数据块中， 只有最后一个数据块以及倒数第二个数据块的状态可以不为  COMPLETE, 且状态只能是COMMITTED
     case COMMITTED:
       // Close file if committed blocks are minimally replicated
       if(penultimateBlockMinStorage &&
@@ -3983,6 +3989,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   void registerDatanode(DatanodeRegistration nodeReg) throws IOException {
     writeLock();
     try {
+      // 注册datanode
       blockManager.registerDatanode(nodeReg);
     } finally {
       writeUnlock("registerDatanode");

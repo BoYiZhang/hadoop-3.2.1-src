@@ -84,6 +84,8 @@ public class DatanodeID implements Comparable<DatanodeID> {
    * For newly formatted Datanodes it is a UUID.
    */
   private final String datanodeUuid;
+
+
   // datanodeUuid ByteString to save on PB serde
   private final ByteString datanodeUuidBytes;
 
