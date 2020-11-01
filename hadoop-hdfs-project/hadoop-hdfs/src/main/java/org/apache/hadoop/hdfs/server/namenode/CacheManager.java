@@ -513,8 +513,14 @@ public class CacheManager {
   private void addInternal(CacheDirective directive, CachePool pool) {
     boolean addedDirective = pool.getDirectiveList().add(directive);
     assert addedDirective;
+
+    //将缓存指令对象加入directivesByld集合中保存
     directivesById.put(directive.getId(), directive);
+
+    //将缓存指令对象加入directivesByPath集合中保存
     String path = directive.getPath();
+
+    //更新缓存池的统计信息
     List<CacheDirective> directives = directivesByPath.get(path);
     if (directives == null) {
       directives = new ArrayList<CacheDirective>(1);
@@ -527,6 +533,7 @@ public class CacheManager {
     directive.addBytesNeeded(stats.getBytesNeeded());
     directive.addFilesNeeded(directive.getFilesNeeded());
 
+    //触发CacheReplicationMonitor执行rescan()操作
     setNeedsRescan();
   }
 
@@ -797,14 +804,26 @@ public class CacheManager {
     assert namesystem.hasWriteLock();
     CachePool pool;
     try {
+
+      //验证请求的参数是否合法
       CachePoolInfo.validate(info);
+
+      //获取缓存池的名字
       String poolName = info.getPoolName();
+
+      // 使用TreeMap保存缓存池
+      // 确认cachePools字段中不包含这个缓存池的信息
       pool = cachePools.get(poolName);
+
+      //如果cachePools字段中已经有了信息， 则抛出异常
       if (pool != null) {
         throw new InvalidRequestException("Cache pool " + poolName
             + " already exists.");
       }
+      //构造CachePool对象， 对于没有设置的参数， 使用默认值补齐
       pool = CachePool.createFromInfoAndDefaults(info);
+
+      //将新构造的CachePool对象放入cachePools集合中
       cachePools.put(pool.getPoolName(), pool);
     } catch (IOException e) {
       LOG.info("addCachePool of " + info + " failed: ", e);

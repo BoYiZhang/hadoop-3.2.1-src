@@ -186,7 +186,12 @@ public class CacheReplicationMonitor extends Thread implements Closeable {
         }
         startTimeMs = curTimeMs;
         mark = !mark;
+
+        // !!!!!!!!!
         rescan();
+
+
+
         curTimeMs = Time.monotonicNow();
         // Update synchronization-related variables.
         lock.lock();
@@ -280,6 +285,7 @@ public class CacheReplicationMonitor extends Thread implements Closeable {
       lock.unlock();
     }
   }
+
 
   private void rescan() throws InterruptedException {
     scannedDirectives = 0;
