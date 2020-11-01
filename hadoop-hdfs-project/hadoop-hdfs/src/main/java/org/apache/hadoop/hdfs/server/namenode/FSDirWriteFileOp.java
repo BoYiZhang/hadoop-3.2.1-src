@@ -278,6 +278,10 @@ class FSDirWriteFileOp {
       ValidateAddBlockResult r) throws IOException {
     Node clientNode = null;
 
+    System.out.println("flags: "+favoredNodes);
+    System.out.println("AddBlockFlag.IGNORE_CLIENT_LOCALITY : " + AddBlockFlag.IGNORE_CLIENT_LOCALITY);
+
+    //是否忽略可短端写入. flags很可能为null,所以可能会在client端写入.
     boolean ignoreClientLocality = (flags != null
             && flags.contains(AddBlockFlag.IGNORE_CLIENT_LOCALITY));
 

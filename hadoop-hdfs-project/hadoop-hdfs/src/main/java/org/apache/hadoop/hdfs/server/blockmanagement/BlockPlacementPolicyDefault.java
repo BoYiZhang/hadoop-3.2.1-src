@@ -159,6 +159,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
         excludedNodes, blocksize, storagePolicy, flags, storageTypes);
   }
 
+  //选取datanode节点
   @Override
   DatanodeStorageInfo[] chooseTarget(String src,
       int numOfReplicas,
@@ -183,6 +184,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
       final EnumMap<StorageType, Integer> storageTypes =
           getRequiredStorageTypes(requiredStorageTypes);
 
+      // 选择喜欢的节点
       // Choose favored nodes
       List<DatanodeStorageInfo> results = new ArrayList<>();
       boolean avoidStaleNodes = stats != null
@@ -261,6 +263,8 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
                                     final BlockStoragePolicy storagePolicy,
                                     EnumSet<AddBlockFlag> addBlockFlags,
                                     EnumMap<StorageType, Integer> sTypes) {
+
+
     if (numOfReplicas == 0 || clusterMap.getNumOfLeaves()==0) {
       return DatanodeStorageInfo.EMPTY_ARRAY;
     }
@@ -268,11 +272,13 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     if (excludedNodes == null) {
       excludedNodes = new HashSet<>();
     }
-     
+
     int[] result = getMaxNodesPerRack(chosenStorage.size(), numOfReplicas);
+
     numOfReplicas = result[0];
     int maxNodesPerRack = result[1];
-      
+
+    // 向excludedNodes添加localMachine和相关节点
     for (DatanodeStorageInfo storage : chosenStorage) {
       // add localMachine and related nodes to excludedNodes
       addToExcludedNodes(storage.getDatanodeDescriptor(), excludedNodes);
@@ -280,8 +286,11 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
 
     List<DatanodeStorageInfo> results = null;
     Node localNode = null;
+
     boolean avoidStaleNodes = (stats != null
         && stats.isAvoidingStaleDataNodesForWrite());
+
+
     boolean avoidLocalNode = (addBlockFlags != null
         && addBlockFlags.contains(AddBlockFlag.NO_LOCAL_WRITE)
         && writer != null
@@ -289,6 +298,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     // Attempt to exclude local node if the client suggests so. If no enough
     // nodes can be obtained, it falls back to the default block placement
     // policy.
+
     if (avoidLocalNode) {
       results = new ArrayList<>(chosenStorage);
       Set<Node> excludedNodeCopy = new HashSet<>(excludedNodes);
@@ -407,19 +417,25 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
       return (writer instanceof DatanodeDescriptor) ? writer : null;
     }
     final int numOfResults = results.size();
+
+    // 需要复制副本总数
     final int totalReplicasExpected = numOfReplicas + numOfResults;
+
     if ((writer == null || !(writer instanceof DatanodeDescriptor)) && !newBlock) {
       writer = results.get(0).getDatanodeDescriptor();
     }
 
+    // 保留原始排除node的副本
     // Keep a copy of original excludedNodes
     final Set<Node> oldExcludedNodes = new HashSet<>(excludedNodes);
 
+    // 选择存储类型；对不可用的存储使用回退
     // choose storage types; use fallbacks for unavailable storages
     final List<StorageType> requiredStorageTypes = storagePolicy
         .chooseStorageTypes((short) totalReplicasExpected,
             DatanodeStorageInfo.toStorageTypes(results),
             unavailableStorages, newBlock);
+
     if (storageTypes == null) {
       storageTypes = getRequiredStorageTypes(requiredStorageTypes);
     }
@@ -428,14 +444,19 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     }
 
     try {
+
       if ((numOfReplicas = requiredStorageTypes.size()) == 0) {
         throw new NotEnoughReplicasException(
             "All required storage types are unavailable: "
             + " unavailableStorages=" + unavailableStorages
             + ", storagePolicy=" + storagePolicy);
       }
+
+      //
       writer = chooseTargetInOrder(numOfReplicas, writer, excludedNodes, blocksize,
           maxNodesPerRack, results, avoidStaleNodes, newBlock, storageTypes);
+
+
     } catch (NotEnoughReplicasException e) {
       final String message = "Failed to place enough replicas, still in need of "
           + (totalReplicasExpected - results.size()) + " to reach "
@@ -503,6 +524,8 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
                                  throws NotEnoughReplicasException {
     final int numOfResults = results.size();
     if (numOfResults == 0) {
+      // 第一个副本
+      // 选取本地节点存储 , 如果本地存储节点不可用, 相同机架中随机一台
       DatanodeStorageInfo storageInfo = chooseLocalStorage(writer,
           excludedNodes, blocksize, maxNodesPerRack, results, avoidStaleNodes,
           storageTypes, true);
@@ -514,8 +537,17 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
         return writer;
       }
     }
+
+    // 第一台 副本所在的机器
     final DatanodeDescriptor dn0 = results.get(0).getDatanodeDescriptor();
     if (numOfResults <= 1) {
+      /**
+       *
+       * 选取第二个副本 :
+       *
+       * 从远程机架节点选取, 如果节点数量不足,则随机选取
+       *
+       */
       chooseRemoteRack(1, dn0, excludedNodes, blocksize, maxNodesPerRack,
           results, avoidStaleNodes, storageTypes);
       if (--numOfReplicas == 0) {
@@ -523,14 +555,23 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
       }
     }
     if (numOfResults <= 2) {
+      //选取第三个节点
+
+      // 获取第二个副本所在的节点信息
       final DatanodeDescriptor dn1 = results.get(1).getDatanodeDescriptor();
+
+      //如果 第一个机器和第二个机器在同一机架, 换一个机架选取
+      //如果远程机架节点不足, 这从第一台机器所在的节点随机选一台.
       if (clusterMap.isOnSameRack(dn0, dn1)) {
         chooseRemoteRack(1, dn0, excludedNodes, blocksize, maxNodesPerRack,
             results, avoidStaleNodes, storageTypes);
       } else if (newBlock){
+        // 如果到这里还没有分配成功过, 从本地机架随机找一台节点重新分配.
+        // 如果是一个新的newBlock , 从第二个节点所在的机架随机选一台
         chooseLocalRack(dn1, excludedNodes, blocksize, maxNodesPerRack,
             results, avoidStaleNodes, storageTypes);
       } else {
+        // 本地机架随机一台
         chooseLocalRack(writer, excludedNodes, blocksize, maxNodesPerRack,
             results, avoidStaleNodes, storageTypes);
       }
@@ -538,6 +579,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
         return writer;
       }
     }
+    // 三个副本以上 随机选取一台....
     chooseRandom(numOfReplicas, NodeBase.ROOT, excludedNodes, blocksize,
         maxNodesPerRack, results, avoidStaleNodes, storageTypes);
     return writer;
@@ -709,6 +751,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
                                 EnumMap<StorageType, Integer> storageTypes)
                                     throws NotEnoughReplicasException {
     int oldNumOfReplicas = results.size();
+    // 从远程机架随机选取一台
     // randomly choose one node from remote racks
     try {
       chooseRandom(numOfReplicas, "~" + localMachine.getNetworkLocation(),
@@ -719,6 +762,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
         LOG.debug("Failed to choose remote rack (location = ~"
             + localMachine.getNetworkLocation() + "), fallback to local rack", e);
       }
+      //如果远程机架节点不够, 从本地机架随机选取
       chooseRandom(numOfReplicas-(results.size()-oldNumOfReplicas),
                    localMachine.getNetworkLocation(), excludedNodes, blocksize, 
                    maxReplicasPerRack, results, avoidStaleNodes, storageTypes);

@@ -2841,6 +2841,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     readLock();
     try {
       checkOperation(OperationCategory.READ);
+
+      // 验证权限
       r = FSDirWriteFileOp.validateAddBlock(this, pc, src, fileId, clientName,
                                             previous, onRetryBlock);
     } finally {

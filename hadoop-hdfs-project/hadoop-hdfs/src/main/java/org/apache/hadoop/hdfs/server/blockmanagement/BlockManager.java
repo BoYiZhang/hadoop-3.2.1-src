@@ -2347,12 +2347,16 @@ public class BlockManager implements BlockStatsMXBean {
       final BlockType blockType,
       final ErasureCodingPolicy ecPolicy,
       final EnumSet<AddBlockFlag> flags) throws IOException {
+
+
     List<DatanodeDescriptor> favoredDatanodeDescriptors = 
         getDatanodeDescriptors(favoredNodes);
     final BlockStoragePolicy storagePolicy =
         storagePolicySuite.getPolicy(storagePolicyID);
     final BlockPlacementPolicy blockplacement =
         placementPolicies.getPolicy(blockType);
+
+    //选取 datanode节点 !!!!
     final DatanodeStorageInfo[] targets = blockplacement.chooseTarget(src,
         numOfReplicas, client, excludedNodes, blocksize, 
         favoredDatanodeDescriptors, storagePolicy, flags);
