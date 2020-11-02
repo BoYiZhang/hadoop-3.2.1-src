@@ -166,6 +166,7 @@ public abstract class ZKFailoverController {
           "configuration before running the ZK failover controller.");
       return ERR_CODE_AUTO_FAILOVER_NOT_ENABLED;
     }
+    // 权限登录...
     loginAsFCUser();
     try {
       return SecurityUtil.doAsLoginUserOrFatal(new PrivilegedAction<Integer>() {
@@ -191,6 +192,8 @@ public abstract class ZKFailoverController {
   private int doRun(String[] args)
       throws Exception {
     try {
+      // 初始化ZK 信息 ...
+      // 构建根节点路径 :  /hadoop-ha/[namenode serviceId]
       initZK();
     } catch (KeeperException ke) {
       LOG.error("Unable to start failover controller. Unable to connect "
@@ -201,6 +204,8 @@ public abstract class ZKFailoverController {
     }
     try {
       if (args.length > 0) {
+
+        // 格式化ZK
         if ("-formatZK".equals(args[0])) {
           boolean force = false;
           boolean interactive = true;
@@ -232,6 +237,7 @@ public abstract class ZKFailoverController {
     }
 
     try {
+      // 检查联邦配置
       localTarget.checkFencingConfigured();
     } catch (BadFencingConfigurationException e) {
       LOG.error("Fencing is not configured for " + localTarget + ".\n" +
@@ -241,9 +247,14 @@ public abstract class ZKFailoverController {
     }
 
     try {
+
+      // 初始化ZKFCRpcServer
       initRPC();
+      // 开启健康检查 HealthMonitor
       initHM();
+      //启动ZKFCRpcServer
       startRPC();
+      //在这里阻塞 , 等待唤醒notify  ... 如果fatalError不为null 报错退出.
       mainLoop();
     } catch (Exception e) {
       LOG.error("The failover controller encounters runtime error: ", e);
@@ -328,17 +339,26 @@ public abstract class ZKFailoverController {
 
   private void initZK() throws HadoopIllegalArgumentException, IOException,
       KeeperException {
+
+    // 获取zk 集群信息
     zkQuorum = conf.get(ZK_QUORUM_KEY);
+
+    // zk超时时间
+    // ha.zookeeper.session-timeout.ms : 10ms
     int zkTimeout = conf.getInt(ZK_SESSION_TIMEOUT_KEY,
         ZK_SESSION_TIMEOUT_DEFAULT);
     // Parse ACLs from configuration.
+
+    // zookeeper ACL认证
+    // ha.zookeeper.acl : world:anyone:rwcda
     String zkAclConf = conf.get(ZK_ACL_KEY, ZK_ACL_DEFAULT);
     zkAclConf = ZKUtil.resolveConfIndirection(zkAclConf);
+
     List<ACL> zkAcls = ZKUtil.parseACLs(zkAclConf);
     if (zkAcls.isEmpty()) {
       zkAcls = Ids.CREATOR_ALL_ACL;
     }
-    
+    // 解析授权
     // Parse authentication from configuration.
     List<ZKAuthInfo> zkAuths = SecurityUtil.getZKAuthInfos(conf, ZK_AUTH_KEY);
 
@@ -348,10 +368,15 @@ public abstract class ZKFailoverController {
         ZK_QUORUM_KEY);
     Preconditions.checkArgument(zkTimeout > 0,
         "Invalid ZK session timeout %s", zkTimeout);
-    
+
+    // 最大重试次数 3
+    // ha.failover-controller.active-standby-elector.zk.op.retries :  3
     int maxRetryNum = conf.getInt(
         CommonConfigurationKeys.HA_FC_ELECTOR_ZK_OP_RETRIES_KEY,
         CommonConfigurationKeys.HA_FC_ELECTOR_ZK_OP_RETRIES_DEFAULT);
+
+    // getParentZnode : /hadoop-ha/ [namenode serviceId]
+    // 构建ActiveStandbyElector
     elector = new ActiveStandbyElector(zkQuorum,
         zkTimeout, getParentZnode(), zkAcls, zkAuths,
         new ElectorCallbacks(), maxRetryNum);

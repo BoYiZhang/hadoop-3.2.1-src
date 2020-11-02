@@ -199,7 +199,10 @@ public class HealthMonitor {
       HAServiceStatus status = null;
       boolean healthy = false;
       try {
+        //获取状态
         status = proxy.getServiceStatus();
+
+        // 监控检查
         proxy.monitorHealth();
         healthy = true;
       } catch (Throwable t) {
@@ -291,8 +294,10 @@ public class HealthMonitor {
     @Override
     public void run() {
       while (shouldRun) {
-        try { 
+        try {
+          // 建立连接
           loopUntilConnected();
+          // 做健康检查
           doHealthChecks();
         } catch (InterruptedException ie) {
           Preconditions.checkState(!shouldRun,

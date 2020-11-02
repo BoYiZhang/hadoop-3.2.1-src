@@ -134,15 +134,18 @@ public class DFSZKFailoverController extends ZKFailoverController {
       throw new HadoopIllegalArgumentException(
           "HA is not enabled for this namenode.");
     }
+    // 获取 namenode  id ..
     String nnId = HAUtil.getNameNodeId(localNNConf, nsId);
     if (nnId == null) {
       String msg = "Could not get the namenode ID of this node. " +
           "You may run zkfc on the node other than namenode.";
       throw new HadoopIllegalArgumentException(msg);
     }
+    // 初始化秘钥
     NameNode.initializeGenericKeys(localNNConf, nsId, nnId);
     DFSUtil.setGenericConf(localNNConf, nsId, nnId, ZKFC_CONF_KEYS);
-    
+
+    //构建 NNHAServiceTarget
     NNHAServiceTarget localTarget = new NNHAServiceTarget(
         localNNConf, nsId, nnId);
     return new DFSZKFailoverController(localNNConf, localTarget);
@@ -190,8 +193,10 @@ public class DFSZKFailoverController extends ZKFailoverController {
     GenericOptionsParser parser = new GenericOptionsParser(
         new HdfsConfiguration(), args);
     try {
-      DFSZKFailoverController zkfc = DFSZKFailoverController.create(
-          parser.getConfiguration());
+      //构建DFSZKFailoverController
+      DFSZKFailoverController zkfc = DFSZKFailoverController.create(  parser.getConfiguration());
+
+      // zkfc.run 启动
       System.exit(zkfc.run(parser.getRemainingArgs()));
     } catch (Throwable t) {
       LOG.error("DFSZKFailOverController exiting due to earlier exception "
