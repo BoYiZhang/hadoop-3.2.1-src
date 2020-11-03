@@ -109,18 +109,30 @@ public abstract class Storage extends StorageInfo {
   public static final String STORAGE_1_BBW = "blocksBeingWritten";
   
   public enum StorageState {
+    //存储不存在
     NON_EXISTENT,
+    //未格式化
     NOT_FORMATTED,
+    //升级完成状态
     COMPLETE_UPGRADE,
+    //恢复升级状态
     RECOVER_UPGRADE,
+    //完成升级提交
     COMPLETE_FINALIZE,
+    //完成回滚操作
     COMPLETE_ROLLBACK,
+    //恢复回滚
     RECOVER_ROLLBACK,
+    //完成检查点操作
     COMPLETE_CHECKPOINT,
+    //恢复检查点操作
     RECOVER_CHECKPOINT,
+    //正常状态
     NORMAL;
   }
-  
+
+
+
   /**
    * An interface to denote storage directory type
    * Implementations can define a type for storage directory by implementing
@@ -132,8 +144,7 @@ public abstract class Storage extends StorageInfo {
     public boolean isOfType(StorageDirType type);
   }
 
-  private final List<StorageDirectory> storageDirs =
-      new CopyOnWriteArrayList<>();
+  private final List<StorageDirectory> storageDirs =    new CopyOnWriteArrayList<>();
 
   private class DirIterator implements Iterator<StorageDirectory> {
     final StorageDirType dirType;
@@ -274,17 +285,34 @@ public abstract class Storage extends StorageInfo {
    */
   @InterfaceAudience.Private
   public static class StorageDirectory implements FormatConfirmable {
+
+    // 存储目录的根， 就是java.io.File文件。
     final File root;              // root directory
     // whether or not this dir is shared between two separate NNs for HA, or
     // between multiple block pools in the case of federation.
+
+    // 指示当前目录是否是共享的。
+    // 例如在HA部署中， 不同的Namenode之间共享存储目录，
+    // 或者在Federation部署中不同的块池之间共享存储目录。
     final boolean isShared;
+
+    // 当前存储目录的类型。
     final StorageDirType dirType; // storage dir type
+
+    // 独占锁， java.nio.FileLock类型，
+    // 用来支持Datanode或者Namenode线程独占存储目录的锁操作。
     FileLock lock;                // storage lock
+
+    // 权限信息
     private final FsPermission permission;
 
+    // 存储目录的标识符。
     private String storageUuid = null;      // Storage directory identifier.
-    
+
+    // 位置信息
     private final StorageLocation location;
+
+
     public StorageDirectory(File dir) {
       this(dir, null, false);
     }
@@ -638,6 +666,7 @@ public abstract class Storage extends StorageInfo {
     }
 
     /**
+     * 检查存储目录的一致性。
      * Check consistency of the storage directory.
      * 
      * @param startOpt a startup option.
@@ -654,20 +683,26 @@ public abstract class Storage extends StorageInfo {
         boolean checkCurrentIsEmpty)
         throws IOException {
 
-      if (location != null &&
-          location.getStorageType() == StorageType.PROVIDED) {
+      if (location != null && location.getStorageType() == StorageType.PROVIDED) {
         // currently we assume that PROVIDED storages are always NORMAL
+        // 如果是外部存储   目前，我们假设提供的存储始终为“正常”
         return StorageState.NORMAL;
       }
 
       assert root != null : "root is null";
       boolean hadMkdirs = false;
+
       String rootPath = root.getCanonicalPath();
-      try { // check that storage exists
+
+
+      try {
+        // 检查存储是否存在
+        // check that storage exists
         if (!root.exists()) {
+          //如果存储不存在或者
           // storage directory does not exist
-          if (startOpt != StartupOption.FORMAT &&
-              startOpt != StartupOption.HOTSWAP) {
+          if (startOpt != StartupOption.FORMAT &&  startOpt != StartupOption.HOTSWAP) {
+            //如果不是格式化 或者 热切换 则状态为不存在
             LOG.warn("Storage directory {} does not exist", rootPath);
             return StorageState.NON_EXISTENT;
           }
@@ -677,21 +712,28 @@ public abstract class Storage extends StorageInfo {
           }
           hadMkdirs = true;
         }
-        // or is inaccessible
+        // 不是目录
         if (!root.isDirectory()) {
           LOG.warn("{} is not a directory", rootPath);
+          // 提示不存在
           return StorageState.NON_EXISTENT;
         }
+        // 是否可以写
         if (!FileUtil.canWrite(root)) {
+          // 提示不存在
           LOG.warn("Cannot access storage directory {}", rootPath);
           return StorageState.NON_EXISTENT;
         }
       } catch(SecurityException ex) {
+        // 权限异常 提示不存在
         LOG.warn("Cannot access storage directory {}", rootPath, ex);
         return StorageState.NON_EXISTENT;
       }
 
+      //如果存储存在,则开始加锁
       this.lock(); // lock storage if it exists
+
+      // 如果startOpt为HOTSWAP，则对于空目录返回NOT_FORMATTED，同时还会检查布局版本。
 
       // If startOpt is HOTSWAP, it returns NOT_FORMATTED for empty directory,
       // while it also checks the layout version.
@@ -700,21 +742,28 @@ public abstract class Storage extends StorageInfo {
         if (checkCurrentIsEmpty) {
           checkEmptyCurrent();
         }
+        // 提示为格式化
         return StorageState.NOT_FORMATTED;
       }
 
+      //是否 导入检查点
       if (startOpt != HdfsServerConstants.StartupOption.IMPORT) {
+        // 检测老的版本
         storage.checkOldLayoutStorage(this);
       }
 
       // check whether current directory is valid
+      // 获取版本文件
       File versionFile = getVersionFile();
+      // 版本文件是否存在
       boolean hasCurrent = versionFile.exists();
 
+      // 检查文件是否存在
       // check which directories exist
       boolean hasPrevious = getPreviousDir().exists();
       boolean hasPreviousTmp = getPreviousTmp().exists();
       boolean hasRemovedTmp = getRemovedTmp().exists();
+      // 检查是否有Finalized文件
       boolean hasFinalizedTmp = getFinalizedTmp().exists();
       boolean hasCheckpointTmp = getLastCheckpointTmp().exists();
 
@@ -722,24 +771,30 @@ public abstract class Storage extends StorageInfo {
           || hasFinalizedTmp || hasCheckpointTmp)) {
         // no temp dirs - no recovery
         if (hasCurrent)
+          //版本文件存在 状态: 正常
           return StorageState.NORMAL;
         if (hasPrevious)
+          // 存在previous 文件夹 , 报错, 版本文件丢失
           throw new InconsistentFSStateException(root,
                               "version file in current directory is missing.");
         if (checkCurrentIsEmpty) {
+          //检查当前文件夹是否为空,如果为空则抛出异常.
           checkEmptyCurrent();
         }
+        // 返回状态,未被格式化
         return StorageState.NOT_FORMATTED;
       }
 
       if ((hasPreviousTmp?1:0) + (hasRemovedTmp?1:0)
           + (hasFinalizedTmp?1:0) + (hasCheckpointTmp?1:0) > 1)
         // more than one temp dirs
+        // 超过1个临时目录, 报错 : too many temporary directories
         throw new InconsistentFSStateException(root,
                                                "too many temporary directories.");
 
       // # of temp dirs == 1 should either recover or complete a transition
       if (hasCheckpointTmp) {
+        // 是否有hasCurrent 文件 ? 是完成检查点操作 : 否  恢复检查点操作
         return hasCurrent ? StorageState.COMPLETE_CHECKPOINT
                           : StorageState.RECOVER_CHECKPOINT;
       }
@@ -905,7 +960,11 @@ public abstract class Storage extends StorageInfo {
     @SuppressWarnings("resource")
     FileLock tryLock() throws IOException {
       boolean deletionHookAdded = false;
+
+      //构造in_use.lock文件
       File lockF = new File(root, STORAGE_FILE_LOCK);
+
+      //锁文件构造失败， 则退出执行
       if (!lockF.exists()) {
         lockF.deleteOnExit();
         deletionHookAdded = true;
@@ -914,14 +973,19 @@ public abstract class Storage extends StorageInfo {
       String jvmName = ManagementFactory.getRuntimeMXBean().getName();
       FileLock res = null;
       try {
+        //尝试在锁文件上加锁
         res = file.getChannel().tryLock();
+
+        //已经有程序获得了锁， 那么直接抛出异常
         if (null == res) {
           LOG.error("Unable to acquire file lock on path {}", lockF);
           throw new OverlappingFileLockException();
         }
+        //加锁成功， 在锁文件中写入虚拟机信息
         file.write(jvmName.getBytes(Charsets.UTF_8));
         LOG.info("Lock on {} acquired by nodename {}", lockF, jvmName);
       } catch(OverlappingFileLockException oe) {
+        //已经有程序获得了锁， 则关闭锁文件， 返回null
         // Cannot read from the locked file on Windows.
         String lockingJvmName = Path.WINDOWS ? "" : (" " + file.readLine());
         LOG.error("It appears that another node {} has already locked the "
@@ -929,6 +993,7 @@ public abstract class Storage extends StorageInfo {
         file.close();
         return null;
       } catch(IOException e) {
+        //读取锁文件失败， 则关闭锁文件， 抛出异常
         LOG.error("Failed to acquire lock on {}. If this storage directory is"
             + " mounted via NFS, ensure that the appropriate nfs lock services"
             + " are running.", lockF, e);
@@ -936,6 +1001,7 @@ public abstract class Storage extends StorageInfo {
         throw e;
       }
       if (!deletionHookAdded) {
+        //加锁成功， 在虚拟机运行结束后， 删除锁文件
         // If the file existed prior to our startup, we didn't
         // call deleteOnExit above. But since we successfully locked
         // the dir, we can take care of cleaning it up.

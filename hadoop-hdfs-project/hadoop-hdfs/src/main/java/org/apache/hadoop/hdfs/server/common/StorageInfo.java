@@ -43,11 +43,23 @@ import com.google.common.base.Joiner;
  */
 @InterfaceAudience.Private
 public class StorageInfo {
+
+  // 存储系统布局版本号， 当节点存储的目录结构发生改变或者 fsimage和editlog的格式发生改变时， 存储系统布局版本号会更新。
+  // 这个版本号一 般是负数。
+
   public int   layoutVersion;   // layout version of the storage data
+
+  // 存储系统命名空间标识。
   public int   namespaceID;     // id of the file system
+
+  // 存储系统的集群ID。
   public String clusterID;      // id of the cluster
+
+  // 存储系统创建时间。
   public long  cTime;           // creation time of the file system state
 
+
+  // 节点类型， 有DATA_NODE、 NAME_NODE、 JOURNAL_NODE等类型。
   protected final NodeType storageType; // Type of the node using this storage 
   
   protected static final String STORAGE_FILE_VERSION    = "VERSION";

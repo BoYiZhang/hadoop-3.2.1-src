@@ -215,7 +215,7 @@ public class DataStorage extends Storage {
 
   /**
    * VolumeBuilder holds the metadata (e.g., the storage directories) of the
-   * prepared volume returned from {@link prepareVolume()}. Calling {@link build()}
+   * prepared volume returned from {@link }. Calling {@link  }
    * to add the metadata to {@link DataStorage} so that this prepared volume can
    * be active.
    */
@@ -344,8 +344,9 @@ public class DataStorage extends Storage {
   }
 
   static int getParallelVolumeLoadThreadsNum(int dataDirs, Configuration conf) {
-    final String key
-        = DFSConfigKeys.DFS_DATANODE_PARALLEL_VOLUME_LOAD_THREADS_NUM_KEY;
+
+    // dfs.datanode.parallel.volumes.load.threads.num
+    final String key  = DFSConfigKeys.DFS_DATANODE_PARALLEL_VOLUME_LOAD_THREADS_NUM_KEY;
     final int n = conf.getInt(key, dataDirs);
     if (n < 1) {
       throw new HadoopIllegalArgumentException(key + " = " + n + " < 1");
@@ -380,14 +381,17 @@ public class DataStorage extends Storage {
   synchronized List<StorageDirectory> addStorageLocations(DataNode datanode,
       NamespaceInfo nsInfo, Collection<StorageLocation> dataDirs,
       StartupOption startOpt) throws IOException {
-    final int numThreads = getParallelVolumeLoadThreadsNum(
-        dataDirs.size(), datanode.getConf());
+    // 获取线程数
+    final int numThreads = getParallelVolumeLoadThreadsNum( dataDirs.size(), datanode.getConf());
+
+    //构建线程池
     final ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+
     try {
-      final List<StorageLocation> successLocations = loadDataStorage(
-          datanode, nsInfo, dataDirs, startOpt, executor);
-      return loadBlockPoolSliceStorage(
-          datanode, nsInfo, successLocations, startOpt, executor);
+
+      final List<StorageLocation> successLocations = loadDataStorage(  datanode, nsInfo, dataDirs, startOpt, executor);
+
+      return loadBlockPoolSliceStorage(  datanode, nsInfo, successLocations, startOpt, executor);
     } finally {
       executor.shutdown();
     }
@@ -396,18 +400,22 @@ public class DataStorage extends Storage {
   private List<StorageLocation> loadDataStorage(DataNode datanode,
       NamespaceInfo nsInfo, Collection<StorageLocation> dataDirs,
       StartupOption startOpt, ExecutorService executor) throws IOException {
+
     final List<StorageLocation> success = Lists.newArrayList();
     final List<UpgradeTask> tasks = Lists.newArrayList();
+
     for (StorageLocation dataDir : dataDirs) {
       if (!containsStorageDir(dataDir)) {
         try {
           // It first ensures the datanode level format is completed.
-          final List<Callable<StorageDirectory>> callables
-              = Lists.newArrayList();
-          final StorageDirectory sd = loadStorageDirectory(
-              datanode, nsInfo, dataDir, startOpt, callables);
+          final List<Callable<StorageDirectory>> callables  = Lists.newArrayList();
+
+          final StorageDirectory sd = loadStorageDirectory(  datanode, nsInfo, dataDir, startOpt, callables);
+
           if (callables.isEmpty()) {
+
             addStorageDir(sd);
+
             success.add(dataDir);
           } else {
             for(Callable<StorageDirectory> c : callables) {
@@ -427,7 +435,9 @@ public class DataStorage extends Storage {
       LOG.info("loadDataStorage: {} upgrade tasks", tasks.size());
       for(UpgradeTask t : tasks) {
         try {
+
           addStorageDir(t.future.get());
+
           success.add(t.dataDir);
         } catch (ExecutionException e) {
           LOG.warn("Failed to upgrade storage directory {}", t.dataDir, e);
@@ -443,24 +453,35 @@ public class DataStorage extends Storage {
   private List<StorageDirectory> loadBlockPoolSliceStorage(DataNode datanode,
       NamespaceInfo nsInfo, Collection<StorageLocation> dataDirs,
       StartupOption startOpt, ExecutorService executor) throws IOException {
+
     final String bpid = nsInfo.getBlockPoolID();
+
+
     final BlockPoolSliceStorage bpStorage = getBlockPoolSliceStorage(nsInfo);
-    Map<StorageLocation, List<Callable<StorageDirectory>>> upgradeCallableMap =
-        new HashMap<>();
+
+
+    Map<StorageLocation, List<Callable<StorageDirectory>>> upgradeCallableMap =  new HashMap<>();
+
     final List<StorageDirectory> success = Lists.newArrayList();
+
     final List<UpgradeTask> tasks = Lists.newArrayList();
+
     for (StorageLocation dataDir : dataDirs) {
+
       dataDir.makeBlockPoolDir(bpid, null);
       try {
-        final List<Callable<StorageDirectory>> sdCallables =
-            Lists.newArrayList();
-        final List<StorageDirectory> dirs = bpStorage.recoverTransitionRead(
-            nsInfo, dataDir, startOpt, sdCallables, datanode.getConf());
+
+        final List<Callable<StorageDirectory>> sdCallables =  Lists.newArrayList();
+
+        final List<StorageDirectory> dirs = bpStorage.recoverTransitionRead( nsInfo, dataDir, startOpt, sdCallables, datanode.getConf());
+
         if (sdCallables.isEmpty()) {
           for(StorageDirectory sd : dirs) {
+
             success.add(sd);
           }
         } else {
+
           upgradeCallableMap.put(dataDir, sdCallables);
         }
       } catch (IOException e) {
@@ -469,18 +490,23 @@ public class DataStorage extends Storage {
       }
     }
 
-    for (Map.Entry<StorageLocation, List<Callable<StorageDirectory>>> entry :
-        upgradeCallableMap.entrySet()) {
+    for (Map.Entry<StorageLocation, List<Callable<StorageDirectory>>> entry :  upgradeCallableMap.entrySet()) {
+
       for(Callable<StorageDirectory> c : entry.getValue()) {
+
         tasks.add(new UpgradeTask(entry.getKey(), executor.submit(c)));
+
       }
     }
 
     if (!tasks.isEmpty()) {
+
       LOG.info("loadBlockPoolSliceStorage: {} upgrade tasks", tasks.size());
       for(UpgradeTask t : tasks) {
         try {
+
           success.add(t.future.get());
+
         } catch (ExecutionException e) {
           LOG.warn("Failed to upgrade storage directory {} for block pool {}",
               t.dataDir, bpid, e);
@@ -1367,7 +1393,7 @@ public class DataStorage extends Storage {
   }
 
   /**
-   * Get the BlockPoolSliceStorage from {@link bpStorageMap}.
+   * Get the BlockPoolSliceStorage from {@link }.
    * If the object is not found, create a new object and put it to the map.
    */
   synchronized BlockPoolSliceStorage getBlockPoolSliceStorage(
