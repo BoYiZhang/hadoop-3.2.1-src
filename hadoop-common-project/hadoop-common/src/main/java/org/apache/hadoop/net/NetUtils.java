@@ -114,6 +114,7 @@ public class NetUtils {
    */
   public static SocketFactory getDefaultSocketFactory(Configuration conf) {
 
+    // hadoop.rpc.socket.factory.class.default: org.apache.hadoop.net.StandardSocketFactory
     String propValue = conf.get(
         CommonConfigurationKeysPublic.HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY,
         CommonConfigurationKeysPublic.HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_DEFAULT);

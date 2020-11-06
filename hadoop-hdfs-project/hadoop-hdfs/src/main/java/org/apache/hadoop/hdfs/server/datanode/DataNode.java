@@ -446,39 +446,57 @@ public class DataNode extends ReconfigurableBase
            final StorageLocationChecker storageLocationChecker,
            final SecureResources resources) throws IOException {
     super(conf);
-    this.tracer = createTracer(conf);
-    this.tracerConfigurationManager =
-        new TracerConfigurationManager(DATANODE_HTRACE_PREFIX, conf);
-    this.fileIoProvider = new FileIoProvider(conf, this);
-    this.blockScanner = new BlockScanner(this);
-    this.lastDiskErrorCheck = 0;
-    this.maxNumberOfBlocksToLog = conf.getLong(DFS_MAX_NUM_BLOCKS_TO_LOG_KEY,
-        DFS_MAX_NUM_BLOCKS_TO_LOG_DEFAULT);
 
-    this.usersWithLocalPathAccess = Arrays.asList(
-        conf.getTrimmedStrings(DFSConfigKeys.DFS_BLOCK_LOCAL_PATH_ACCESS_USER_KEY));
+    this.tracer = createTracer(conf);
+    this.tracerConfigurationManager =  new TracerConfigurationManager(DATANODE_HTRACE_PREFIX, conf);
+
+
+    this.fileIoProvider = new FileIoProvider(conf, this);
+
+    this.blockScanner = new BlockScanner(this);
+
+    this.lastDiskErrorCheck = 0;
+
+    // dfs.namenode.max-num-blocks-to-log : 1000
+    this.maxNumberOfBlocksToLog = conf.getLong(DFS_MAX_NUM_BLOCKS_TO_LOG_KEY,  DFS_MAX_NUM_BLOCKS_TO_LOG_DEFAULT);
+
+    // dfs.block.local-path-access.user :
+    this.usersWithLocalPathAccess = Arrays.asList(  conf.getTrimmedStrings(DFSConfigKeys.DFS_BLOCK_LOCAL_PATH_ACCESS_USER_KEY));
+
+    // dfs.datanode.use.datanode.hostname : false
     this.connectToDnViaHostname = conf.getBoolean(
         DFSConfigKeys.DFS_DATANODE_USE_DN_HOSTNAME,
         DFSConfigKeys.DFS_DATANODE_USE_DN_HOSTNAME_DEFAULT);
+
+    // dfs.permissions.superusergroup : supergroup
     this.supergroup = conf.get(DFSConfigKeys.DFS_PERMISSIONS_SUPERUSERGROUP_KEY,
         DFSConfigKeys.DFS_PERMISSIONS_SUPERUSERGROUP_DEFAULT);
+
+    // dfs.permissions.enabled : true
     this.isPermissionEnabled = conf.getBoolean(
         DFSConfigKeys.DFS_PERMISSIONS_ENABLED_KEY,
         DFSConfigKeys.DFS_PERMISSIONS_ENABLED_DEFAULT);
+
+    // dfs.pipeline.ecn : false
     this.pipelineSupportECN = conf.getBoolean(
         DFSConfigKeys.DFS_PIPELINE_ECN_ENABLED,
         DFSConfigKeys.DFS_PIPELINE_ECN_ENABLED_DEFAULT);
 
+    // 配置文件版本 :
     confVersion = "core-" +
         conf.get("hadoop.common.configuration.version", "UNSPECIFIED") +
         ",hdfs-" +
         conf.get("hadoop.hdfs.configuration.version", "UNSPECIFIED");
 
+    // 构建 DatasetVolumeChecker
     this.volumeChecker = new DatasetVolumeChecker(conf, new Timer());
 
+    // 确定是否应尝试将文件描述符传递给客户端 : false
+    //
     // Determine whether we should try to pass file descriptors to clients.
     if (conf.getBoolean(HdfsClientConfigKeys.Read.ShortCircuit.KEY,
               HdfsClientConfigKeys.Read.ShortCircuit.DEFAULT)) {
+
       String reason = DomainSocket.getLoadingFailureReason();
       if (reason != null) {
         LOG.warn("File descriptor passing is disabled because {}", reason);
@@ -493,19 +511,30 @@ public class DataNode extends ReconfigurableBase
       LOG.debug(this.fileDescriptorPassingDisabledReason);
     }
 
+    // 构建socketFactory
+    //
+    // hadoop.rpc.socket.factory.class.default: org.apache.hadoop.net.StandardSocketFactory
     this.socketFactory = NetUtils.getDefaultSocketFactory(conf);
 
     try {
+
       hostName = getHostName(conf);
       LOG.info("Configured hostname is {}", hostName);
+
+      // 启动 DataNode
       startDataNode(dataDirs, resources);
+
     } catch (IOException ie) {
       shutdown();
       throw ie;
     }
+
+    // dfs.datanode.network.counts.cache.max.size :  Integer.MAX_VALUE
     final int dncCacheMaxSize =
         conf.getInt(DFS_DATANODE_NETWORK_COUNTS_CACHE_MAX_SIZE_KEY,
             DFS_DATANODE_NETWORK_COUNTS_CACHE_MAX_SIZE_DEFAULT) ;
+
+
     datanodeNetworkCounts =
         CacheBuilder.newBuilder()
             .maximumSize(dncCacheMaxSize)
@@ -518,7 +547,11 @@ public class DataNode extends ReconfigurableBase
               }
             });
 
+
+    // 从配置中获取每个OOB类型的超时值
+    //
     initOOBTimeout();
+
     this.storageLocationChecker = storageLocationChecker;
   }
 
@@ -1367,12 +1400,16 @@ public class DataNode extends ReconfigurableBase
                      SecureResources resources
                      ) throws IOException {
 
+    // Data Node中所有 BPs 设置全局设置
     // settings global for all BPs in the Data Node
     this.secureResources = resources;
+
     synchronized (this) {
       this.dataDirs = dataDirectories;
     }
+
     this.dnConf = new DNConf(this);
+    //检查安全配置
     checkSecureConfig(dnConf, getConf(), resources);
 
     if (dnConf.maxLockedMemory > 0) {
@@ -1410,12 +1447,19 @@ public class DataNode extends ReconfigurableBase
           + "to the number of configured volumes (" + volsConfigured + ").");
     }
 
+    //构建存储 DataStorage
     storage = new DataStorage();
     
     // global DN settings
     registerMXBean();
+
+    // 开启 DataXceiverServer
     initDataXceiver();
+
+    // 开启 DatanodeHttpServer
     startInfoServer();
+
+    // 开启监控
     pauseMonitor = new JvmPauseMonitor();
     pauseMonitor.init(getConf());
     pauseMonitor.start();
@@ -1434,18 +1478,26 @@ public class DataNode extends ReconfigurableBase
         DataNodePeerMetrics.create(getDisplayName(), getConf()) : null;
     metrics.getJvmMetrics().setPauseMonitor(pauseMonitor);
 
+    // ErasureCodingWorker
     ecWorker = new ErasureCodingWorker(getConf(), this);
+    // block恢复Worker
     blockRecoveryWorker = new BlockRecoveryWorker(this);
 
+    // 构建BlockPoolManager
     blockPoolManager = new BlockPoolManager(this);
+
+    // 刷新namenode
     blockPoolManager.refreshNamenodes(getConf());
 
     // Create the ReadaheadPool from the DataNode context so we can
     // exit without having to explicitly shutdown its thread pool.
     readaheadPool = ReadaheadPool.getInstance();
+
     saslClient = new SaslDataTransferClient(dnConf.getConf(),
         dnConf.saslPropsResolver, dnConf.trustedChannelResolver);
+    // SaslDataTransferServer
     saslServer = new SaslDataTransferServer(dnConf, blockPoolTokenSecretManager);
+
     startMetricsLogger();
 
     if (dnConf.diskStatsEnabled) {
@@ -2652,10 +2704,14 @@ public class DataNode extends ReconfigurableBase
         isTransientStorage);
   }
 
-  /** Start a single datanode daemon and wait for it to finish.
+  /**
+   * 开启各种服务
+   *  Start a single datanode daemon and wait for it to finish.
    *  If this thread is specifically interrupted, it will stop waiting.
    */
   public void runDatanodeDaemon() throws IOException {
+
+
     blockPoolManager.startAll();
 
     // start dataXceiveServer
@@ -2666,6 +2722,7 @@ public class DataNode extends ReconfigurableBase
     ipcServer.setTracer(tracer);
     ipcServer.start();
     startPlugins(getConf());
+
   }
 
   /**
@@ -2688,14 +2745,18 @@ public class DataNode extends ReconfigurableBase
     return instantiateDataNode(args, conf, null);
   }
   
-  /** Instantiate a single datanode object, along with its secure resources. 
+  /**
+   * 实例化单个datanode对象及其安全资源
+   * Instantiate a single datanode object, along with its secure resources.
    * This must be run by invoking{@link DataNode#runDatanodeDaemon()} 
    * subsequently. 
    */
   public static DataNode instantiateDataNode(String args [], Configuration conf,
       SecureResources resources) throws IOException {
-    if (conf == null)
+
+    if (conf == null) {
       conf = new HdfsConfiguration();
+    }
     
     if (args != null) {
       // parse generic hadoop options
@@ -2707,10 +2768,20 @@ public class DataNode extends ReconfigurableBase
       printUsage(System.err);
       return null;
     }
+
+
+    //构建存储位置对象
     Collection<StorageLocation> dataLocations = getStorageLocations(conf);
+
+
+    // 构建用户组信息
     UserGroupInformation.setConfiguration(conf);
+
+    // 构建授权体系 比如 kerbos
     SecurityUtil.login(conf, DFS_DATANODE_KEYTAB_FILE_KEY,
         DFS_DATANODE_KERBEROS_PRINCIPAL_KEY, getHostName(conf));
+
+    // 构建实例
     return makeInstance(dataLocations, conf, resources);
   }
 
@@ -2745,7 +2816,10 @@ public class DataNode extends ReconfigurableBase
                                  Configuration conf) throws IOException {
     return createDataNode(args, conf, null);
   }
-  
+
+
+  // 实例化并启动单个datanode守护进程并等待它完成。
+  // 如果这个线程被特别中断，它将停止等待。
   /** Instantiate & Start a single datanode daemon and wait for it to finish.
    *  If this thread is specifically interrupted, it will stop waiting.
    */
@@ -2753,9 +2827,16 @@ public class DataNode extends ReconfigurableBase
   @InterfaceAudience.Private
   public static DataNode createDataNode(String args[], Configuration conf,
       SecureResources resources) throws IOException {
+
+    //初始化构建DataNode
     DataNode dn = instantiateDataNode(args, conf, resources);
+
+
     if (dn != null) {
+
+      //启动所有服务
       dn.runDatanodeDaemon();
+
     }
     return dn;
   }
@@ -2790,19 +2871,30 @@ public class DataNode extends ReconfigurableBase
    * no directory from this directory list can be created.
    * @throws IOException
    */
-  static DataNode makeInstance(Collection<StorageLocation> dataDirs,
-      Configuration conf, SecureResources resources) throws IOException {
+  static DataNode makeInstance(Collection<StorageLocation> dataDirs,  Configuration conf, SecureResources resources) throws IOException {
+
     List<StorageLocation> locations;
-    StorageLocationChecker storageLocationChecker =
-        new StorageLocationChecker(conf, new Timer());
+
+    //开启线程,定时检查存储 dfs.datanode.disk.check.min.gap : 15毫秒 ???
+    StorageLocationChecker storageLocationChecker = new StorageLocationChecker(conf, new Timer());
+
+
     try {
+
       locations = storageLocationChecker.check(conf, dataDirs);
+
+
     } catch (InterruptedException ie) {
       throw new IOException("Failed to instantiate DataNode", ie);
     }
+
+    //todo
     DefaultMetricsSystem.initialize("DataNode");
 
+
     assert locations.size() > 0 : "number of data directories should be > 0";
+
+    // 创建 DataNode
     return new DataNode(conf, locations, storageLocationChecker, resources);
   }
 
@@ -2897,8 +2989,12 @@ public class DataNode extends ReconfigurableBase
     int errorCode = 0;
     try {
       StringUtils.startupShutdownMessage(DataNode.class, args, LOG);
+
+      // 构建DataNode
       DataNode datanode = createDataNode(args, null, resources);
+
       if (datanode != null) {
+        //阻塞datanode
         datanode.join();
       } else {
         errorCode = 1;
