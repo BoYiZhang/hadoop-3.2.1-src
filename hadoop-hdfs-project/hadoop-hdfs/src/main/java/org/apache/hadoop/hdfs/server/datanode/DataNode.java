@@ -1755,8 +1755,9 @@ public class DataNode extends ReconfigurableBase
    */
   private void handleAddBlockPoolError(AddBlockPoolException e)
       throws IOException {
-    Map<FsVolumeSpi, IOException> unhealthyDataDirs =
-        e.getFailingVolumes();
+
+    Map<FsVolumeSpi, IOException> unhealthyDataDirs = e.getFailingVolumes();
+
     if (unhealthyDataDirs != null && !unhealthyDataDirs.isEmpty()) {
       handleVolumeFailures(unhealthyDataDirs.keySet());
     } else {
@@ -1781,24 +1782,37 @@ public class DataNode extends ReconfigurableBase
    * handshake with the the first namenode is completed.
    */
   private void initStorage(final NamespaceInfo nsInfo) throws IOException {
-    final FsDatasetSpi.Factory<? extends FsDatasetSpi<?>> factory
-        = FsDatasetSpi.Factory.getFactory(getConf());
+
+
+    final FsDatasetSpi.Factory<? extends FsDatasetSpi<?>> factory  = FsDatasetSpi.Factory.getFactory(getConf());
     
     if (!factory.isSimulated()) {
+
       final StartupOption startOpt = getStartupOption(getConf());
+
       if (startOpt == null) {
         throw new IOException("Startup option not set.");
       }
+
+      //bpid:  BP-451827885-192.168.8.156-1584099133244
       final String bpid = nsInfo.getBlockPoolID();
+
       //read storage info, lock data dirs and transition fs state if necessary
       synchronized (this) {
+
+
         storage.recoverTransitionRead(this, nsInfo, dataDirs, startOpt);
       }
+
       final StorageInfo bpStorage = storage.getBPStorage(bpid);
-      LOG.info("Setting up storage: nsid={};bpid={};lv={};" +
-              "nsInfo={};dnuuid={}",
+
+
+
+      LOG.info("Setting up storage: nsid={};bpid={};lv={};" +   "nsInfo={};dnuuid={}",
           bpStorage.getNamespaceID(), bpid, storage.getLayoutVersion(),
           nsInfo, storage.getDatanodeUuid());
+
+
     }
 
     // If this is a newly formatted DataNode then assign a new DatanodeUuid.
@@ -2770,7 +2784,7 @@ public class DataNode extends ReconfigurableBase
     }
 
 
-    //构建存储位置对象
+    //从配置文件中加载 存储位置  --> 构建存储存储对象
     Collection<StorageLocation> dataLocations = getStorageLocations(conf);
 
 
@@ -2875,7 +2889,7 @@ public class DataNode extends ReconfigurableBase
 
     List<StorageLocation> locations;
 
-    //开启线程,定时检查存储 dfs.datanode.disk.check.min.gap : 15毫秒 ???
+    //开启线程,定时检查存储 dfs.datanode.disk.check.min.gap : 15 minute
     StorageLocationChecker storageLocationChecker = new StorageLocationChecker(conf, new Timer());
 
 

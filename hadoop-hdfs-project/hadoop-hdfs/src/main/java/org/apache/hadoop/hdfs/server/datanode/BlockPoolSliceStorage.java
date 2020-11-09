@@ -138,6 +138,8 @@ public class BlockPoolSliceStorage extends Storage {
   }
 
   /**
+   * 加载一个存储目录。如果需要，从以前的转换中恢复。
+   *
    * Load one storage directory. Recover from previous transitions if required.
    *
    * @param nsInfo namespace information
@@ -153,17 +155,24 @@ public class BlockPoolSliceStorage extends Storage {
     StorageDirectory sd = new StorageDirectory(
         nsInfo.getBlockPoolID(), null, true, location);
     try {
+
+      // 调用analyzeStorage()方法分析当前StorageDirectory的状态
       StorageState curState = sd.analyzeStorage(startOpt, this, true);
       // sd is locked but not opened
+      // 根据curState恢复状态
       switch (curState) {
+      //存储目录状态正常， 不用执行任何操作
       case NORMAL:
         break;
+
+      //对于不存在的情况， 则直接忽略
       case NON_EXISTENT:
         LOG.info("Block pool storage directory for location {} and block pool"
             + " id {} does not exist", location, nsInfo.getBlockPoolID());
         throw new IOException("Storage directory for location " + location +
             " and block pool id " + nsInfo.getBlockPoolID() +
             " does not exist");
+      //没有格式化时， 调用format()方法格式化数据目录
       case NOT_FORMATTED: // format
         LOG.info("Block pool storage directory for location {} and block pool"
                 + " id {} is not formatted. Formatting ...", location,
@@ -171,6 +180,7 @@ public class BlockPoolSliceStorage extends Storage {
         format(sd, nsInfo);
         break;
       default:  // recovery part is common
+        //对于其他情况， 则调用StorageDirectory.doRecover()恢复到NORMAL状态
         sd.doRecover(curState);
       }
 
@@ -178,6 +188,8 @@ public class BlockPoolSliceStorage extends Storage {
       // Each storage directory is treated individually.
       // During startup some of them can upgrade or roll back
       // while others could be up-to-date for the regular startup.
+
+      //调用doTransition()执行启动操作， 启动选项通过startOpt参数传递
       if (!doTransition(sd, nsInfo, startOpt, callables, conf)) {
 
         // 3. Check CTime and update successfully loaded storage.
@@ -185,6 +197,7 @@ public class BlockPoolSliceStorage extends Storage {
           throw new IOException("Datanode CTime (=" + getCTime()
               + ") is not equal to namenode CTime (=" + nsInfo.getCTime() + ")");
         }
+        //3． 对于每一个成功执行的存储目录， 写入VERSION文件
         setServiceLayoutVersion(getServiceLayoutVersion());
         writeProperties(sd);
       }
@@ -197,6 +210,12 @@ public class BlockPoolSliceStorage extends Storage {
   }
 
   /**
+   * 分析并加载存储目录。
+   * 如果需要，从以前的转换中恢复。
+   *
+   * 块池存储要么全部被分析，要么没有加载。
+   * 因此，加载任何块池存储失败都会导致错误的数据卷。
+   *
    * Analyze and load storage directories. Recover from previous transitions if
    * required.
    *
@@ -345,6 +364,9 @@ public class BlockPoolSliceStorage extends Storage {
   }
 
   /**
+   *
+   * 分析是否需要转换BP状态，必要时执行。
+   *
    * Analyze whether a transition of the BP state is required and
    * perform it if necessary.
    * <br>
@@ -360,53 +382,73 @@ public class BlockPoolSliceStorage extends Storage {
   private boolean doTransition(StorageDirectory sd, NamespaceInfo nsInfo,
       StartupOption startOpt, List<Callable<StorageDirectory>> callables,
       Configuration conf) throws IOException {
+
+    // 数据来自于外部存储 什么都不做
     if (sd.getStorageLocation().getStorageType() == StorageType.PROVIDED) {
       return false; // regular startup for PROVIDED storage directories
     }
+
     if (startOpt == StartupOption.ROLLBACK && sd.getPreviousDir().exists()) {
+      // 如果启动选项是ROLLBACK， 则调用doRollback()进行回滚操作
       Preconditions.checkState(!getTrashRootDir(sd).exists(),
           sd.getPreviousDir() + " and " + getTrashRootDir(sd) + " should not " +
           " both be present.");
       doRollback(sd, nsInfo); // rollback if applicable
+
     } else if (startOpt == StartupOption.ROLLBACK &&
         !sd.getPreviousDir().exists()) {
       // Restore all the files in the trash. The restored files are retained
       // during rolling upgrade rollback. They are deleted during rolling
       // upgrade downgrade.
+      // 还原垃圾箱中的所有文件。在滚动升级回滚期间将保留还原的文件。它们在滚动升级降级期间被删除。
       int restored = restoreBlockFilesFromTrash(getTrashRootDir(sd));
       LOG.info("Restored {} block files from trash.", restored);
     }
+    //检查升级是否成功
     readProperties(sd);
     checkVersionUpgradable(this.layoutVersion);
-    assert this.layoutVersion >= HdfsServerConstants.DATANODE_LAYOUT_VERSION
-       : "Future version is not allowed";
+
+
+    assert this.layoutVersion >= HdfsServerConstants.DATANODE_LAYOUT_VERSION  : "Future version is not allowed";
+
+    // 检测 NamespaceID 是否相等 , 不相等 则报错
     if (getNamespaceID() != nsInfo.getNamespaceID()) {
       throw new IOException("Incompatible namespaceIDs in "
           + sd.getRoot().getCanonicalPath() + ": namenode namespaceID = "
           + nsInfo.getNamespaceID() + "; datanode namespaceID = "
           + getNamespaceID());
     }
+
+    // 检测 blockpoolID 是否相等 , 不相等 则报错
     if (!blockpoolID.equals(nsInfo.getBlockPoolID())) {
       throw new IOException("Incompatible blockpoolIDs in "
           + sd.getRoot().getCanonicalPath() + ": namenode blockpoolID = "
           + nsInfo.getBlockPoolID() + "; datanode blockpoolID = "
           + blockpoolID);
     }
-    if (this.layoutVersion == HdfsServerConstants.DATANODE_LAYOUT_VERSION
-        && this.cTime == nsInfo.getCTime()) {
+
+    // 如果版本相同 并且创建时间相同 正常启动
+    // TODO 为什么要加一个验证创建时间 ??????
+    if (this.layoutVersion == HdfsServerConstants.DATANODE_LAYOUT_VERSION && this.cTime == nsInfo.getCTime()) {
       return false; // regular startup
     }
+
+
     if (this.layoutVersion > HdfsServerConstants.DATANODE_LAYOUT_VERSION) {
       int restored = restoreBlockFilesFromTrash(getTrashRootDir(sd));
       LOG.info("Restored {} block files from trash " +
           "before the layout upgrade. These blocks will be moved to " +
           "the previous directory during the upgrade", restored);
     }
+
+    //磁盘版本号小于代码版本号， 则调用doUpgrade()升级
     if (this.layoutVersion > HdfsServerConstants.DATANODE_LAYOUT_VERSION
         || this.cTime < nsInfo.getCTime()) {
       doUpgrade(sd, nsInfo, callables, conf); // upgrade
       return true;
     }
+
+    //磁盘版本号大于Datanode支持的版本号， 则抛出异常
     // layoutVersion == LAYOUT_VERSION && this.cTime > nsInfo.cTime
     // must shutdown
     throw new IOException("Datanode state: LV = " + this.getLayoutVersion()
@@ -437,7 +479,11 @@ public class BlockPoolSliceStorage extends Storage {
       final NamespaceInfo nsInfo,
       final List<Callable<StorageDirectory>> callables,
       final Configuration conf) throws IOException {
+
+    // 如果当前存储目录的文件系统布局版本号支持Federation部署
     // Upgrading is applicable only to release with federation or after
+    // 直接更新layoutVersion， 并写入存储目录的VERSION文件中
+    // 其他升级操作由BlockPoolSliceStorage.doUpgrade()方法负责
     if (!DataNodeLayoutVersion.supports(
         LayoutVersion.Feature.FEDERATION, layoutVersion)) {
       return;
@@ -462,22 +508,28 @@ public class BlockPoolSliceStorage extends Storage {
     }
     final File bpCurDir = bpSd.getCurrentDir();
     final File bpPrevDir = bpSd.getPreviousDir();
+
+    //确认current目录存在
     assert bpCurDir.exists() : "BP level current directory must exist.";
     cleanupDetachDir(new File(bpCurDir, DataStorage.STORAGE_DIR_DETACHED));
-    
+
+    //1． 删除previous目录
     // 1. Delete <SD>/current/<bpid>/previous dir before upgrading
     if (bpPrevDir.exists()) {
       deleteDir(bpPrevDir);
     }
     final File bpTmpDir = bpSd.getPreviousTmp();
+    //确认previous.tmp目录不存在
     assert !bpTmpDir.exists() : "previous.tmp directory must not exist.";
-    
+
+    // 2． 将current目录重命名为previous.tmp
     // 2. Rename <SD>/current/<bpid>/current to
     //    <SD>/current/<bpid>/previous.tmp
     rename(bpCurDir, bpTmpDir);
     
     final String name = "block pool " + blockpoolID + " at " + bpSd.getRoot();
     if (callables == null) {
+      //执行升级操作
       doUpgrade(name, bpSd, nsInfo, bpPrevDir, bpTmpDir, bpCurDir, oldLV, conf);
     } else {
       callables.add(new Callable<StorageDirectory>() {
@@ -495,6 +547,9 @@ public class BlockPoolSliceStorage extends Storage {
       NamespaceInfo nsInfo, final File bpPrevDir, final File bpTmpDir,
       final File bpCurDir, final int oldLV, Configuration conf)
           throws IOException {
+
+    //3． 将块池目录的current文件夹与存储目录的previous.tmp文件夹建立硬链接
+
     // 3. Create new <SD>/current with block files hardlinks and VERSION
     linkAllBlocks(bpTmpDir, bpCurDir, oldLV, conf);
     this.layoutVersion = HdfsServerConstants.DATANODE_LAYOUT_VERSION;
@@ -502,8 +557,10 @@ public class BlockPoolSliceStorage extends Storage {
         : "Data-node and name-node layout versions must be the same.";
     this.cTime = nsInfo.getCTime();
     writeProperties(bpSd);
-    
-    // 4.rename <SD>/current/<bpid>/previous.tmp to
+
+
+    // 4. 将previous.tmp目录改名为previous
+    // 4. rename <SD>/current/<bpid>/previous.tmp to
     // <SD>/current/<bpid>/previous
     rename(bpTmpDir, bpPrevDir);
     LOG.info("Upgrade of {} is complete", name);
@@ -618,16 +675,20 @@ public class BlockPoolSliceStorage extends Storage {
     LOG.info("Rolling back storage directory {}.\n   target LV = {}; target "
             + "CTime = {}", bpSd.getRoot(), nsInfo.getLayoutVersion(),
         nsInfo.getCTime());
+
+    //确认removed.tmp不存在
     File tmpDir = bpSd.getRemovedTmp();
     assert !tmpDir.exists() : "removed.tmp directory must not exist.";
+    // 1. 先将current目录改名为removed.tmp
     // 1. rename current to tmp
     File curDir = bpSd.getCurrentDir();
     assert curDir.exists() : "Current directory must exist.";
     rename(curDir, tmpDir);
-    
+    // 2. 将previous目录重命名为current
     // 2. rename previous to current
     rename(prevDir, curDir);
-    
+
+    // 3. 删除removed.tmp， 完成回滚操作
     // 3. delete removed.tmp dir
     deleteDir(tmpDir);
     LOG.info("Rollback of {} is complete", bpSd.getRoot());
@@ -638,13 +699,17 @@ public class BlockPoolSliceStorage extends Storage {
    * that holds the snapshot.
    */
   void doFinalize(File dnCurDir) throws IOException {
+
     if (dnCurDir == null) {
       return; //we do nothing if the directory is null
     }
     File bpRoot = getBpRoot(blockpoolID, dnCurDir);
     StorageDirectory bpSd = new StorageDirectory(bpRoot);
+
+
     // block pool level previous directory
     File prevDir = bpSd.getPreviousDir();
+    // 如果previous目录不存在， 则没有必要执行提交操作， 直接退出执行
     if (!prevDir.exists()) {
       return; // already finalized
     }
@@ -653,12 +718,13 @@ public class BlockPoolSliceStorage extends Storage {
             + "cur CTime = {}", dataDirPath, this.getLayoutVersion(),
         this.getCTime());
     assert bpSd.getCurrentDir().exists() : "Current directory must exist.";
-    
-    // rename previous to finalized.tmp
+    //1． 将previous目录改名为finalized.tmp
+    //1.  rename previous to finalized.tmp
     final File tmpDir = bpSd.getFinalizedTmp();
     rename(prevDir, tmpDir);
 
-    // delete finalized.tmp dir in a separate thread
+    // 2． 启动一个新的线程， 并发删除finalized.tmp文件夹
+    // 2.  delete finalized.tmp dir in a separate thread
     new Daemon(new Runnable() {
       @Override
       public void run() {

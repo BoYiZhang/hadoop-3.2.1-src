@@ -1681,15 +1681,15 @@ public class NameNode extends ReconfigurableBase implements
    * @param conf configuration to use
    * @throws IOException
    */
-  private static boolean printMetadataVersion(Configuration conf)
-    throws IOException {
+  private static boolean printMetadataVersion(Configuration conf)  throws IOException {
+
     final String nsId = DFSUtil.getNamenodeNameServiceId(conf);
     final String namenodeId = HAUtil.getNameNodeId(conf, nsId);
     NameNode.initializeGenericKeys(conf, nsId, namenodeId);
     final FSImage fsImage = new FSImage(conf);
     final FSNamesystem fs = new FSNamesystem(conf, fsImage, false);
-    return fsImage.recoverTransitionRead(
-      StartupOption.METADATAVERSION, fs, null);
+
+    return fsImage.recoverTransitionRead( StartupOption.METADATAVERSION, fs, null);
   }
 
   public static NameNode createNameNode(String argv[], Configuration conf)

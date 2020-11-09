@@ -87,6 +87,7 @@ public class StorageLocationChecker {
 
   public StorageLocationChecker(Configuration conf, Timer timer)
       throws DiskErrorException {
+    // dfs.datanode.disk.check.timeout : 600000 ==> 10 min
     maxAllowedTimeForCheckMs = conf.getTimeDuration(
         DFS_DATANODE_DISK_CHECK_TIMEOUT_KEY,
         DFS_DATANODE_DISK_CHECK_TIMEOUT_DEFAULT,
@@ -97,11 +98,11 @@ public class StorageLocationChecker {
           + DFS_DATANODE_DISK_CHECK_TIMEOUT_KEY + " - "
           + maxAllowedTimeForCheckMs + " (should be > 0)");
     }
-
+    // dfs.datanode.data.dir.perm : 700 ==> rwx------
     expectedPermission = new FsPermission(
         conf.get(DFS_DATANODE_DATA_DIR_PERMISSION_KEY,
             DFS_DATANODE_DATA_DIR_PERMISSION_DEFAULT));
-
+    // dfs.datanode.failed.volumes.tolerated: 0
     maxVolumeFailuresTolerated = conf.getInt(
         DFS_DATANODE_FAILED_VOLUMES_TOLERATED_KEY,
         DFS_DATANODE_FAILED_VOLUMES_TOLERATED_DEFAULT);

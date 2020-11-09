@@ -345,7 +345,7 @@ public class DataStorage extends Storage {
 
   static int getParallelVolumeLoadThreadsNum(int dataDirs, Configuration conf) {
 
-    // dfs.datanode.parallel.volumes.load.threads.num
+    // dfs.datanode.parallel.volumes.load.threads.num : 1
     final String key  = DFSConfigKeys.DFS_DATANODE_PARALLEL_VOLUME_LOAD_THREADS_NUM_KEY;
     final int n = conf.getInt(key, dataDirs);
     if (n < 1) {
@@ -381,14 +381,14 @@ public class DataStorage extends Storage {
   synchronized List<StorageDirectory> addStorageLocations(DataNode datanode,
       NamespaceInfo nsInfo, Collection<StorageLocation> dataDirs,
       StartupOption startOpt) throws IOException {
-    // 获取线程数
+    // 获取线程数 1
     final int numThreads = getParallelVolumeLoadThreadsNum( dataDirs.size(), datanode.getConf());
 
     //构建线程池
     final ExecutorService executor = Executors.newFixedThreadPool(numThreads);
 
     try {
-
+      //  0 = [DISK]file:/tools/hadoop-3.2.1/data/hdfs/data
       final List<StorageLocation> successLocations = loadDataStorage(  datanode, nsInfo, dataDirs, startOpt, executor);
 
       return loadBlockPoolSliceStorage(  datanode, nsInfo, successLocations, startOpt, executor);
@@ -544,8 +544,7 @@ public class DataStorage extends Storage {
             this.bpStorageMap.entrySet()) {
           String bpid = entry.getKey();
           BlockPoolSliceStorage bpsStorage = entry.getValue();
-          File bpRoot =
-              BlockPoolSliceStorage.getBpRoot(bpid, sd.getCurrentDir());
+          File bpRoot = BlockPoolSliceStorage.getBpRoot(bpid, sd.getCurrentDir());
           bpsStorage.remove(bpRoot.getAbsoluteFile());
         }
 
@@ -566,6 +565,13 @@ public class DataStorage extends Storage {
   }
 
   /**
+   *
+   * 分析特定块池的存储目录。
+   * 如果需要，从以前的转换中恢复。
+   * 如果需要，根据命名空间信息执行fs状态转换。
+   * 读取存储信息。
+   * 此方法应该在多个DN线程之间同步。只有第一个DN线程执行DN级别的 storage dir recoverTransitionRead。
+   *
    * Analyze storage directories for a specific block pool.
    * Recover from previous transitions if required.
    * Perform fs state transition if necessary depending on the namespace info.
@@ -582,6 +588,8 @@ public class DataStorage extends Storage {
    */
   void recoverTransitionRead(DataNode datanode, NamespaceInfo nsInfo,
       Collection<StorageLocation> dataDirs, StartupOption startOpt) throws IOException {
+
+    // 调用addStorageLocations()方法对Datanode存储空间进行初始化
     if (addStorageLocations(datanode, nsInfo, dataDirs, startOpt).isEmpty()) {
       throw new IOException("All specified directories have failed to load.");
     }
