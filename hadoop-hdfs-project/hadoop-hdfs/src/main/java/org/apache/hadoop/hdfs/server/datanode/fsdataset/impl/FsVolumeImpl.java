@@ -107,9 +107,14 @@ public class FsVolumeImpl implements FsVolumeSpi {
   private static final ObjectReader READER =
       new ObjectMapper().readerFor(BlockIteratorState.class);
 
+  //  这个字段主要用于加锁操作
   private final FsDatasetImpl dataset;
+
+  // 当前存储目录对应的StorageDirectory的storageID。
   private final String storageID;
   private final StorageType storageType;
+
+  // 当前FsVolumeImpl下所有BlockPoolSlice的引用， 是blockPoolId->BlockPoolSlice的映射。
   private final Map<String, BlockPoolSlice> bpSlices  = new ConcurrentHashMap<String, BlockPoolSlice>();
 
   // Refers to the base StorageLocation used to construct this volume
@@ -117,13 +122,18 @@ public class FsVolumeImpl implements FsVolumeSpi {
   // <location>/STORAGE_DIR_CURRENT/)
   private final StorageLocation storageLocation;
 
+  // 当前存储目录下current文件夹的引用。
   private final File currentDir;    // <StorageDirectory>/current
+
+  // 当前存储目录的磁盘使用情况。
   private final DF usage;
   private final ReservedSpaceCalculator reserved;
   private CloseableReferenceCount reference = new CloseableReferenceCount();
 
   // Disk space reserved for blocks (RBW or Re-replicating) open for write.
   private AtomicLong reservedForReplicas;
+
+  // 当前存储目录的预留磁盘空间大小。
   private long recentReserved = 0;
   private final Configuration conf;
   // Capacity configured. This is useful when we want to
@@ -134,11 +144,14 @@ public class FsVolumeImpl implements FsVolumeSpi {
   private final DataNodeVolumeMetrics metrics;
 
   /**
+   * 线程池， 用来处理添加到缓存中的新的数据块。
+   *
    * Per-volume worker pool that processes new blocks to cache.
    * The maximum number of workers per volume is bounded (configurable via
    * dfs.datanode.fsdatasetcache.max.threads.per.volume) to limit resource
    * contention.
    */
+
   protected ThreadPoolExecutor cacheExecutor;
 
   FsVolumeImpl(FsDatasetImpl dataset, String storageID, StorageDirectory sd,
