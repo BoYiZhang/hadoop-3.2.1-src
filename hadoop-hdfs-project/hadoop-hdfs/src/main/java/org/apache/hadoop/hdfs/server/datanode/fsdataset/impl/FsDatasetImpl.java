@@ -263,11 +263,18 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
    */
   FsDatasetImpl(DataNode datanode, DataStorage storage, Configuration conf
       ) throws IOException {
+
     this.fsRunning = true;
+    // DataNode{data=null, localName='192.168.8.188:9866', datanodeUuid='9efa402a-df6b-48cf-9273-5468f68cc42f', xmitsInProgress=0}
     this.datanode = datanode;
+    //lv=-57;cid=CID-67c28180-c700-49d1-a3f4-07db5dc12a17;nsid=0;c=0
     this.dataStorage = storage;
+    // Configuration: core-default.xml, core-site.xml, hdfs-default.xml, hdfs-site.xml
     this.conf = conf;
+    // 512
     this.smallBufferSize = DFSUtilClient.getSmallBufferSize(conf);
+
+
     this.datasetLock = new AutoCloseableLock(
         new InstrumentedLock(getClass().getName(), LOG,
           new ReentrantLock(true),
@@ -276,17 +283,25 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
             DFSConfigKeys.DFS_LOCK_SUPPRESS_WARNING_INTERVAL_DEFAULT,
             TimeUnit.MILLISECONDS),
           300));
+
+
     this.datasetLockCondition = datasetLock.newCondition();
 
+
+    // 操作所需的卷数是卷总数减去我们可以容忍的失败卷数。 : 0
     // The number of volumes required for operation is the total number
     // of volumes minus the number of failed volumes we can tolerate.
     volFailuresTolerated = datanode.getDnConf().getVolFailuresTolerated();
-
+    // 0   [DISK]file:/tools/hadoop-3.2.1/data/hdfs/data
     Collection<StorageLocation> dataLocations = DataNode.getStorageLocations(conf);
+
+
     List<VolumeFailureInfo> volumeFailureInfos = getInitialVolumeFailureInfos(
         dataLocations, storage);
 
     volsConfigured = datanode.getDnConf().getVolsConfigured();
+
+
     int volsFailed = volumeFailureInfos.size();
 
     if (volFailuresTolerated < DataNode.MAX_VOLUME_FAILURE_TOLERATED_LIMIT
@@ -296,6 +311,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           + ". Value configured is either less than maxVolumeFailureLimit or greater than "
           + "to the number of configured volumes (" + volsConfigured + ").");
     }
+
+    //  MAX_VOLUME_FAILURE_TOLERATED_LIMIT :  - 1 ==>  无限制
     if (volFailuresTolerated == DataNode.MAX_VOLUME_FAILURE_TOLERATED_LIMIT) {
       if (volsConfigured == volsFailed) {
         throw new DiskErrorException(
@@ -315,7 +332,11 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     }
 
     storageMap = new ConcurrentHashMap<String, DatanodeStorage>();
+
+    //加载lock
     volumeMap = new ReplicaMap(datasetLock);
+
+
     ramDiskReplicaTracker = RamDiskReplicaTracker.getInstance(conf, this);
 
     @SuppressWarnings("unchecked")
@@ -324,18 +345,35 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
             DFSConfigKeys.DFS_DATANODE_FSDATASET_VOLUME_CHOOSING_POLICY_KEY,
             RoundRobinVolumeChoosingPolicy.class,
             VolumeChoosingPolicy.class), conf);
-    volumes = new FsVolumeList(volumeFailureInfos, datanode.getBlockScanner(),
-        blockChooserImpl);
+
+    // FsVolumelmpl：
+    // 管理Datanode一个存储目录下的所有数据块。
+    // 由于一个存储目录可以存储多个块池的数据块，
+    // 所以FsVolumelmpl会持有这个存储目录中保存的所有块池的BlockPoolSlice对象
+    volumes = new FsVolumeList(volumeFailureInfos, datanode.getBlockScanner(),  blockChooserImpl);
+
     asyncDiskService = new FsDatasetAsyncDiskService(datanode, this);
+
+
     asyncLazyPersistService = new RamDiskAsyncLazyPersistService(datanode, conf);
+
+
     deletingBlock = new HashMap<String, Set<Long>>();
 
     for (int idx = 0; idx < storage.getNumStorageDirs(); idx++) {
+
+
       addVolume(storage.getStorageDir(idx));
     }
+
+
     setupAsyncLazyPersistThreads();
 
     cacheManager = new FsDatasetCache(this);
+
+
+
+
 
     // Start the lazy writer once we have built the replica maps.
     // We need to start the lazy writer even if MaxLockedMemory is set to
@@ -352,6 +390,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
 
     registerMBean(datanode.getDatanodeUuid());
 
+
+
     // Add a Metrics2 Source Interface. This is same
     // data as MXBean. We can remove the registerMbean call
     // in a release where we can break backward compatibility
@@ -359,12 +399,18 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     ms.register("FSDatasetState", "FSDatasetState", this);
 
     localFS = FileSystem.getLocal(conf);
+
+
     blockPinningEnabled = conf.getBoolean(
       DFSConfigKeys.DFS_DATANODE_BLOCK_PINNING_ENABLED,
       DFSConfigKeys.DFS_DATANODE_BLOCK_PINNING_ENABLED_DEFAULT);
+
+
+
     maxDataLength = conf.getInt(
         CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH,
         CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH_DEFAULT);
+
   }
 
   @Override

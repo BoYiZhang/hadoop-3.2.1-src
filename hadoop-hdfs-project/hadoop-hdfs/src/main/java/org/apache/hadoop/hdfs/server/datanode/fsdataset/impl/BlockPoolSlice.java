@@ -75,6 +75,8 @@ import org.apache.hadoop.util.Timer;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import sun.misc.Unsafe;
+
 /**
  * A block pool slice represents a portion of a block pool stored on a volume.
  * Taken together, all BlockPoolSlices sharing a block pool ID across a
@@ -133,30 +135,36 @@ class BlockPoolSlice {
    */
   BlockPoolSlice(String bpid, FsVolumeImpl volume, File bpDir,
       Configuration conf, Timer timer) throws IOException {
+    // BP-451827885-192.168.8.156-1584099133244
     this.bpid = bpid;
+    // /tools/hadoop-3.2.1/data/hdfs/data
     this.volume = volume;
+    //
     this.fileIoProvider = volume.getFileIoProvider();
+    //  /tools/hadoop-3.2.1/data/hdfs/data/current/BP-451827885-192.168.8.156-1584099133244/current
     this.currentDir = new File(bpDir, DataStorage.STORAGE_DIR_CURRENT);
-    this.finalizedDir = new File(
-        currentDir, DataStorage.STORAGE_DIR_FINALIZED);
+    //  /tools/hadoop-3.2.1/data/hdfs/data/current/BP-451827885-192.168.8.156-1584099133244/current/finalized
+    this.finalizedDir = new File( currentDir, DataStorage.STORAGE_DIR_FINALIZED);
+    //  /tools/hadoop-3.2.1/data/hdfs/data/current/BP-451827885-192.168.8.156-1584099133244/current/lazypersist
     this.lazypersistDir = new File(currentDir, DataStorage.STORAGE_DIR_LAZY_PERSIST);
+
     if (!this.finalizedDir.exists()) {
       if (!this.finalizedDir.mkdirs()) {
         throw new IOException("Failed to mkdirs " + this.finalizedDir);
       }
     }
-
+    // 4096
     this.ioFileBufferSize = DFSUtilClient.getIoFileBufferSize(conf);
-
+    // dfs.datanode.duplicate.replica.deletion : true
     this.deleteDuplicateReplicas = conf.getBoolean(
         DFSConfigKeys.DFS_DATANODE_DUPLICATE_REPLICA_DELETION,
         DFSConfigKeys.DFS_DATANODE_DUPLICATE_REPLICA_DELETION_DEFAULT);
-
+    // dfs.datanode.cached-dfsused.check.interval.ms : 600000 ms  =>  1 minute
     this.cachedDfsUsedCheckTime =
         conf.getLong(
             DFSConfigKeys.DFS_DN_CACHED_DFSUSED_CHECK_INTERVAL_MS,
             DFSConfigKeys.DFS_DN_CACHED_DFSUSED_CHECK_INTERVAL_DEFAULT_MS);
-
+    // ipc.maximum.data.length : 64mb
     this.maxDataLength = conf.getInt(
         CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH,
         CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH_DEFAULT);
@@ -167,28 +175,35 @@ class BlockPoolSlice {
     // are now moved back to the data directory. It is possible that
     // in the future, we might want to do some sort of datanode-local
     // recovery for these blocks. For example, crc validation.
-    //
+    // tmpDir :  /tools/hadoop-3.2.1/data/hdfs/data/current/BP-451827885-192.168.8.156-1584099133244/tmp
     this.tmpDir = new File(bpDir, DataStorage.STORAGE_DIR_TMP);
+
     if (tmpDir.exists()) {
       fileIoProvider.fullyDelete(volume, tmpDir);
     }
+    // /tools/hadoop-3.2.1/data/hdfs/data/current/BP-451827885-192.168.8.156-1584099133244/current/rbw
     this.rbwDir = new File(currentDir, DataStorage.STORAGE_DIR_RBW);
 
     // create the rbw and tmp directories if they don't exist.
+
     fileIoProvider.mkdirs(volume, rbwDir);
+
     fileIoProvider.mkdirs(volume, tmpDir);
 
-    // Use cached value initially if available. Or the following call will
-    // block until the initial du command completes.
+    // Use cached value initially if available. Or the following call will block until the initial du command completes.
+    // du -sk /tools/hadoop-3.2.1/data/hdfs/data/current/BP-451827885-192.168.8.156-1584099133244
+    // 132947968	/tools/hadoop-3.2.1/data/hdfs/data/current/BP-451827885-192.168.8.156-1584099133244
     this.dfsUsage = new CachingGetSpaceUsed.Builder().setPath(bpDir)
                                                      .setConf(conf)
                                                      .setInitialUsed(loadDfsUsed())
                                                      .build();
+
     if (addReplicaThreadPool == null) {
       // initialize add replica fork join pool
       initializeAddReplicaPool(conf);
     }
     // Make the dfs usage to be saved during shutdown.
+
     shutdownHook = new Runnable() {
       @Override
       public void run() {
@@ -198,6 +213,7 @@ class BlockPoolSlice {
         }
       }
     };
+
     ShutdownHookManager.get().addShutdownHook(shutdownHook,
         SHUTDOWN_HOOK_PRIORITY);
   }
@@ -328,13 +344,17 @@ class BlockPoolSlice {
   }
 
   /**
+   *
+   * 临时文件。
+   * 当block完成时，它们被移到finalized块目录中。
+   *
    * Temporary files. They get moved to the finalized block directory when
    * the block is finalized.
    */
   File createTmpFile(Block b) throws IOException {
     File f = new File(tmpDir, b.getBlockName());
-    File tmpFile = DatanodeUtil.createFileWithExistsCheck(
-        volume, b, f, fileIoProvider);
+    //构建tmpFile
+    File tmpFile = DatanodeUtil.createFileWithExistsCheck( volume, b, f, fileIoProvider);
     // If any exception during creation, its expected that counter will not be
     // incremented, So no need to decrement
     incrNumBlocks();
@@ -356,10 +376,16 @@ class BlockPoolSlice {
   }
 
   File addFinalizedBlock(Block b, ReplicaInfo replicaInfo) throws IOException {
+    //调用DatanodeUtil.idToBlockDir()方法获取副本在finalized目录的存储路径
     File blockDir = DatanodeUtil.idToBlockDir(finalizedDir, b.getBlockId());
     fileIoProvider.mkdirsWithExistsCheck(volume, blockDir);
+
+    //在存储路径中创建数据块副本文件以及校验文件
     File blockFile = FsDatasetImpl.moveBlockFiles(b, replicaInfo, blockDir);
     File metaFile = FsDatasetUtil.getMetaFile(blockFile, b.getGenerationStamp());
+
+
+    //更新dfsUsage
     if (dfsUsage instanceof CachingGetSpaceUsed) {
       ((CachingGetSpaceUsed) dfsUsage).incDfsUsed(
           b.getNumBytes() + metaFile.length());
@@ -408,12 +434,14 @@ class BlockPoolSlice {
       throws IOException {
     // Recover lazy persist replicas, they will be added to the volumeMap
     // when we scan the finalized directory.
+    //恢复lazyPersist状态的副本， 先将它们转变为FINALIZED状态
     if (lazypersistDir.exists()) {
       int numRecovered = moveLazyPersistReplicasToFinalized(lazypersistDir);
       FsDatasetImpl.LOG.info(
           "Recovered " + numRecovered + " replicas from " + lazypersistDir);
     }
 
+    //将所有FINALIZED状态的副本加入ReplicaMap中
     boolean  success = readReplicasFromCache(volumeMap, lazyWriteReplicaMap);
     if (!success) {
       List<IOException> exceptions = Collections
@@ -479,11 +507,13 @@ class BlockPoolSlice {
     if (blockFile.exists()) {
       // If the original block file still exists, then no recovery is needed.
       if (!fileIoProvider.delete(volume, unlinkedTmp)) {
+        //源文件存在， 则删除临时文件， 如果删除失败则抛出异常
         throw new IOException("Unable to cleanup unlinked tmp file " +
             unlinkedTmp);
       }
       return null;
     } else {
+      //源文件不存在， 则将临时文件改名为源文件
       fileIoProvider.rename(volume, unlinkedTmp, blockFile);
       return blockFile;
     }
@@ -557,6 +587,8 @@ class BlockPoolSlice {
     ReplicaInfo newReplica = null;
     long blockId = block.getBlockId();
     long genStamp = block.getGenerationStamp();
+
+    //如果是finalized文件夹， 则将所有数据块加载为FINALIZED状态
     if (isFinalized) {
       newReplica = new ReplicaBuilder(ReplicaState.FINALIZED)
           .setBlockId(blockId)
@@ -572,12 +604,14 @@ class BlockPoolSlice {
           File.pathSeparator + "." + file.getName() + ".restart");
       Scanner sc = null;
       try {
+        //重启元数据文件存在， 并且当前时间在重启窗口内
         sc = new Scanner(restartMeta, "UTF-8");
         // The restart meta file exists
         if (sc.hasNextLong() && (sc.nextLong() > timer.now())) {
           // It didn't expire. Load the replica as a RBW.
           // We don't know the expected block length, so just use 0
           // and don't reserve any more space for writes.
+          //将数据块加载为RBW状态
           newReplica = new ReplicaBuilder(ReplicaState.RBW)
               .setBlockId(blockId)
               .setLength(validateIntegrityAndSetLength(file, genStamp))
@@ -601,6 +635,7 @@ class BlockPoolSlice {
           sc.close();
         }
       }
+      //重启元数据文件不存在， 将数据块加载为RWR状态
       // Restart meta doesn't exist or expired.
       if (loadRwr) {
         ReplicaBuilder builder = new ReplicaBuilder(ReplicaState.RWR)
@@ -614,6 +649,8 @@ class BlockPoolSlice {
     }
 
     ReplicaInfo tmpReplicaInfo = volumeMap.addAndGet(bpid, newReplica);
+
+    //将数据块信息放入volumeMap中
     ReplicaInfo oldReplica = (tmpReplicaInfo == newReplica) ? null
         : tmpReplicaInfo;
     if (oldReplica != null) {
@@ -638,6 +675,7 @@ class BlockPoolSlice {
 
 
   /**
+   * 将给定目录下的副本添加到卷映射
    * Add replicas under the given directory to the volume map
    * @param volumeMap the replicas map
    * @param dir an input directory
@@ -652,22 +690,31 @@ class BlockPoolSlice {
       final RamDiskReplicaTracker lazyWriteReplicaMap, boolean isFinalized,
       List<IOException> exceptions, Queue<RecursiveAction> subTaskQueue)
       throws IOException {
+    //循环遍历文件夹中的所有文件
     File[] files = fileIoProvider.listFiles(volume, dir);
+
     Arrays.sort(files, FILE_COMPARATOR);
+
     for (int i = 0; i < files.length; i++) {
+
       File file = files[i];
+
       if (file.isDirectory()) {
+
         // Launch new sub task.
+        // 启动一个子程序处理
         AddReplicaProcessor subTask = new AddReplicaProcessor(volumeMap, file,
             lazyWriteReplicaMap, isFinalized, exceptions, subTaskQueue);
         subTask.fork();
         subTaskQueue.add(subTask);
       }
 
+      //如果文件夹中存在临时文件， 则首先进行恢复操作
       if (isFinalized && FsDatasetUtil.isUnlinkTmpFile(file)) {
         file = recoverTempUnlinkedBlock(file);
         if (file == null) { // the original block still exists, so we cover it
           // in another iteration and can continue here
+          // 如果临时文件对应的源文件存在， 那么跳过该临时文件
           continue;
         }
       }
@@ -677,10 +724,12 @@ class BlockPoolSlice {
 
       long genStamp = FsDatasetUtil.getGenerationStampFromFile(
           files, file, i);
+
       long blockId = Block.filename2id(file.getName());
+
       Block block = new Block(blockId, file.length(), genStamp);
-      addReplicaToReplicasMap(block, volumeMap, lazyWriteReplicaMap,
-          isFinalized);
+
+      addReplicaToReplicasMap(block, volumeMap, lazyWriteReplicaMap,  isFinalized);
     }
   }
 
@@ -867,17 +916,20 @@ class BlockPoolSlice {
     }
   }
 
-  private boolean readReplicasFromCache(ReplicaMap volumeMap,
-      final RamDiskReplicaTracker lazyWriteReplicaMap) {
+  private boolean readReplicasFromCache(ReplicaMap volumeMap,  final RamDiskReplicaTracker lazyWriteReplicaMap) {
+
     ReplicaMap tmpReplicaMap = new ReplicaMap(new AutoCloseableLock());
     File replicaFile = new File(currentDir, REPLICA_CACHE_FILE);
+
     // Check whether the file exists or not.
     if (!replicaFile.exists()) {
       LOG.info("Replica Cache file: "+  replicaFile.getPath() +
           " doesn't exist ");
       return false;
     }
+
     long fileLastModifiedTime = replicaFile.lastModified();
+
     if (System.currentTimeMillis() > fileLastModifiedTime + replicaCacheExpiry) {
       LOG.info("Replica Cache file: " + replicaFile.getPath() +
           " has gone stale");
@@ -890,9 +942,11 @@ class BlockPoolSlice {
     }
     FileInputStream inputStream = null;
     try {
+
       inputStream = fileIoProvider.getFileInputStream(volume, replicaFile);
-      BlockListAsLongs blocksList =
-          BlockListAsLongs.readFrom(inputStream, maxDataLength);
+
+      BlockListAsLongs blocksList =  BlockListAsLongs.readFrom(inputStream, maxDataLength);
+
       if (blocksList == null) {
         return false;
       }
@@ -900,11 +954,13 @@ class BlockPoolSlice {
       for (BlockReportReplica replica : blocksList) {
         switch (replica.getState()) {
         case FINALIZED:
+          //将所有FINALIZED状态的副本加入ReplicaMap中
           addReplicaToReplicasMap(replica, tmpReplicaMap, lazyWriteReplicaMap, true);
           break;
         case RUR:
         case RBW:
         case RWR:
+          //将所有RBR状态的副本加入ReplicaMap中
           addReplicaToReplicasMap(replica, tmpReplicaMap, lazyWriteReplicaMap, false);
           break;
         default:

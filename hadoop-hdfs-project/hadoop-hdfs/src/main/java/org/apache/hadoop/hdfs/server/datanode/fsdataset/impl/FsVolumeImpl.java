@@ -110,8 +110,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
   private final FsDatasetImpl dataset;
   private final String storageID;
   private final StorageType storageType;
-  private final Map<String, BlockPoolSlice> bpSlices
-      = new ConcurrentHashMap<String, BlockPoolSlice>();
+  private final Map<String, BlockPoolSlice> bpSlices  = new ConcurrentHashMap<String, BlockPoolSlice>();
 
   // Refers to the base StorageLocation used to construct this volume
   // (i.e., does not include STORAGE_DIR_CURRENT in
@@ -994,8 +993,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
     return VolumeCheckResult.HEALTHY;
   }
     
-  void getVolumeMap(ReplicaMap volumeMap,
-                    final RamDiskReplicaTracker ramDiskReplicaMap)
+  void getVolumeMap(ReplicaMap volumeMap,  final RamDiskReplicaTracker ramDiskReplicaMap)
       throws IOException {
     for(BlockPoolSlice s : bpSlices.values()) {
       s.getVolumeMap(volumeMap, ramDiskReplicaMap);

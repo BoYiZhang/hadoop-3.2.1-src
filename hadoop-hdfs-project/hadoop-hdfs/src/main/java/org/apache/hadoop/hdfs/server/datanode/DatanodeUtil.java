@@ -120,8 +120,27 @@ public class DatanodeUtil {
    * @return
    */
   public static File idToBlockDir(File root, long blockId) {
+
+
+    System.out.println( blockId + " ====>   " + Long.toBinaryString(blockId));
+
+    System.out.println(" 0x1F ====> long :   " + 0x1F );
+
+    System.out.println(" 0x1F ====>   " + Long.toBinaryString(0x1F));
+
+
+
+    // blockld的第三个字节作为一级目录索引
     int d1 = (int) ((blockId >> 16) & 0x1F);
+    // blockld的第二个字节作为二级目录索引
+
+    System.out.println(" d1 ====>   " + Integer.toBinaryString(d1));
+
     int d2 = (int) ((blockId >> 8) & 0x1F);
+
+    System.out.println(" d2 ====>   " + Integer.toBinaryString(d2));
+
+    //构造存储路径并返回
     String path = DataStorage.BLOCK_SUBDIR_PREFIX + d1 + SEP +
         DataStorage.BLOCK_SUBDIR_PREFIX + d2;
     return new File(root, path);
