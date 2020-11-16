@@ -295,7 +295,7 @@ public interface HdfsServerConstants {
      * RBW （ ReplicaBeingWritten ）
      * 刚刚被创建或者追加写的副本， 处于写操作的数
      * 据流管道中， 正在被写入， 且已写入副本的内容还是可读的。
-     * RBW状态的副本使用ReplicaBeingWritten类描述。
+     * RBW状态的副本使用 ReplicaBeingWritten 类描述。
      *
      * Replica is being written to. */
     RBW(1),

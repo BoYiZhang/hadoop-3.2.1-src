@@ -122,11 +122,11 @@ public class DatanodeUtil {
   public static File idToBlockDir(File root, long blockId) {
 
 
-    System.out.println( blockId + " ====>   " + Long.toBinaryString(blockId));
-
-    System.out.println(" 0x1F ====> long :   " + 0x1F );
-
-    System.out.println(" 0x1F ====>   " + Long.toBinaryString(0x1F));
+//    System.out.println( blockId + " ====>   " + Long.toBinaryString(blockId));
+//
+//    System.out.println(" 0x1F ====> long :   " + 0x1F );
+//
+//    System.out.println(" 0x1F ====>   " + Long.toBinaryString(0x1F));
 
 
 

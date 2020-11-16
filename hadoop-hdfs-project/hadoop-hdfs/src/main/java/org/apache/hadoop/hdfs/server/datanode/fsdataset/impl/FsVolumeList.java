@@ -54,8 +54,7 @@ class FsVolumeList {
   private final Map<StorageLocation, VolumeFailureInfo> volumeFailureInfos =
       Collections.synchronizedMap(
           new TreeMap<StorageLocation, VolumeFailureInfo>());
-  private final ConcurrentLinkedQueue<FsVolumeImpl> volumesBeingRemoved =
-      new ConcurrentLinkedQueue<>();
+  private final ConcurrentLinkedQueue<FsVolumeImpl> volumesBeingRemoved =   new ConcurrentLinkedQueue<>();
   private final AutoCloseableLock checkDirsLock;
   private final Condition checkDirsLockCondition;
 
@@ -115,6 +114,7 @@ class FsVolumeList {
         list.add(v);
       }
     }
+    //调用blockChooser.chooseVolume()方法获取一个可以存储副本的存储目录
     return chooseVolume(list, blockSize, storageId);
   }
 
@@ -400,12 +400,15 @@ class FsVolumeList {
         new ConcurrentHashMap<FsVolumeSpi, IOException>();
     List<Thread> blockPoolAddingThreads = new ArrayList<Thread>();
     for (final FsVolumeImpl v : volumes) {
+      //对于每一个FsVolumeImpl级联启动一个独立的线程
       Thread t = new Thread() {
         public void run() {
           try (FsVolumeReference ref = v.obtainReference()) {
             FsDatasetImpl.LOG.info("Scanning block pool " + bpid +
                 " on volume " + v + "...");
             long startTime = Time.monotonicNow();
+
+            //调用FsVolumeImpl.addBlockPool()在对应存储目录下添加块池目录
             v.addBlockPool(bpid, conf);
             long timeTaken = Time.monotonicNow() - startTime;
             FsDatasetImpl.LOG.info("Time taken to scan block pool " + bpid +
@@ -420,6 +423,7 @@ class FsVolumeList {
       blockPoolAddingThreads.add(t);
       t.start();
     }
+    //等待所有线程执行完毕
     for (Thread t : blockPoolAddingThreads) {
       try {
         t.join();

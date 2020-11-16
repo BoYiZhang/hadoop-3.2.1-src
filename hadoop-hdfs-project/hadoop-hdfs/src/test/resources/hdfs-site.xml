@@ -23,7 +23,7 @@
     </property>
     <property>
       <name>dfs.datanode.data.dir</name>
-      <value>/tools/hadoop-3.2.1/data/hdfs/data</value>
+      <value>/opt/tools/hadoop-3.2.1/data/hdfs/data</value>
       <final>true</final>
     </property>
     <property>

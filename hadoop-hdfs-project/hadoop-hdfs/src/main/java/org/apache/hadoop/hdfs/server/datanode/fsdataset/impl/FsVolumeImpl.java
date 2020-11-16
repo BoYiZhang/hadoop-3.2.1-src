@@ -1205,6 +1205,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
     assert replicaInfo.getVolume() == this:
       "The volume of the replica should be the same as this volume";
 
+    // 构造一个新的RBW文件
     // construct a RBW replica with the new GS
     File newBlkFile = new File(getRbwDir(bpid), replicaInfo.getBlockName());
     LocalReplicaInPipeline newReplicaInfo = new ReplicaBuilder(ReplicaState.RBW)
@@ -1217,17 +1218,21 @@ public class FsVolumeImpl implements FsVolumeSpi {
         .setBytesToReserve(bytesReserved)
         .buildLocalReplicaInPipeline();
 
+    // 只有finalized 的副本才能被追加
     // Only a finalized replica can be appended.
     FinalizedReplica finalized = (FinalizedReplica)replicaInfo;
     // load last checksum and datalen
     newReplicaInfo.setLastChecksumAndDataLen(
         finalized.getVisibleLength(), finalized.getLastPartialChunkChecksum());
 
+    // 更新volumeMap中副本的ReplicaInfo对象
     // rename meta file to rbw directory
     // rename block file to rbw directory
     newReplicaInfo.moveReplicaFrom(replicaInfo, newBlkFile);
 
     reserveSpaceForReplica(bytesReserved);
+
+    //返回构造的ReplicaInfo对象
     return newReplicaInfo;
   }
 
@@ -1278,7 +1283,9 @@ public class FsVolumeImpl implements FsVolumeSpi {
 
   public ReplicaInPipeline createTemporary(ExtendedBlock b) throws IOException {
     // create a temporary file to hold block in the designated volume
+    //在该存储目录下的数据块所在块池的tmp子目录中创建数据块文件
     File f = createTmpFile(b.getBlockPoolId(), b.getLocalBlock());
+    // 构建副本信息
     LocalReplicaInPipeline newReplicaInfo =
         new ReplicaBuilder(ReplicaState.TEMPORARY)
           .setBlockId(b.getBlockId())

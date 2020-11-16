@@ -73,14 +73,15 @@ public class RoundRobinVolumeChoosingPolicy<V extends FsVolumeSpi>
                          long blockSize) throws IOException {
     // since volumes could've been removed because of the failure
     // make sure we are not out of bounds
-    int curVolume = curVolumes[curVolumeIndex] < volumes.size()
-            ? curVolumes[curVolumeIndex] : 0;
+    int curVolume = curVolumes[curVolumeIndex] < volumes.size() ? curVolumes[curVolumeIndex] : 0;
 
     int startVolume = curVolume;
     long maxAvailable = 0;
 
     while (true) {
+      //返回一个有足够空间的volume
       final V volume = volumes.get(curVolume);
+
       curVolume = (curVolume + 1) % volumes.size();
       long availableVolumeSize = volume.getAvailable();
       if (availableVolumeSize > blockSize) {
