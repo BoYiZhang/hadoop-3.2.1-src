@@ -1950,9 +1950,11 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       if (replicaInfo != null &&
           replicaInfo.getState() == ReplicaState.TEMPORARY) {
         // remove from volumeMap
+        // 从内存volumeMap 移除
         volumeMap.remove(b.getBlockPoolId(), b.getLocalBlock());
 
         // delete the on-disk temp file
+        // 删除磁盘文件
         if (delBlockFromDisk(replicaInfo)) {
           LOG.warn("Block " + b + " unfinalized and removed. ");
         }
@@ -2212,10 +2214,14 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       final ReplicaInfo removing;
       final FsVolumeImpl v;
       try (AutoCloseableLock lock = datasetLock.acquire()) {
+        // 获取内存中的副本信息
         final ReplicaInfo info = volumeMap.get(bpid, invalidBlks[i]);
+
+
         if (info == null) {
-          ReplicaInfo infoByBlockId =
-              volumeMap.get(bpid, invalidBlks[i].getBlockId());
+
+          ReplicaInfo infoByBlockId =  volumeMap.get(bpid, invalidBlks[i].getBlockId());
+
           if (infoByBlockId == null) {
             // It is okay if the block is not found -- it
             // may be deleted earlier.
@@ -2246,6 +2252,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           LOG.warn("Parent directory check failed; replica " + info
               + " is not backed by a local file");
         }
+
+        //从volumeMap中移除副本信息
         removing = volumeMap.remove(bpid, invalidBlks[i]);
         addDeletingBlock(bpid, removing.getBlockId());
         if (LOG.isDebugEnabled()) {
@@ -2258,6 +2266,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       }
 
       if (v.isTransientStorage()) {
+
         RamDiskReplica replicaInfo =
           ramDiskReplicaTracker.getReplica(bpid, invalidBlks[i].getBlockId());
         if (replicaInfo != null) {
@@ -2269,11 +2278,13 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         }
       }
 
+      // 如果副本正在被短路读取， 并且副本信息存储在短路读取的共享内存中， 则删除
       // If a DFSClient has the replica in its cache of short-circuit file
       // descriptors (and the client is using ShortCircuitShm), invalidate it.
       datanode.getShortCircuitRegistry().processBlockInvalidation(
                 new ExtendedBlockId(invalidBlks[i].getBlockId(), bpid));
 
+      // 如果副本在Datanode中被缓存， 则从缓存中删除当前副本
       // If the block is cached, start uncaching it.
       cacheManager.uncacheBlock(bpid, invalidBlks[i].getBlockId());
 
@@ -2283,6 +2294,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           // enough.
           // It's ok to unlink the block file before the uncache operation
           // finishes.
+
+          // 调用异步的磁盘文件删除功能， 删除数据块文件以及校验文件
           asyncDiskService.deleteAsync(v.obtainReference(), removing,
               new ExtendedBlock(bpid, invalidBlks[i]),
               dataStorage.getTrashDirectoryForReplica(bpid, removing));
@@ -2804,24 +2817,30 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   static ReplicaRecoveryInfo initReplicaRecoveryImpl(String bpid, ReplicaMap map,
       Block block, long recoveryId)
           throws IOException, MustStopExistingWriter {
-    final ReplicaInfo replica = map.get(bpid, block.getBlockId());
-    LOG.info("initReplicaRecovery: " + block + ", recoveryId=" + recoveryId
-        + ", replica=" + replica);
 
-    //check replica
+    // 从volumeMap中获取副本信息
+    final ReplicaInfo replica = map.get(bpid, block.getBlockId());
+    LOG.info("initReplicaRecovery: " + block + ", recoveryId=" + recoveryId + ", replica=" + replica);
+
+    // //确认副本存在
+    // check replica
     if (replica == null) {
       return null;
     }
 
-    //stop writer if there is any
+    // 如果有写线程则停止写线程
+    // stop writer if there is any
     if (replica.getState() == ReplicaState.TEMPORARY ||
         replica.getState() == ReplicaState.RBW) {
       final ReplicaInPipeline rip = (ReplicaInPipeline)replica;
+
+      //确认接收的数据大于可见的数据
       if (!rip.attemptToSetWriter(null, Thread.currentThread())) {
         throw new MustStopExistingWriter(rip);
       }
 
-      //check replica bytes on disk.
+      // check replica bytes on disk.
+      // 检查副本文件
       if (replica.getBytesOnDisk() < replica.getVisibleLength()) {
         throw new IOException("getBytesOnDisk() < getVisibleLength(), rip="
             + replica);
@@ -2830,25 +2849,29 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       //check the replica's files
       checkReplicaFiles(replica);
     }
-
-    //check generation stamp
+    //
+    // 检查副本时间戳
+    // check generation stamp
     if (replica.getGenerationStamp() < block.getGenerationStamp()) {
       throw new IOException(
           "replica.getGenerationStamp() < block.getGenerationStamp(), block="
           + block + ", replica=" + replica);
     }
 
-    //check recovery id
+    // 检查recoveryId， 确认不是一个过期的恢复操作
+    // check recovery id
     if (replica.getGenerationStamp() >= recoveryId) {
       throw new IOException("THIS IS NOT SUPPOSED TO HAPPEN:"
           + " replica.getGenerationStamp() >= recoveryId = " + recoveryId
           + ", block=" + block + ", replica=" + replica);
     }
 
+    //构造ReplicaUnderRecovery对象， 如果已经存在RUR对象， 则更新recoveryId
     //check RUR
     final ReplicaInfo rur;
     if (replica.getState() == ReplicaState.RUR) {
       rur = replica;
+      //注意， 这里要判断这个恢复操作是否是一个过期或者重复的操作
       if (rur.getRecoveryID() >= recoveryId) {
         throw new RecoveryInProgressException(
             "rur.getRecoveryID() >= recoveryId = " + recoveryId
@@ -2860,6 +2883,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           + " from " + oldRecoveryID + " to " + recoveryId);
     }
     else {
+      //  ReplicaUnderRecovery对象不存在， 则构造RUR对象， 并更新volumeMap
       rur = new ReplicaBuilder(ReplicaState.RUR)
           .from(replica).setRecoveryId(recoveryId).build();
       map.add(bpid, rur);
@@ -2871,6 +2895,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         ((ReplicaInPipeline) replica).releaseAllBytesReserved();
       }
     }
+    // 返回副本恢复前的信息
     return rur.createInfo();
   }
 
@@ -2881,7 +2906,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
                                     final long newBlockId,
                                     final long newlength) throws IOException {
     try (AutoCloseableLock lock = datasetLock.acquire()) {
-      //get replica
+      // get replica
+      // 获取副本信息
       final String bpid = oldBlock.getBlockPoolId();
       final ReplicaInfo replica = volumeMap.get(bpid, oldBlock.getBlockId());
       LOG.info("updateReplica: " + oldBlock
@@ -2889,31 +2915,37 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           + ", length=" + newlength
           + ", replica=" + replica);
 
-      //check replica
+      // check replica
+      // 检查副本信息是否存在
       if (replica == null) {
         throw new ReplicaNotFoundException(oldBlock);
       }
 
       //check replica state
+      // 判断副本状态， 如果不是RUR则抛出异常
       if (replica.getState() != ReplicaState.RUR) {
         throw new IOException("replica.getState() != " + ReplicaState.RUR
             + ", replica=" + replica);
       }
 
-      //check replica's byte on disk
+      // 检查副本长度是否正常
+      // check replica's byte on disk
       if (replica.getBytesOnDisk() != oldBlock.getNumBytes()) {
         throw new IOException("THIS IS NOT SUPPOSED TO HAPPEN:"
             + " replica.getBytesOnDisk() != block.getNumBytes(), block="
             + oldBlock + ", replica=" + replica);
       }
 
+      //  检查副本的数据块文件和校验文件是否匹配
       //check replica files before update
       checkReplicaFiles(replica);
 
-      //update replica
+      // update replica
+      // 将副本状态更新为目标状态
       final ReplicaInfo finalized = updateReplicaUnderRecovery(oldBlock
           .getBlockPoolId(), replica, recoveryId,
           newBlockId, newlength);
+
 
       boolean copyTruncate = newBlockId != oldBlock.getBlockId();
       if (!copyTruncate) {
@@ -2932,13 +2964,16 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
             + ", len=" + oldBlock.getNumBytes()
             + ", finalized=" + finalized;
       }
-      //check replica files after update
+      // check replica files after update
+      // 检查副本的数据块文件和校验文件是否匹配
       checkReplicaFiles(finalized);
 
+      //返回存储ID
       return finalized;
     }
   }
 
+  // 私有的updateReplicaUnderRecovery()方法
   private ReplicaInfo updateReplicaUnderRecovery(
                                           String bpid,
                                           ReplicaInfo rur,
@@ -2946,6 +2981,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
                                           long newBlockId,
                                           long newlength) throws IOException {
     //check recovery id
+    // 检查恢复标识， 如果是过期的恢复操作， 则抛出异常
     if (rur.getRecoveryID() != recoveryId) {
       throw new IOException("rur.getRecoveryID() != recoveryId = " + recoveryId
           + ", rur=" + rur);
@@ -2954,6 +2990,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     boolean copyOnTruncate = newBlockId > 0L && rur.getBlockId() != newBlockId;
     // bump rur's GS to be recovery id
     if(!copyOnTruncate) {
+      //更新副本时间戳到recoveryId
       rur.bumpReplicaGS(recoveryId);
     }
 
@@ -2966,6 +3003,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     if (rur.getNumBytes() > newlength) {
       if(!copyOnTruncate) {
         rur.breakHardLinksIfNeeded();
+        //则调用truncate()方法截短数据块文件， 并重新计算校验和
         rur.truncateBlock(newlength);
         // update RUR with the new length
         rur.setNumBytes(newlength);
@@ -2983,6 +3021,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
 
         newReplicaInfo.setNumBytes(newlength);
         volumeMap.add(bpid, newReplicaInfo.getReplicaInfo());
+        //将副本状态由RUR改为FINALIZED， 并更新volumeMap
         finalizeReplica(bpid, newReplicaInfo.getReplicaInfo());
       }
     }
