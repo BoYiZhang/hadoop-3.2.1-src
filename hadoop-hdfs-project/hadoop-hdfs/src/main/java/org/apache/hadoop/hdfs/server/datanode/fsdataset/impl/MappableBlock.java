@@ -40,6 +40,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
 /**
+ * 表示DataNode映射的HDFS块。
  * Represents an HDFS block that is mmapped by the DataNode.
  */
 @InterfaceAudience.Private
@@ -83,9 +84,13 @@ public class MappableBlock implements Closeable {
       if (blockChannel == null) {
         throw new IOException("Block InputStream has no FileChannel.");
       }
+      //调用FileChannel.map ()方法将数据块文件映射射到内存中
       mmap = blockChannel.map(MapMode.READ_ONLY, 0, length);
+      //调用mlock系统调用将内存锁定,以防止操作系统将这段内存交换到swap中
       NativeIO.POSIX.getCacheManipulator().mlock(blockFileName, mmap, length);
+      //验证内存中缓存的数据块的校验和正确
       verifyChecksum(length, metaIn, blockChannel, blockFileName);
+      // 构造MappableBlock对象并返回
       mappableBlock = new MappableBlock(mmap, length);
     } finally {
       IOUtils.closeQuietly(blockChannel);
@@ -104,6 +109,10 @@ public class MappableBlock implements Closeable {
   private static void verifyChecksum(long length,
       FileInputStream metaIn, FileChannel blockChannel, String blockFileName)
           throws IOException, ChecksumException {
+
+    // 从块的元文件中验证校验和
+    //从元数据文件头获取数据校验和
+
     // Verify the checksum from the block's meta file
     // Get the DataChecksum from the meta file header
     BlockMetadataHeader header =

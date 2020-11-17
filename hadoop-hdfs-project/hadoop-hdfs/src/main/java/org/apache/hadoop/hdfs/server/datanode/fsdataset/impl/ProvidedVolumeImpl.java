@@ -260,8 +260,7 @@ class ProvidedVolumeImpl extends FsVolumeImpl {
   }
 
   private URI baseURI;
-  private final Map<String, ProvidedBlockPoolSlice> bpSlices =
-      new ConcurrentHashMap<String, ProvidedBlockPoolSlice>();
+  private final Map<String, ProvidedBlockPoolSlice> bpSlices =  new ConcurrentHashMap<String, ProvidedBlockPoolSlice>();
 
   private ProvidedVolumeDF df;
   // the remote FileSystem to which this ProvidedVolume points to.

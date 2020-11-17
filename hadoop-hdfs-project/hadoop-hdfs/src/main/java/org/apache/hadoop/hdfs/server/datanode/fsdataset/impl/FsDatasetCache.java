@@ -114,10 +114,10 @@ public class FsDatasetCache {
       .class);
 
   /**
+   *  存储MappableBlock对象及其状态。
    * Stores MappableBlock objects and the states they're in.
    */
-  private final HashMap<ExtendedBlockId, Value> mappableBlockMap =
-      new HashMap<ExtendedBlockId, Value>();
+  private final HashMap<ExtendedBlockId, Value> mappableBlockMap =  new HashMap<ExtendedBlockId, Value>();
 
   private final AtomicLong numBlocksCached = new AtomicLong(0);
 
@@ -319,6 +319,7 @@ public class FsDatasetCache {
             processBlockMunlockRequest(key)) {
       deferred = true;
     }
+    // 数据块在mappableBlockMap映射中没有记录， 那么就不需要进行uncached操 作了
     if (prevValue == null) {
       LOG.debug("Block with id {}, pool {} does not need to be uncached, "
           + "because it is not currently in the mappableBlockMap.", blockId,
@@ -330,12 +331,17 @@ public class FsDatasetCache {
     case CACHING:
       LOG.debug("Cancelling caching for block with id {}, pool {}.", blockId,
           bpid);
+      // 如果是已经缓存中的了话,直接设置为取消缓存
+
       mappableBlockMap.put(key,
           new Value(prevValue.mappableBlock, State.CACHING_CANCELLED));
       break;
     case CACHED:
+      // 如果是已经缓存中的了话,直接设置为未缓存
       mappableBlockMap.put(key,
           new Value(prevValue.mappableBlock, State.UNCACHING));
+
+      // 是否推迟
       if (deferred) {
         if (LOG.isDebugEnabled()) {
           LOG.debug("{} is anchored, and can't be uncached now.  Scheduling it " +
@@ -351,6 +357,7 @@ public class FsDatasetCache {
       }
       break;
     default:
+      // 失败记录数 + 1
       LOG.debug("Block with id {}, pool {} does not need to be uncached, "
           + "because it is in state {}.", blockId, bpid, prevValue.state);
       numBlocksFailedToUncache.incrementAndGet();
@@ -461,9 +468,11 @@ public class FsDatasetCache {
           return;
         }
         try {
+          //调用load ()方法将数据块缓存到内存中
           mappableBlock = MappableBlock.
               load(length, blockIn, metaIn, blockFileName);
         } catch (ChecksumException e) {
+          //如果出现校验和错误， 则直接返回
           // Exception message is bogus since this wasn't caused by a file read
           LOG.warn("Failed to cache " + key + ": checksum verification failed.");
           return;
@@ -481,10 +490,12 @@ public class FsDatasetCache {
             LOG.warn("Caching of " + key + " was cancelled.");
             return;
           }
+          //将数据块的缓存状态设置为CACHED， 并放入mappableBlockMap字段中保存
           mappableBlockMap.put(key, new Value(mappableBlock, State.CACHED));
         }
-        LOG.debug("Successfully cached {}.  We are now caching {} bytes in"
-            + " total.", key, newUsedBytes);
+        LOG.debug("Successfully cached {}.  We are now caching {} bytes in"  + " total.", key, newUsedBytes);
+
+        // 将短路读取共享内存中当前数据块的槽位设置为可锚定
         dataset.datanode.getShortCircuitRegistry().processBlockMlockEvent(key);
         numBlocksCached.addAndGet(1);
         dataset.datanode.getMetrics().incrBlocksCached(1);
@@ -562,14 +573,16 @@ public class FsDatasetCache {
             this, revocationPollingMs, TimeUnit.MILLISECONDS);
         return;
       }
-
+      //获取数据块对应的缓存信息
       synchronized (FsDatasetCache.this) {
         value = mappableBlockMap.get(key);
       }
       Preconditions.checkNotNull(value);
       Preconditions.checkArgument(value.state == State.UNCACHING);
-
+      //释放数据块文件在内存中的映射区域， 也就是释放mappableBlock
       IOUtils.closeQuietly(value.mappableBlock);
+
+      //从mappableBlockMap映射中删除当前数据块的记录
       synchronized (FsDatasetCache.this) {
         mappableBlockMap.remove(key);
       }

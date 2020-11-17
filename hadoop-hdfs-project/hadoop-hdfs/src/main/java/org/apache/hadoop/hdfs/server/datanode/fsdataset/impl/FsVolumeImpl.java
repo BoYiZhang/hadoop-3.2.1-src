@@ -1058,6 +1058,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
     } else {
       bp = new BlockPoolSlice(bpid, this, bpdir, c, timer);
     }
+    LOG.info(" FsVolumeImpl # addBlockPool --> Thread : {} , bpid : {} ,bpdir : {} " , Thread.currentThread().getName() , bpid , bpdir );
     bpSlices.put(bpid, bp);
   }
   
