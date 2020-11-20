@@ -68,7 +68,7 @@ public class Sender implements DataTransferProtocol {
     this.out = out;
   }
 
-  /** Initialize a operation. */
+  //op()方法用于向输出流中写入DataTransferProtocol版本号， 然后再写入操作码Op
   private static void op(final DataOutput out, final Op op) throws IOException {
     out.writeShort(DataTransferProtocol.DATA_TRANSFER_VERSION);
     op.write(out);
@@ -76,9 +76,11 @@ public class Sender implements DataTransferProtocol {
 
   private static void send(final DataOutputStream out, final Op opcode,
       final Message proto) throws IOException {
-    LOG.trace("Sending DataTransferOp {}: {}",
-        proto.getClass().getSimpleName(), proto);
+    LOG.trace("Sending DataTransferOp {}: {}",  proto.getClass().getSimpleName(), proto);
+    //调用op ()方法写入版本号， 然后再写入操作码Op
     op(out, opcode);
+
+    //写入序列化后的参数
     proto.writeDelimitedTo(out);
     out.flush();
   }
@@ -104,6 +106,7 @@ public class Sender implements DataTransferProtocol {
       final boolean sendChecksum,
       final CachingStrategy cachingStrategy) throws IOException {
 
+    //将所有DataTransferProtocol.readBlock()方法中的参数用ProtoBuf序列化
     OpReadBlockProto proto = OpReadBlockProto.newBuilder()
         .setHeader(DataTransferProtoUtil.buildClientHeader(blk, clientName,
             blockToken))
@@ -113,6 +116,7 @@ public class Sender implements DataTransferProtocol {
         .setCachingStrategy(getCachingStrategy(cachingStrategy))
         .build();
 
+    //调用send()方法发送Op.READ_BLOCK描述当前调用的是readBlock()方法同时发送序列化后的参数proto
     send(out, Op.READ_BLOCK, proto);
   }
 

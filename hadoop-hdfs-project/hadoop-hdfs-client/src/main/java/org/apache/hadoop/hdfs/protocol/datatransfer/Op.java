@@ -28,13 +28,25 @@ import org.apache.hadoop.classification.InterfaceStability;
 @InterfaceAudience.Private
 @InterfaceStability.Evolving
 public enum Op {
+  //操作码80， 对应DataTransferProtocol.writeBlock()方法
   WRITE_BLOCK((byte)80),
+  //操作码81， 对应DataTransferProtocol.readBlock()方法
   READ_BLOCK((byte)81),
+
   READ_METADATA((byte)82),
+
+  //操作码83， 对应DataTransferProtocol.replaceBlock()方法
   REPLACE_BLOCK((byte)83),
+
+  //操作码84， 对应DataTransferProtocol.copyBlock()方法
   COPY_BLOCK((byte)84),
+
+  //操作码85， 对应DataTransferProtocol.blockChecksum()方法
   BLOCK_CHECKSUM((byte)85),
+
+  //操作码86， 对应DataTransferProtocol.transferBlock()方法
   TRANSFER_BLOCK((byte)86),
+
   REQUEST_SHORT_CIRCUIT_FDS((byte)87),
   RELEASE_SHORT_CIRCUIT_FDS((byte)88),
   REQUEST_SHORT_CIRCUIT_SHM((byte)89),
