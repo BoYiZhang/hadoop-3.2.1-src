@@ -158,8 +158,7 @@ class BPOfferService {
     }
   }
 
-  void refreshNNList(ArrayList<InetSocketAddress> addrs,
-      ArrayList<InetSocketAddress> lifelineAddrs) throws IOException {
+  void refreshNNList(ArrayList<InetSocketAddress> addrs,  ArrayList<InetSocketAddress> lifelineAddrs) throws IOException {
     Set<InetSocketAddress> oldAddrs = Sets.newHashSet();
     for (BPServiceActor actor : bpServices) {
       oldAddrs.add(actor.getNNSocketAddress());
@@ -169,8 +168,7 @@ class BPOfferService {
     // Process added NNs
     Set<InetSocketAddress> addedNNs = Sets.difference(newAddrs, oldAddrs);
     for (InetSocketAddress addedNN : addedNNs) {
-      BPServiceActor actor = new BPServiceActor(addedNN,
-          lifelineAddrs.get(addrs.indexOf(addedNN)), this);
+      BPServiceActor actor = new BPServiceActor(addedNN,  lifelineAddrs.get(addrs.indexOf(addedNN)), this);
       actor.start();
       bpServices.add(actor);
     }

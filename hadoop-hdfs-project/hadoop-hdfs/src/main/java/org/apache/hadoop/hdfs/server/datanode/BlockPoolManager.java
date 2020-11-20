@@ -44,13 +44,13 @@ import org.slf4j.Logger;
 @InterfaceAudience.Private
 class BlockPoolManager {
   private static final Logger LOG = DataNode.LOG;
-  
-  private final Map<String, BPOfferService> bpByNameserviceId =
-    Maps.newHashMap();
-  private final Map<String, BPOfferService> bpByBlockPoolId =
-    Maps.newHashMap();
-  private final List<BPOfferService> offerServices =
-      new CopyOnWriteArrayList<>();
+
+  // NameserviceId 与 BPOfferService 的映射
+  private final Map<String, BPOfferService> bpByNameserviceId = Maps.newHashMap();
+  //  BlockPoolId 与 BPOfferService 的映射
+  private final Map<String, BPOfferService> bpByBlockPoolId = Maps.newHashMap();
+
+  private final List<BPOfferService> offerServices = new CopyOnWriteArrayList<>();
 
   private final DataNode dn;
 
@@ -144,8 +144,7 @@ class BlockPoolManager {
     }
   }
   
-  void refreshNamenodes(Configuration conf)
-      throws IOException {
+  void refreshNamenodes(Configuration conf)  throws IOException {
     LOG.info("Refresh request received for nameservices: " +
         conf.get(DFSConfigKeys.DFS_NAMESERVICES));
 
@@ -153,10 +152,8 @@ class BlockPoolManager {
     Map<String, Map<String, InetSocketAddress>> newLifelineAddressMap = null;
 
     try {
-      newAddressMap =
-          DFSUtil.getNNServiceRpcAddressesForCluster(conf);
-      newLifelineAddressMap =
-          DFSUtil.getNNLifelineRpcAddressesForCluster(conf);
+      newAddressMap =  DFSUtil.getNNServiceRpcAddressesForCluster(conf);
+      newLifelineAddressMap =  DFSUtil.getNNLifelineRpcAddressesForCluster(conf);
     } catch (IOException ioe) {
       LOG.warn("Unable to get NameNode addresses.");
     }
@@ -182,6 +179,8 @@ class BlockPoolManager {
     Set<String> toRemove;
     
     synchronized (this) {
+      // 第一步:  对于每一个nameservices服务 , 找出更新和新增的服务
+
       // Step 1. For each of the new nameservices, figure out whether
       // it's an update of the set of NNs for an existing NS,
       // or an entirely new nameservice.
@@ -192,11 +191,10 @@ class BlockPoolManager {
           toAdd.add(nameserviceId);
         }
       }
-      
-      // Step 2. Any nameservices we currently have but are no longer present
-      // need to be removed.
-      toRemove = Sets.newHashSet(Sets.difference(
-          bpByNameserviceId.keySet(), addrMap.keySet()));
+
+      //  第二步 : 处理掉需要移除的nameservices
+      // Step 2. Any nameservices we currently have but are no longer present need to be removed.
+      toRemove = Sets.newHashSet(Sets.difference(  bpByNameserviceId.keySet(), addrMap.keySet()));
       
       assert toRefresh.size() + toAdd.size() ==
         addrMap.size() :
@@ -204,33 +202,35 @@ class BlockPoolManager {
           "  toRemove: " + Joiner.on(",").useForNull("<default>").join(toRemove) +
           "  toRefresh: " + Joiner.on(",").useForNull("<default>").join(toRefresh);
 
-      
+      // 第三步: 启动新的 nameservices 服务
       // Step 3. Start new nameservices
       if (!toAdd.isEmpty()) {
         LOG.info("Starting BPOfferServices for nameservices: " +
             Joiner.on(",").useForNull("<default>").join(toAdd));
-      
+        // 处理新增的服务
         for (String nsToAdd : toAdd) {
           Map<String, InetSocketAddress> nnIdToAddr = addrMap.get(nsToAdd);
-          Map<String, InetSocketAddress> nnIdToLifelineAddr =
-              lifelineAddrMap.get(nsToAdd);
-          ArrayList<InetSocketAddress> addrs =
-              Lists.newArrayListWithCapacity(nnIdToAddr.size());
-          ArrayList<InetSocketAddress> lifelineAddrs =
-              Lists.newArrayListWithCapacity(nnIdToAddr.size());
+
+          Map<String, InetSocketAddress> nnIdToLifelineAddr = lifelineAddrMap.get(nsToAdd);
+          ArrayList<InetSocketAddress> addrs =   Lists.newArrayListWithCapacity(nnIdToAddr.size());
+          ArrayList<InetSocketAddress> lifelineAddrs =   Lists.newArrayListWithCapacity(nnIdToAddr.size());
           for (String nnId : nnIdToAddr.keySet()) {
             addrs.add(nnIdToAddr.get(nnId));
-            lifelineAddrs.add(nnIdToLifelineAddr != null ?
-                nnIdToLifelineAddr.get(nnId) : null);
+            lifelineAddrs.add(nnIdToLifelineAddr != null ? nnIdToLifelineAddr.get(nnId) : null);
           }
+          //调用createBPOS()方法创建BPOfferService对象
           BPOfferService bpos = createBPOS(nsToAdd, addrs, lifelineAddrs);
+
+          //加入bpByNameserviceId映射中
           bpByNameserviceId.put(nsToAdd, bpos);
           offerServices.add(bpos);
         }
       }
+
+      // 启动所有的BPOfferService,级联启动BPServiceActor的工作线程
       startAll();
     }
-
+    // 第四步 处理掉需要关闭的nameservices
     // Step 4. Shut down old nameservices. This happens outside
     // of the synchronized(this) lock since they need to call
     // back to .remove() from another thread
@@ -245,7 +245,7 @@ class BlockPoolManager {
         // they will call remove on their own
       }
     }
-    
+    // 第五步: 更新nameservices
     // Step 5. Update nameservices whose NN list has changed
     if (!toRefresh.isEmpty()) {
       LOG.info("Refreshing list of NNs for nameservices: " +
