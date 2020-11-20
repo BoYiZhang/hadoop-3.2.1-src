@@ -85,15 +85,26 @@ import com.google.common.base.Joiner;
 class BPServiceActor implements Runnable {
   
   static final Logger LOG = DataNode.LOG;
+
+  // 当前BPServiceActor对应的Namenode的地址。
   final InetSocketAddress nnAddr;
+
+  // 当前BPServiceActor对应的Namenode的状态。
   HAServiceState state;
 
+  // 管理当前BPServiceActor对象的BPOfferSerice对象的引用。
   final BPOfferService bpos;
-  
+
+ //  记录上一次缓存块汇报以及心跳的时间。
   volatile long lastCacheReport = 0;
+
+
   private final Scheduler scheduler;
 
+  // 当前的工作线程， 是BPServiceActor主逻辑的执行线程。
   Thread bpThread;
+
+  // 向Namenode发送RPC请求的代理， Datanode向Namenode发起DatanodeProtocolRPC调用都是通过这个引用进行的。
   DatanodeProtocolClientSideTranslatorPB bpNamenode;
 
   enum RunningState {
@@ -101,9 +112,17 @@ class BPServiceActor implements Runnable {
   }
 
   private volatile RunningState runningState = RunningState.CONNECTING;
+
+
+  // 标志位， 用来指明当前BPServiceActor的状态， true为运行状态， false为停止状态， 这个标志位是用于控制bpThread工作线程的。
   private volatile boolean shouldServiceRun = true;
+
+  //  Datanode对象的引用，
   private final DataNode dn;
+  //  Datanode的配置。
   private final DNConf dnConf;
+
+
   private long prevBlockReportId;
   private long fullBlockReportLeaseId;
   private final SortedSet<Integer> blockReportSizes =
@@ -112,30 +131,55 @@ class BPServiceActor implements Runnable {
 
   private final IncrementalBlockReportManager ibrManager;
 
+  //用于记录Datanode的注册信息。
   private DatanodeRegistration bpRegistration;
-  final LinkedList<BPServiceActorAction> bpThreadQueue 
-      = new LinkedList<BPServiceActorAction>();
+
+  final LinkedList<BPServiceActorAction> bpThreadQueue = new LinkedList<BPServiceActorAction>();
 
   BPServiceActor(InetSocketAddress nnAddr, InetSocketAddress lifelineNnAddr,
       BPOfferService bpos) {
+
+
     this.bpos = bpos;
+
+
     this.dn = bpos.getDataNode();
+
+    // localhost/127.0.0.1:8020
     this.nnAddr = nnAddr;
+
+    // null
     this.lifelineSender = lifelineNnAddr != null ?
         new LifelineSender(lifelineNnAddr) : null;
+
+    // null
     this.initialRegistrationComplete = lifelineNnAddr != null ?
         new CountDownLatch(1) : null;
+
+    // DNConf@3736
     this.dnConf = dn.getDnConf();
+
+    // IncrementalBlockReportManager
     this.ibrManager = new IncrementalBlockReportManager(
         dnConf.ibrInterval,
         dn.getMetrics());
+    // -2554285107120895793
     prevBlockReportId = ThreadLocalRandom.current().nextLong();
+
     fullBlockReportLeaseId = 0;
+
+
+    // heartBeatInterval : 3s
+    // getLifelineIntervalMs : 9s
+    // blockReportInterval : 21600 s  =   6h
+    // outliersReportIntervalMs : 30min
     scheduler = new Scheduler(dnConf.heartBeatInterval,
         dnConf.getLifelineIntervalMs(), dnConf.blockReportInterval,
         dnConf.outliersReportIntervalMs);
-    // get the value of maxDataLength.
+
+    // get the value of maxDataLength.   67108864  == 64mb
     this.maxDataLength = dnConf.getMaxDataLength();
+
   }
 
   public DatanodeRegistration getBpRegistration() {
@@ -269,22 +313,26 @@ class BPServiceActor implements Runnable {
   }
 
   private void connectToNNAndHandshake() throws IOException {
+    // 获取与namenode通讯的代理对象
     // get NN proxy
     bpNamenode = dn.connectToNN(nnAddr);
 
-    // First phase of the handshake with NN - get the namespace
-    // info.
+    // First phase of the handshake with NN - get the namespace info.
+    // 1. 获取NamespaceInfo
     NamespaceInfo nsInfo = retrieveNamespaceInfo();
 
     // Verify that this matches the other NN in this HA pair.
     // This also initializes our block pool in the DN if we are
     // the first NN connection for this BP.
+    // 验证是否和namenode匹配, 如果是第一个Namenode 连接这个BP会初始化block pool
     bpos.verifyAndSetNamespaceInfo(this, nsInfo);
 
     /* set thread name again to include NamespaceInfo when it's available. */
+    // 设置线程名
     this.bpThread.setName(formatThreadName("heartbeating", nnAddr));
 
     // Second phase of the handshake with the NN.
+    //  向namenode注册该datanode的信息
     register(nsInfo);
   }
 
@@ -543,8 +591,10 @@ class BPServiceActor implements Runnable {
   void start() {
     if ((bpThread != null) && (bpThread.isAlive())) {
       //Thread is started already
+      //bpThread线程已经启动， 则直接返回
       return;
     }
+    //构造bpThread并以守护线程的方式启动
     bpThread = new Thread(this);
     bpThread.setDaemon(true); // needed for JUnit testing
     bpThread.start();
@@ -564,6 +614,7 @@ class BPServiceActor implements Runnable {
 
   //This must be called only by blockPoolManager.
   void stop() {
+    //将shouldServiceRun赋值为false， 并中断bpThread线程的执行
     shouldServiceRun = false;
     if (lifelineSender != null) {
       lifelineSender.stop();
@@ -577,6 +628,7 @@ class BPServiceActor implements Runnable {
   void join() {
     try {
       if (lifelineSender != null) {
+        //直接调用bpThread的join()方法
         lifelineSender.join();
       }
       if (bpThread != null) {
@@ -609,6 +661,7 @@ class BPServiceActor implements Runnable {
   }
 
   /**
+   * 每个BP线程的主循环方法, 在停止之前会一直请求远程NameNode 函数
    * Main loop for each BP thread. Run until shutdown,
    * forever calling remote NameNode functions.
    */
@@ -627,15 +680,22 @@ class BPServiceActor implements Runnable {
     while (shouldRun()) {
       try {
         DataNodeFaultInjector.get().startOfferService();
+
+        // 获取开始时间
         final long startTime = scheduler.monotonicNow();
 
-        //
+        // 向Namenode发送心跳或者block-report
         // Every so often, send heartbeat or block-report
         //
         final boolean sendHeartbeat = scheduler.isHeartbeatDue(startTime);
+
         HeartbeatResponse resp = null;
         if (sendHeartbeat) {
-          //
+          // 所有的心跳信息包含如下:
+          // -- Datanode名册个
+          // -- data 传输接口
+          // -- 总容量
+          // -- 剩余容量字节
           // All heartbeat messages include following info:
           // -- Datanode name
           // -- data transfer port
@@ -644,7 +704,10 @@ class BPServiceActor implements Runnable {
           //
           boolean requestBlockReportLease = (fullBlockReportLeaseId == 0) &&
                   scheduler.isBlockReportDue(startTime);
+
+
           if (!dn.areHeartbeatsDisabledForTests()) {
+            // 调用sendHeartbeat()方法发送心跳至Namenode
             resp = sendHeartBeat(requestBlockReportLease);
             assert resp != null;
             if (resp.getFullBlockReportLeaseId() != 0) {
@@ -658,6 +721,7 @@ class BPServiceActor implements Runnable {
               }
               fullBlockReportLeaseId = resp.getFullBlockReportLeaseId();
             }
+
             dn.getMetrics().addHeartbeat(scheduler.monotonicNow() - startTime);
 
             // If the state of this NN has changed (eg STANDBY->ACTIVE)
@@ -666,8 +730,9 @@ class BPServiceActor implements Runnable {
             // Important that this happens before processCommand below,
             // since the first heartbeat to a new active might have commands
             // that we should actually process.
-            bpos.updateActorStatesFromHeartbeat(
-                this, resp.getNameNodeHaState());
+
+            // 对心跳响应中携带的Namenode的HA状态进行处理
+            bpos.updateActorStatesFromHeartbeat( this, resp.getNameNodeHaState());
             state = resp.getNameNodeHaState().getState();
 
             if (state == HAServiceState.ACTIVE) {
@@ -675,6 +740,7 @@ class BPServiceActor implements Runnable {
             }
 
             long startProcessCommands = monotonicNow();
+            //最后调用processCommand()方法处理响应中带回的Namenode指令
             if (!processCommand(resp.getCommands()))
               continue;
             long endProcessCommands = monotonicNow();
@@ -685,8 +751,9 @@ class BPServiceActor implements Runnable {
             }
           }
         }
-        if (!dn.areIBRDisabledForTests() &&
-            (ibrManager.sendImmediately()|| sendHeartbeat)) {
+        //Heartbeats finished ..
+
+        if (!dn.areIBRDisabledForTests() && (ibrManager.sendImmediately()|| sendHeartbeat)) {
           ibrManager.sendIBRs(bpNamenode, bpRegistration,
               bpos.getBlockPoolId());
         }
@@ -735,6 +802,9 @@ class BPServiceActor implements Runnable {
       }
       processQueueMessages();
     } // while (shouldRun())
+
+
+
   } // offerService
 
   private void sleepAfterException() {
@@ -747,6 +817,12 @@ class BPServiceActor implements Runnable {
   }
 
   /**
+   *
+   * 构造Datanode注册请求，
+   * 这里StorageInfo以及DatanodeUUid已经通过上一阶段的握手获得并且持久化在磁盘上，
+   * createRegistration()根据这些信息构造Datanode注册请求
+   *
+   *
    * Register one bp with the corresponding NameNode
    * <p>
    * The bpDatanode needs to register with the namenode on startup in order
@@ -768,12 +844,15 @@ class BPServiceActor implements Runnable {
 
     while (shouldRun()) {
       try {
+        // 调用 DatanodeProtocol.registerDatanode()注册Datanode
         // Use returned registration from namenode with updated fields
         newBpRegistration = bpNamenode.registerDatanode(newBpRegistration);
         newBpRegistration.setNamespaceInfo(nsInfo);
         bpRegistration = newBpRegistration;
         break;
-      } catch(EOFException e) {  // namenode might have just restarted
+      } catch(EOFException e) {
+          //Namenode忙碌， 则等待1秒后重试
+          // namenode might have just restarted
         LOG.info("Problem connecting to server: " + nnAddr + " :"
             + e.getLocalizedMessage());
         sleepAndLogInterrupts(1000, "connecting to server");
@@ -782,7 +861,10 @@ class BPServiceActor implements Runnable {
         sleepAndLogInterrupts(1000, "connecting to server");
       }
     }
-    
+
+    //  调用registrationSucceeded()方法确认namespaceId、 clusterId
+    //  与其他Namenode返回的信息一致
+    //  并且确认DatanodeUUid与Datanode本地存储一致
     LOG.info("Block pool " + this + " successfully registered with NN");
     bpos.registrationSucceeded(this, bpRegistration);
 
@@ -790,6 +872,7 @@ class BPServiceActor implements Runnable {
     // ask for a new lease id at the next heartbeat.
     fullBlockReportLeaseId = 0;
 
+    // 对块汇汇报做一个延迟  :  随机短延迟-有助于分散所有DNs的BR
     // random short delay - helps scatter the BR from all DNs
     scheduler.scheduleBlockReport(dnConf.initialBlockReportDelayMs);
   }
@@ -821,17 +904,20 @@ class BPServiceActor implements Runnable {
         // init stuff
         try {
           // setup storage
+          //与Namenode握手， 初始化Datanode存储并注册
           connectToNNAndHandshake();
           break;
         } catch (IOException ioe) {
           // Initial handshake, storage recovery or registration failed
           runningState = RunningState.INIT_FAILED;
           if (shouldRetryInit()) {
+            //进行重试搡作， 直到BPOfferService停止初始化操作
             // Retry until all namenode's of BPOS failed initialization
             LOG.error("Initialization failed for " + this + " "
                 + ioe.getLocalizedMessage());
             sleepAndLogInterrupts(5000, "initializing");
           } else {
+              //初始化失败， 将运行状态改为FAILED
             runningState = RunningState.FAILED;
             LOG.error("Initialization failed for " + this + ". Exiting. ", ioe);
             return;
@@ -839,24 +925,31 @@ class BPServiceActor implements Runnable {
         }
       }
 
+      //初始化成功， 将运行状态设置为RUNNING
       runningState = RunningState.RUNNING;
       if (initialRegistrationComplete != null) {
         initialRegistrationComplete.countDown();
       }
 
+      //线程的主循环，
+      // 循环调用offerService()方法向Namenode发送心跳、 块汇报、 增量块汇报以及缓存块汇报，
+      // 并执行Namenode返回的名字节点指令
       while (shouldRun()) {
         try {
           offerService();
         } catch (Exception ex) {
+          //收到异常也不理会，休眠5秒,  继续循环直到BPServiceActor停止或者Datanode停止
           LOG.error("Exception in BPOfferService for " + this, ex);
           sleepAndLogInterrupts(5000, "offering service");
         }
       }
+      //BPServiceActor停止以后， 将线程状态改为EXITED
       runningState = RunningState.EXITED;
     } catch (Throwable ex) {
       LOG.warn("Unexpected exception in block pool " + this, ex);
       runningState = RunningState.FAILED;
     } finally {
+      //调用cleanup ()方法进行清理操作
       LOG.warn("Ending block pool service for: " + this);
       cleanUp();
     }

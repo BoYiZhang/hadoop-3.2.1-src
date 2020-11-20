@@ -363,6 +363,11 @@ class BPOfferService {
   }
 
   /**
+   *
+   * 由BPServiceActors在与NN握手时调用。
+   * 如果这是第一个NN连接，则设置此BPOfferService的命名空间信息。
+   * 如果是到新NN的连接，它将验证这个名称空间是否匹配（例如，为了防止在指定来自不同集群的备用节点时发生配置错误）
+   *
    * Called by the BPServiceActors when they handshake to a NN.
    * If this is the first NN connection, this sets the namespace info
    * for this BPOfferService. If it's a connection to a new NN, it
@@ -380,8 +385,11 @@ class BPOfferService {
     }
 
     try {
+
       if (setNamespaceInfo(nsInfo) == null) {
         boolean success = false;
+        //第一个Namenode的响应， 这时我们已经知道命名空间id，
+        // 就可以通过调用Datanode.initBLockPool()方法初始化Datanode的本地存储了
 
         // Now that we know the namespace ID, etc, we can pass this to the DN.
         // The DN can now initialize its local storage if we are the
@@ -394,6 +402,8 @@ class BPOfferService {
             // The datanode failed to initialize the BP. We need to reset
             // the namespace info so that other BPService actors still have
             // a chance to set it, and re-initialize the datanode.
+
+            //如果初始化失败， 则将bpNSInfo置为空， 等待下一个Namenode的响应
             setNamespaceInfo(null);
           }
         }
@@ -565,13 +575,21 @@ class BPOfferService {
       NNHAStatusHeartbeat nnHaState) {
     writeLock();
     try {
+      // Namenode携带的txid
       final long txid = nnHaState.getTxId();
 
+
+      //当前Namenode是否声明自己为Active Namenode
       final boolean nnClaimsActive =
           nnHaState.getState() == HAServiceState.ACTIVE;
+
+
       final boolean bposThinksActive = bpServiceToActive == actor;
+
+      //当前Namenode携带的txid是否大于原Active Namenode携带的txid
       final boolean isMoreRecentClaim = txid > lastActiveClaimTxId;
 
+      //原来的Standby Namenode声明自己为Active Namenode， 发生状态切换
       if (nnClaimsActive && !bposThinksActive) {
         LOG.info("Namenode " + actor + " trying to claim ACTIVE state with " +
             "txid=" + txid);
@@ -598,6 +616,7 @@ class BPOfferService {
         bpServiceToActive = null;
       }
 
+      //将bpServiceToActive指向当前Namenode对应的BPServiceActor
       if (bpServiceToActive == actor) {
         assert txid >= lastActiveClaimTxId;
         lastActiveClaimTxId = txid;
