@@ -1027,6 +1027,7 @@ class BPServiceActor implements Runnable {
   public void bpThreadEnqueue(BPServiceActorAction action) {
     synchronized (bpThreadQueue) {
       if (!bpThreadQueue.contains(action)) {
+        // 加入处理队列
         bpThreadQueue.add(action);
       }
     }

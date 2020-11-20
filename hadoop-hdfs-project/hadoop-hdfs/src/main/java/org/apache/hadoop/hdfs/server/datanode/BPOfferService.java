@@ -58,6 +58,9 @@ class BPOfferService {
   static final Logger LOG = DataNode.LOG;
   
   /**
+   * 当前BPOfferService服务的命名空间的信息， 这个信息
+   * 是在与Namenode的握手阶段获得的。
+   *
    * Information about the namespace that this service
    * is registering with. This is assigned after
    * the first phase of the handshake.
@@ -65,6 +68,9 @@ class BPOfferService {
   NamespaceInfo bpNSInfo;
 
   /**
+   * 当前BPOfferService对应的块池在Namenode
+   * 上的注册信息， 这个信息是在Datanode注册阶段获得
+   *
    * The registration information for this block pool.
    * This is assigned after the second phase of the
    * handshake.
@@ -73,9 +79,14 @@ class BPOfferService {
 
   private final String nameserviceId;
   private volatile String bpId;
+
+  // 当前DataNode对象的引用。
   private final DataNode dn;
 
   /**
+   * 当前BPOffferService认为Active的Namenode对
+   * 应的BPServiceActor对象
+   *
    * A reference to the BPServiceActor associated with the currently
    * ACTIVE NN. In the case that all NameNodes are in STANDBY mode,
    * this can be null. If non-null, this must always refer to a member
@@ -84,6 +95,8 @@ class BPOfferService {
   private BPServiceActor bpServiceToActive = null;
   
   /**
+   * 当前命名空间中所有Namenode对应的
+   * BPServiceActor的列表。 注意这里是一个CopyOnWriteList
    * The list of all actors for namenodes in this nameservice, regardless
    * of their active or standby states.
    */
@@ -96,7 +109,12 @@ class BPOfferService {
    * is more recent than the previous value. This allows us to detect
    * split-brain scenarios in which a prior NN is still asserting its
    * ACTIVE state but with a too-low transaction ID. See HDFS-2627
-   * for details. 
+   * for details.
+   *
+   * 每当收到一个Namenode（声明自己为Active状态的
+   * Namenode） 传来的心跳时， 就记录下最近的一个transactionId， 这个字段用于防
+   * 止出现脑裂的情况
+   *
    */
   private long lastActiveClaimTxId = -1;
 
@@ -287,9 +305,11 @@ class BPOfferService {
   void reportBadBlocks(ExtendedBlock block,
                        String storageUuid, StorageType storageType) {
     checkBlock(block);
+    //遍历BPOfferService中管理的所有BPServiceActor对象
     for (BPServiceActor actor : bpServices) {
-      ReportBadBlockAction rbbAction = new ReportBadBlockAction
-          (block, storageUuid, storageType);
+
+      ReportBadBlockAction rbbAction = new ReportBadBlockAction  (block, storageUuid, storageType);
+      //在这些对象上调用对应的bpThreadEnqueue ()方法
       actor.bpThreadEnqueue(rbbAction);
     }
   }
@@ -298,6 +318,13 @@ class BPOfferService {
    * Informing the name node could take a long long time! Should we wait
    * till namenode is informed before responding with success to the
    * client? For now we don't.
+   *
+   *
+   * 通知namenode会划分很长时间,
+   * 我们是否需要等待namenode响应之才会给client响应?
+   * 目前尚未实现
+   *
+   *
    */
   void notifyNamenodeReceivedBlock(ExtendedBlock block, String delHint,
       String storageUuid, boolean isOnTransientStorage) {
@@ -318,11 +345,13 @@ class BPOfferService {
   private void notifyNamenodeBlock(ExtendedBlock block, BlockStatus status,
       String delHint, String storageUuid, boolean isOnTransientStorage) {
     checkBlock(block);
-    final ReceivedDeletedBlockInfo info = new ReceivedDeletedBlockInfo(
-        block.getLocalBlock(), status, delHint);
+
+
+    final ReceivedDeletedBlockInfo info = new ReceivedDeletedBlockInfo( block.getLocalBlock(), status, delHint);
     final DatanodeStorage storage = dn.getFSDataset().getStorage(storageUuid);
 
     for (BPServiceActor actor : bpServices) {
+      //遍历所有的BPServiceActor对象， 并调用notifyNamenodeDeletedBlock()方法
       actor.getIbrManager().notifyNamenodeBlock(info, storage,
           isOnTransientStorage);
     }
@@ -414,6 +443,8 @@ class BPOfferService {
   }
 
   /**
+   * BPServiceActors成功注册到NN ,  检测连接到的NN是否与 block-pool NN信息一致
+   *
    * After one of the BPServiceActors registers successfully with the
    * NN, it calls this function to verify that the NN it connected to
    * is consistent with other NNs serving the block-pool.
@@ -422,15 +453,21 @@ class BPOfferService {
       DatanodeRegistration reg) throws IOException {
     writeLock();
     try {
+
+
       if (bpRegistration != null) {
+        // 检测 namespaceID是否一致
         checkNSEquality(bpRegistration.getStorageInfo().getNamespaceID(),
             reg.getStorageInfo().getNamespaceID(), "namespace ID");
+        // 检测 ClusterID 是否一致
         checkNSEquality(bpRegistration.getStorageInfo().getClusterID(),
             reg.getStorageInfo().getClusterID(), "cluster ID");
       }
       bpRegistration = reg;
 
+      // 加入缓存/安全校验 SecretManager
       dn.bpRegistrationSucceeded(bpRegistration, getBlockPoolId());
+
       // Add the initial block token secret keys to the DN's secret manager.
       if (dn.isBlockTokenEnabled) {
         dn.blockPoolTokenSecretManager.addKeys(getBlockPoolId(),
@@ -690,14 +727,19 @@ class BPOfferService {
       // actor state by obtaining the lock
       LOG.info("DatanodeCommand action : DNA_REGISTER from " + actor.nnAddr
           + " with " + actor.state + " state");
+
+      //如果Namenode返回的指令要求Datanode重新注册， 则调用reRegister()方法
       actor.reRegister();
       return false;
     }
     writeLock();
     try {
+
       if (actor == bpServiceToActive) {
+        //对于Active Namenode返回的指令， 调用processCommandFromActive()方法处理
         return processCommandFromActive(cmd, actor);
       } else {
+        //对于Standby Namenode返回的指令， 则调用processCommandFromStandby()方法处理
         return processCommandFromStandby(cmd, actor);
       }
     } finally {
@@ -736,14 +778,18 @@ class BPOfferService {
       cmd instanceof BlockIdCommand ? (BlockIdCommand)cmd: null;
 
     switch(cmd.getAction()) {
+
     case DatanodeProtocol.DNA_TRANSFER:
+      // 数据块复制
       // Send a copy of a block to another datanode
       dn.transferBlocks(bcmd.getBlockPoolId(), bcmd.getBlocks(),
           bcmd.getTargets(), bcmd.getTargetStorageTypes(),
           bcmd.getTargetStorageIDs());
       break;
+
     case DatanodeProtocol.DNA_INVALIDATE:
-      //
+      // 数据库删除
+
       // Some local block(s) are obsolete and can be 
       // safely garbage-collected.
       //
@@ -758,22 +804,26 @@ class BPOfferService {
       dn.metrics.incrBlocksRemoved(toDelete.length);
       break;
     case DatanodeProtocol.DNA_CACHE:
+      // 数据缓存
       LOG.info("DatanodeCommand action: DNA_CACHE for " +
         blockIdCmd.getBlockPoolId() + " of [" +
           blockIdArrayToString(blockIdCmd.getBlockIds()) + "]");
       dn.getFSDataset().cache(blockIdCmd.getBlockPoolId(), blockIdCmd.getBlockIds());
       break;
     case DatanodeProtocol.DNA_UNCACHE:
+      // 清除缓存
       LOG.info("DatanodeCommand action: DNA_UNCACHE for " +
         blockIdCmd.getBlockPoolId() + " of [" +
           blockIdArrayToString(blockIdCmd.getBlockIds()) + "]");
       dn.getFSDataset().uncache(blockIdCmd.getBlockPoolId(), blockIdCmd.getBlockIds());
       break;
     case DatanodeProtocol.DNA_SHUTDOWN:
+      // 关闭 datanode节点
       // TODO: DNA_SHUTDOWN appears to be unused - the NN never sends this command
       // See HDFS-2987.
       throw new UnsupportedOperationException("Received unimplemented DNA_SHUTDOWN");
     case DatanodeProtocol.DNA_FINALIZE:
+      // 提交上一次升级
       String bp = ((FinalizeCommand) cmd).getBlockPoolId();
       LOG.info("Got finalize command for block pool " + bp);
       assert getBlockPoolId().equals(bp) :
@@ -783,11 +833,13 @@ class BPOfferService {
       dn.finalizeUpgradeForPool(bp);
       break;
     case DatanodeProtocol.DNA_RECOVERBLOCK:
+      // 数据块恢复
       String who = "NameNode at " + actor.getNNSocketAddress();
       dn.getBlockRecoveryWorker().recoverBlocks(who,
           ((BlockRecoveryCommand)cmd).getRecoveringBlocks());
       break;
     case DatanodeProtocol.DNA_ACCESSKEYUPDATE:
+      // 安全相关 更新 access key
       LOG.info("DatanodeCommand action: DNA_ACCESSKEYUPDATE");
       if (dn.isBlockTokenEnabled) {
         dn.blockPoolTokenSecretManager.addKeys(
@@ -796,6 +848,7 @@ class BPOfferService {
       }
       break;
     case DatanodeProtocol.DNA_BALANCERBANDWIDTHUPDATE:
+      // 更新平衡器宽度
       LOG.info("DatanodeCommand action: DNA_BALANCERBANDWIDTHUPDATE");
       long bandwidth =
                  ((BalancerBandwidthCommand) cmd).getBalancerBandwidthValue();
@@ -809,6 +862,7 @@ class BPOfferService {
       }
       break;
     case DatanodeProtocol.DNA_ERASURE_CODING_RECONSTRUCTION:
+      // 擦除编码重建命令
       LOG.info("DatanodeCommand action: DNA_ERASURE_CODING_RECOVERY");
       Collection<BlockECReconstructionInfo> ecTasks =
           ((BlockECReconstructionCommand) cmd).getECTasks();
@@ -821,6 +875,9 @@ class BPOfferService {
   }
  
   /**
+   * 此方法应处理来自备用namenode的命令
+   * 除了更新 DNA_ACCESSKEYUPDATE 基本啥都干不了.
+   *
    * This method should handle commands from Standby namenode except
    * DNA_REGISTER which should be handled earlier itself.
    */
