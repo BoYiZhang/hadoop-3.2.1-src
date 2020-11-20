@@ -68,12 +68,16 @@ public abstract class Receiver implements DataTransferProtocol {
 
   /** Read an Op.  It also checks protocol version. */
   protected final Op readOp() throws IOException {
+    //先从数据流中读入DataTransferProtocol版本号， 并与当前版本号进行比对
     final short version = in.readShort();
+
+    // 对比版本 , hadoop 3.2.1的版本是 --> 28
     if (version != DataTransferProtocol.DATA_TRANSFER_VERSION) {
       throw new IOException( "Version Mismatch (Expected: " +
           DataTransferProtocol.DATA_TRANSFER_VERSION  +
           ", Received: " +  version + " )");
     }
+    //然后从数据流中读入Op， 并返回
     return Op.read(in);
   }
 
@@ -99,6 +103,7 @@ public abstract class Receiver implements DataTransferProtocol {
 
   /** Process op by the corresponding method. */
   protected final void processOp(Op op) throws IOException {
+    //根据不同的Op操作码调用指定的方法响应
     switch(op) {
     case READ_BLOCK:
       opReadBlock();
@@ -145,10 +150,12 @@ public abstract class Receiver implements DataTransferProtocol {
 
   /** Receive OP_READ_BLOCK */
   private void opReadBlock() throws IOException {
+    //从IO流中读取序列化的readBlock()参数
     OpReadBlockProto proto = OpReadBlockProto.parseFrom(vintPrefixed(in));
     TraceScope traceScope = continueTraceSpan(proto.getHeader(),
         proto.getClass().getSimpleName());
     try {
+      //反序列化参数， 然后调用子类DataXceiver的readBlock()方法执行读取操作
       readBlock(PBHelperClient.convert(proto.getHeader().getBaseHeader().getBlock()),
         PBHelperClient.convert(proto.getHeader().getBaseHeader().getToken()),
         proto.getHeader().getClientName(),
