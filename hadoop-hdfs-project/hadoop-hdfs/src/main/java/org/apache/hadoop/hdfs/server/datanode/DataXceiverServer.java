@@ -55,8 +55,7 @@ class DataXceiverServer implements Runnable {
    * Enforcing the limit is required in order to avoid data-node
    * running out of memory.
    */
-  int maxXceiverCount =
-    DFSConfigKeys.DFS_DATANODE_MAX_RECEIVER_THREADS_DEFAULT;
+  int maxXceiverCount = DFSConfigKeys.DFS_DATANODE_MAX_RECEIVER_THREADS_DEFAULT;
 
   /** A manager to make sure that cluster balancing does not
    * take too much resources.
@@ -119,17 +118,21 @@ class DataXceiverServer implements Runnable {
   
   DataXceiverServer(PeerServer peerServer, Configuration conf,
       DataNode datanode) {
+    // TcpPeerServer(/0.0.0.0:9866)
     this.peerServer = peerServer;
+    // DataNode{data=null, localName='boyi-pro.lan:9866', datanodeUuid='null', xmitsInProgress=0}
     this.datanode = datanode;
-    
+    // dfs.datanode.max.transfer.threads 4096
     this.maxXceiverCount = 
       conf.getInt(DFSConfigKeys.DFS_DATANODE_MAX_RECEIVER_THREADS_KEY,
                   DFSConfigKeys.DFS_DATANODE_MAX_RECEIVER_THREADS_DEFAULT);
-    
+    // dfs.blocksize  128*1024*1024
     this.estimateBlockSize = conf.getLongBytes(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,
         DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT);
     
     //set up parameter for cluster balancing
+    // dfs.datanode.balance.bandwidthPerSec : 10 * 1024*1024 = 10M
+    // dfs.datanode.balance.max.concurrent.moves : 50
     this.balanceThrottler = new BlockBalanceThrottler(
         conf.getLongBytes(DFSConfigKeys.DFS_DATANODE_BALANCE_BANDWIDTHPERSEC_KEY,
             DFSConfigKeys.DFS_DATANODE_BALANCE_BANDWIDTHPERSEC_DEFAULT),
@@ -139,12 +142,16 @@ class DataXceiverServer implements Runnable {
 
   @Override
   public void run() {
-    Peer peer = null;
+    Peer peer = null; // NioInetPeer(Socket[addr=/127.0.0.1,port=54402,localport=9866])
+
+    //循环执行逻辑
     while (datanode.shouldRun && !datanode.shutdownForUpgrade) {
       try {
+        //接受连接请求
         peer = peerServer.accept();
 
         // Make sure the xceiver count is not exceeded
+        // 通过 ThreadGroup 来控制的, 默认值为 4096
         int curXceiverCount = datanode.getXceiverCount();
         if (curXceiverCount > maxXceiverCount) {
           throw new IOException("Xceiver count " + curXceiverCount
@@ -152,10 +159,12 @@ class DataXceiverServer implements Runnable {
               + maxXceiverCount);
         }
 
+        //创建一个DataXceiver响应请求
         new Daemon(datanode.threadGroup,
             DataXceiver.create(peer, datanode, this))
             .start();
       } catch (SocketTimeoutException ignored) {
+        //Socket超时异常直接忽略
         // wake up to see if should continue to run
       } catch (AsynchronousCloseException ace) {
         // another thread closed our listener socket - that's expected during shutdown,
@@ -178,12 +187,13 @@ class DataXceiverServer implements Runnable {
           // ignore
         }
       } catch (Throwable te) {
-        LOG.error(datanode.getDisplayName()
-            + ":DataXceiverServer: Exiting due to: ", te);
+        LOG.error(datanode.getDisplayName() + ":DataXceiverServer: Exiting due to: ", te);
+        //其他异常则直接关闭Datanode
         datanode.shouldRun = false;
       }
     }
 
+    // 清理操作： 退出主循环， 执行关闭操作， 将peerServer关闭
     // Close the server to stop reception of more requests.
     try {
       peerServer.close();

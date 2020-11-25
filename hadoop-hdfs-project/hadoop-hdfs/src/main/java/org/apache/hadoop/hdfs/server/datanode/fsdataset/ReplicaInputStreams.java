@@ -45,13 +45,13 @@ public class ReplicaInputStreams implements Closeable {
   public ReplicaInputStreams(
       InputStream dataStream, InputStream checksumStream,
       FsVolumeReference volumeRef, FileIoProvider fileIoProvider) {
-    this.volumeRef = volumeRef;
-    this.fileIoProvider = fileIoProvider;
-    this.dataIn = dataStream;
-    this.checksumIn = checksumStream;
+    this.volumeRef = volumeRef; // FsVolumeReferenceImpl   ==> volume : /opt/tools/hadoop-3.2.1/data/hdfs/data
+    this.fileIoProvider = fileIoProvider; // FileIoProvider ==>  datanoe:  DataNode{data=FSDataset{dirpath='[/opt/tools/hadoop-3.2.1/data/hdfs/data, /opt/tools/hadoop-3.2.1/data/hdfs/data01]'}, localName='192.168.8.188:9866', datanodeUuid='9efa402a-df6b-48cf-9273-5468f68cc42f', xmitsInProgress=0}
+    this.dataIn = dataStream; // FileIoProvider&WrappedFileInputStream
+    this.checksumIn = checksumStream; // DataInputStream
     if (dataIn instanceof FileInputStream) {
       try {
-        dataInFd = ((FileInputStream) dataIn).getFD();
+        dataInFd = ((FileInputStream) dataIn).getFD();  /// /opt/tools/hadoop-3.2.1/data/hdfs/data/current/BP-451827885-192.168.8.156-1584099133244/current/finalized/subdir0/subdir19/blk_1073746921
       } catch (Exception e) {
         LOG.warn("Could not get file descriptor for inputstream of class " +
             this.dataIn.getClass());

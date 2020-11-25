@@ -176,32 +176,40 @@ public class ShortCircuitRegistry {
     SharedFileDescriptorFactory shmFactory = null;
     DomainSocketWatcher watcher = null;
     try {
+
       int interruptCheck = conf.getInt(
           DFS_SHORT_CIRCUIT_SHARED_MEMORY_WATCHER_INTERRUPT_CHECK_MS,
           DFS_SHORT_CIRCUIT_SHARED_MEMORY_WATCHER_INTERRUPT_CHECK_MS_DEFAULT);
+
       if (interruptCheck <= 0) {
         throw new IOException(
             DFS_SHORT_CIRCUIT_SHARED_MEMORY_WATCHER_INTERRUPT_CHECK_MS +
             " was set to " + interruptCheck);
       }
-      String[] shmPaths =
-          conf.getTrimmedStrings(DFS_DATANODE_SHARED_FILE_DESCRIPTOR_PATHS);
+
+
+      String[] shmPaths = conf.getTrimmedStrings(DFS_DATANODE_SHARED_FILE_DESCRIPTOR_PATHS);
+
       if (shmPaths.length == 0) {
         shmPaths =
             DFS_DATANODE_SHARED_FILE_DESCRIPTOR_PATHS_DEFAULT.split(",");
       }
       shmFactory = SharedFileDescriptorFactory.
           create("HadoopShortCircuitShm_", shmPaths);
+
       String dswLoadingFailure = DomainSocketWatcher.getLoadingFailureReason();
       if (dswLoadingFailure != null) {
         throw new IOException(dswLoadingFailure);
       }
+
       watcher = new DomainSocketWatcher(interruptCheck, "datanode");
+
       enabled = true;
       if (LOG.isDebugEnabled()) {
         LOG.debug("created new ShortCircuitRegistry with interruptCheck=" +
                   interruptCheck + ", shmPath=" + shmFactory.getPath());
       }
+
     } catch (IOException e) {
       if (LOG.isDebugEnabled()) {
         LOG.debug("Disabling ShortCircuitRegistry", e);

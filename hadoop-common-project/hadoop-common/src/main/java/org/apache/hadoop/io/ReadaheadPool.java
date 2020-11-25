@@ -206,6 +206,8 @@ public class ReadaheadPool {
       // other FD, which may be wasted work, but won't cause a problem.
       try {
         if (fd.valid()) {
+
+          //调用fadvise()系统调用完成预读取
           NativeIO.POSIX.getCacheManipulator().posixFadviseIfPossible(
               identifier, fd, off, len, POSIX_FADV_WILLNEED);
         }

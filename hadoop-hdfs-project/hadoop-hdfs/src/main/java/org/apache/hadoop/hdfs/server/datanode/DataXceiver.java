@@ -136,19 +136,30 @@ class DataXceiver extends Receiver implements Runnable {
   private DataXceiver(Peer peer, DataNode datanode,
       DataXceiverServer dataXceiverServer) throws IOException {
     super(datanode.getTracer());
+    // NioInetPeer(Socket[addr=/127.0.0.1,port=54069,localport=9866])
     this.peer = peer;
+    // getDnConf
     this.dnConf = datanode.getDnConf();
+    // SocketInputStream@4920
     this.socketIn = peer.getInputStream();
+    // SocketOutputStream@4921
     this.socketOut = peer.getOutputStream();
+    // DataNode{data=FSDataset{dirpath='[/opt/tools/hadoop-3.2.1/data/hdfs/data, /opt/tools/hadoop-3.2.1/data/hdfs/data01]'}, localName='boyi-pro.lan:9866', datanodeUuid='9efa402a-df6b-48cf-9273-5468f68cc42f', xmitsInProgress=0}
     this.datanode = datanode;
+    // DataXceiverServer@2667   =>   peerServer : TcpPeerServer(/0.0.0.:9866)
     this.dataXceiverServer = dataXceiverServer;
+    // false
     this.connectToDnViaHostname = datanode.getDnConf().connectToDnViaHostname;
+    // 4096
     this.ioFileBufferSize = DFSUtilClient.getIoFileBufferSize(datanode.getConf());
+    // 512
     this.smallBufferSize = DFSUtilClient.getSmallBufferSize(datanode.getConf());
+    // /127.0.0.1:54069
     remoteAddress = peer.getRemoteAddressString();
+    // 10
     final int colonIdx = remoteAddress.indexOf(':');
-    remoteAddressWithoutPort =
-        (colonIdx < 0) ? remoteAddress : remoteAddress.substring(0, colonIdx);
+    //  remoteAddressWithoutPort:   /127.0.0.1    localAddress : /127.0.0.1:9866
+    remoteAddressWithoutPort = (colonIdx < 0) ? remoteAddress : remoteAddress.substring(0, colonIdx);
     localAddress = peer.getLocalAddressString();
 
     LOG.debug("Number of active connections is: {}",
@@ -229,13 +240,16 @@ class DataXceiver extends Receiver implements Runnable {
       }
       dataXceiverServer.addPeer(peer, Thread.currentThread(), this);
       peer.setWriteTimeout(datanode.getDnConf().socketWriteTimeout);
+      //获取底层的输入流
       InputStream input = socketIn;
       try {
         IOStreamPair saslStreams = datanode.saslServer.receive(peer, socketOut,
           socketIn, datanode.getXferAddress().getPort(),
           datanode.getDatanodeId());
-        input = new BufferedInputStream(saslStreams.in,
-            smallBufferSize);
+
+        // 对输入流进行装饰
+        input = new BufferedInputStream(saslStreams.in, smallBufferSize);
+        // 获取底层的输出流
         socketOut = saslStreams.out;
       } catch (InvalidMagicNumberException imne) {
         if (imne.isHandshake4Encryption()) {
@@ -252,7 +266,7 @@ class DataXceiver extends Receiver implements Runnable {
         }
         return;
       }
-      
+      //调用父类的initialize ()方法完成Receiver的初始化操作
       super.initialize(new DataInputStream(input));
       
       // We process requests in a loop, and stay around for a short timeout.
@@ -268,6 +282,7 @@ class DataXceiver extends Receiver implements Runnable {
           } else {
             peer.setReadTimeout(dnConf.socketTimeout);
           }
+          //调用Receiver.readOp()从输入流中解析操作符
           op = readOp();
         } catch (InterruptedIOException ignored) {
           // Time out while we wait for client rpc
@@ -289,6 +304,8 @@ class DataXceiver extends Receiver implements Runnable {
         }
 
         opStartTime = monotonicNow();
+
+        //调用processOp()处理这个流式请求
         processOp(op);
         ++opsProcessed;
       } while ((peer != null) &&
@@ -644,25 +661,31 @@ class DataXceiver extends Receiver implements Runnable {
   }
 
   @Override
-  public void readBlock(final ExtendedBlock block,
-      final Token<BlockTokenIdentifier> blockToken,
-      final String clientName,
-      final long blockOffset,
-      final long length,
-      final boolean sendChecksum,
-      final CachingStrategy cachingStrategy) throws IOException {
+  public void readBlock(final ExtendedBlock block, // BP-451827885-192.168.8.156-1584099133244:blk_1073746920_6096
+      final Token<BlockTokenIdentifier> blockToken, // Kind: , Service: , Ident:
+      final String clientName, //DFSClient_NONMAPREDUCE_368352401_1
+      final long blockOffset, // 0
+      final long length,  // 1361
+      final boolean sendChecksum, // true
+      final CachingStrategy cachingStrategy) throws IOException {  // CachingStrategy(dropBehind=null, readahead=null)
+    // 客户端名称 DFSClient_NONMAPREDUCE_368352401_1
     previousOpClientName = clientName;
+
     long read = 0;
+
     updateCurrentThreadName("Sending block " + block);
+
     OutputStream baseStream = getOutputStream();
+
     DataOutputStream out = getBufferedOutputStream();
-    checkAccess(out, true, block, blockToken, Op.READ_BLOCK,
-        BlockTokenIdentifier.AccessMode.READ);
+
+    checkAccess(out, true, block, blockToken, Op.READ_BLOCK, BlockTokenIdentifier.AccessMode.READ);
 
     // send the block
     BlockSender blockSender = null;
-    DatanodeRegistration dnR = 
-      datanode.getDNRegistrationForBP(block.getBlockPoolId());
+
+    DatanodeRegistration dnR =   datanode.getDNRegistrationForBP(block.getBlockPoolId());
+    // src: /127.0.0.1:9866, dest: /127.0.0.1:51764, bytes: %d, op: HDFS_READ, cliID: DFSClient_NONMAPREDUCE_368352401_1, offset: %d, srvID: 9efa402a-df6b-48cf-9273-5468f68cc42f, blockid: BP-451827885-192.168.8.156-1584099133244:blk_1073746920_6096, duration(ns): %d
     final String clientTraceFmt =
       clientName.length() > 0 && ClientTraceLog.isInfoEnabled()
         ? String.format(DN_CLIENTTRACE_FORMAT, localAddress, remoteAddress,
@@ -673,9 +696,12 @@ class DataXceiver extends Receiver implements Runnable {
 
     try {
       try {
+
         blockSender = new BlockSender(block, blockOffset, length,
             true, false, sendChecksum, datanode, clientTraceFmt,
             cachingStrategy);
+
+
       } catch(IOException e) {
         String msg = "opReadBlock " + block + " received exception " + e; 
         LOG.info(msg);
@@ -687,8 +713,13 @@ class DataXceiver extends Receiver implements Runnable {
       writeSuccessWithChecksumInfo(blockSender, new DataOutputStream(getOutputStream()));
 
       long beginRead = Time.monotonicNow();
+
+      // 发送数据
       read = blockSender.sendBlock(out, baseStream, null); // send data
+
+
       long duration = Time.monotonicNow() - beginRead;
+
       if (blockSender.didSendEntireByteRange()) {
         // If we sent the entire range, then we should expect the client
         // to respond with a Status enum.
@@ -765,38 +796,61 @@ class DataXceiver extends Receiver implements Runnable {
       final String[] targetStorageIds) throws IOException {
     previousOpClientName = clientname;
     updateCurrentThreadName("Receiving block " + block);
+
+    //isDatanode变量指示当前写操作是否是DFSClient发起的 : false
     final boolean isDatanode = clientname.length() == 0;
+
+    //isClient变量与isDatanode相反， 表示是Datanode触发的写操作  true
     final boolean isClient = !isDatanode;
+
+    //isTransfer变量指示当前的写操作是否为数据块复制操作， 利用数据流管道状态来判断 false
     final boolean isTransfer = stage == BlockConstructionStage.TRANSFER_RBW
         || stage == BlockConstructionStage.TRANSFER_FINALIZED;
+
+    // 是否开启持久化 false
     allowLazyPersist = allowLazyPersist &&
         (dnConf.getAllowNonLocalLazyPersist() || peer.isLocal());
+
     long size = 0;
+
+    // 创建replyOut输出流
     // reply to upstream datanode or client 
     final DataOutputStream replyOut = getBufferedOutputStream();
 
     int nst = targetStorageTypes.length;
+
     StorageType[] storageTypes = new StorageType[nst + 1];
+
     storageTypes[0] = storageType;
+
     if (targetStorageTypes.length > 0) {
+
       System.arraycopy(targetStorageTypes, 0, storageTypes, 1, nst);
     }
 
     // To support older clients, we don't pass in empty storageIds
     final int nsi = targetStorageIds.length;
+
     final String[] storageIds;
     if (nsi > 0) {
+
       storageIds = new String[nsi + 1];
+
       storageIds[0] = storageId;
+
       if (targetStorageTypes.length > 0) {
+
         System.arraycopy(targetStorageIds, 0, storageIds, 1, nsi);
       }
     } else {
+
       storageIds = new String[0];
     }
+
     checkAccess(replyOut, isClient, block, blockToken, Op.WRITE_BLOCK,
         BlockTokenIdentifier.AccessMode.WRITE,
         storageTypes, storageIds);
+
 
     // check single target for transfer-RBW/Finalized
     if (isTransfer && targets.length > 0) {
@@ -805,40 +859,78 @@ class DataXceiver extends Receiver implements Runnable {
     }
 
     if (LOG.isDebugEnabled()) {
+
+      // opWriteBlock: stage=PIPELINE_SETUP_CREATE, clientname=DFSClient_NONMAPREDUCE_1654943232_1
+      // block  =BP-451827885-192.168.8.156-1584099133244:blk_1073746922_6098, newGs=0, bytesRcvd=[0, 0]
+      //  targets=[]; pipelineSize=1, srcDataNode=:0, pinning=false
+
+
+
       LOG.debug("opWriteBlock: stage={}, clientname={}\n  " +
               "block  ={}, newGs={}, bytesRcvd=[{}, {}]\n  " +
               "targets={}; pipelineSize={}, srcDataNode={}, pinning={}",
           stage, clientname, block, latestGenerationStamp, minBytesRcvd,
           maxBytesRcvd, Arrays.asList(targets), pipelineSize, srcDataNode,
           pinning);
+
+      // isDatanode=false, isClient=true, isTransfer=false
       LOG.debug("isDatanode={}, isClient={}, isTransfer={}",
           isDatanode, isClient, isTransfer);
+
+      // writeBlock receive buf size 408118 tcp no delay true
       LOG.debug("writeBlock receive buf size {} tcp no delay {}",
           peer.getReceiveBufferSize(), peer.getTcpNoDelay());
     }
+
+
 
     // We later mutate block's generation stamp and length, but we need to
     // forward the original version of the block to downstream mirrors, so
     // make a copy here.
     final ExtendedBlock originalBlock = new ExtendedBlock(block);
+
     if (block.getNumBytes() == 0) {
+
       block.setNumBytes(dataXceiverServer.estimateBlockSize);
+
     }
     LOG.info("Receiving {} src: {} dest: {}",
         block, remoteAddress, localAddress);
 
-    DataOutputStream mirrorOut = null;  // stream to next target
-    DataInputStream mirrorIn = null;    // reply from next target
-    Socket mirrorSock = null;           // socket to next target
-    String mirrorNode = null;           // the name:port of next target
-    String firstBadLink = "";           // first datanode that failed in connection setup
+    // 到下游数据节点的输出流
+    // stream to next target
+    DataOutputStream mirrorOut = null;
+
+    //下游数据节点的输入流
+    // reply from next target
+    DataInputStream mirrorIn = null;
+
+    //到下游节点的Socket
+    // socket to next target
+    Socket mirrorSock = null;
+
+    //下游节点的名称： 端口
+    // the name:port of next target
+    String mirrorNode = null;
+
+    // 数据流管道中第一个失败的Datanode
+    // first datanode that failed in connection setup
+    String firstBadLink = "";
+
     Status mirrorInStatus = SUCCESS;
+
+    //保存这个数据块的Datanode存储的id
     final String storageUuid;
+
     final boolean isOnTransientStorage;
+
     try {
+
       final Replica replica;
-      if (isDatanode || 
-          stage != BlockConstructionStage.PIPELINE_CLOSE_RECOVERY) {
+
+      if (isDatanode ||  stage != BlockConstructionStage.PIPELINE_CLOSE_RECOVERY) {
+
+        //打开一个BlockReceiver， 用于从上游节点接收数据块
         // open a block receiver
         setCurrentBlockReceiver(getBlockReceiver(block, storageType, in,
             peer.getRemoteAddressString(),
@@ -846,81 +938,116 @@ class DataXceiver extends Receiver implements Runnable {
             stage, latestGenerationStamp, minBytesRcvd, maxBytesRcvd,
             clientname, srcDataNode, datanode, requestedChecksum,
             cachingStrategy, allowLazyPersist, pinning, storageId));
+
         replica = blockReceiver.getReplica();
+
       } else {
-        replica = datanode.data.recoverClose(
-            block, latestGenerationStamp, minBytesRcvd);
+
+        replica = datanode.data.recoverClose(  block, latestGenerationStamp, minBytesRcvd);
+
       }
+
       storageUuid = replica.getStorageUuid();
+
       isOnTransientStorage = replica.isOnTransientStorage();
 
-      //
+      // 连接到下游节点
       // Connect to downstream machine, if appropriate
       //
       if (targets.length > 0) {
+
         InetSocketAddress mirrorTarget = null;
+
         // Connect to backup machine
         mirrorNode = targets[0].getXferAddr(connectToDnViaHostname);
+
         LOG.debug("Connecting to datanode {}", mirrorNode);
+
         mirrorTarget = NetUtils.createSocketAddr(mirrorNode);
+
         mirrorSock = datanode.newSocket();
         try {
 
           DataNodeFaultInjector.get().failMirrorConnection();
 
-          int timeoutValue = dnConf.socketTimeout +
-              (HdfsConstants.READ_TIMEOUT_EXTENSION * targets.length);
-          int writeTimeout = dnConf.socketWriteTimeout +
-              (HdfsConstants.WRITE_TIMEOUT_EXTENSION * targets.length);
+          int timeoutValue = dnConf.socketTimeout + (HdfsConstants.READ_TIMEOUT_EXTENSION * targets.length);
+
+          int writeTimeout = dnConf.socketWriteTimeout +  (HdfsConstants.WRITE_TIMEOUT_EXTENSION * targets.length);
+
+          // 建立到下游节点的Socket连接
           NetUtils.connect(mirrorSock, mirrorTarget, timeoutValue);
+
           mirrorSock.setTcpNoDelay(dnConf.getDataTransferServerTcpNoDelay());
+
           mirrorSock.setSoTimeout(timeoutValue);
+
           mirrorSock.setKeepAlive(true);
+
+
           if (dnConf.getTransferSocketSendBufferSize() > 0) {
-            mirrorSock.setSendBufferSize(
-                dnConf.getTransferSocketSendBufferSize());
+
+            mirrorSock.setSendBufferSize( dnConf.getTransferSocketSendBufferSize());
           }
 
-          OutputStream unbufMirrorOut = NetUtils.getOutputStream(mirrorSock,
-              writeTimeout);
+          OutputStream unbufMirrorOut = NetUtils.getOutputStream(mirrorSock,  writeTimeout);
+
           InputStream unbufMirrorIn = NetUtils.getInputStream(mirrorSock);
-          DataEncryptionKeyFactory keyFactory =
-            datanode.getDataEncryptionKeyFactoryForBlock(block);
+
+
+          DataEncryptionKeyFactory keyFactory =  datanode.getDataEncryptionKeyFactoryForBlock(block);
+
+
           SecretKey secretKey = null;
+
           if (dnConf.overwriteDownstreamDerivedQOP) {
+
             String bpid = block.getBlockPoolId();
-            BlockKey blockKey = datanode.blockPoolTokenSecretManager
-                .get(bpid).getCurrentKey();
+
+            BlockKey blockKey = datanode.blockPoolTokenSecretManager.get(bpid).getCurrentKey();
+
             secretKey = blockKey.getKey();
           }
-          IOStreamPair saslStreams = datanode.saslClient.socketSend(
-              mirrorSock, unbufMirrorOut, unbufMirrorIn, keyFactory,
-              blockToken, targets[0], secretKey);
+
+          IOStreamPair saslStreams = datanode.saslClient.socketSend( mirrorSock, unbufMirrorOut, unbufMirrorIn, keyFactory, blockToken, targets[0], secretKey);
+
           unbufMirrorOut = saslStreams.out;
+
           unbufMirrorIn = saslStreams.in;
-          mirrorOut = new DataOutputStream(new BufferedOutputStream(unbufMirrorOut,
-              smallBufferSize));
+
+          //创建mirrorOut和mirrorIn建立到下游节点的输出流以及输入流
+          mirrorOut = new DataOutputStream(new BufferedOutputStream(unbufMirrorOut,  smallBufferSize));
+
           mirrorIn = new DataInputStream(unbufMirrorIn);
 
           String targetStorageId = null;
+
+
           if (targetStorageIds.length > 0) {
+
             // Older clients may not have provided any targetStorageIds
             targetStorageId = targetStorageIds[0];
           }
           if (targetPinnings != null && targetPinnings.length > 0) {
+
+            //向下游节点发送数据块写入请求
             new Sender(mirrorOut).writeBlock(originalBlock, targetStorageTypes[0],
                 blockToken, clientname, targets, targetStorageTypes,
                 srcDataNode, stage, pipelineSize, minBytesRcvd, maxBytesRcvd,
                 latestGenerationStamp, requestedChecksum, cachingStrategy,
                 allowLazyPersist, targetPinnings[0], targetPinnings,
                 targetStorageId, targetStorageIds);
+
+
           } else {
+
+            //接收来自下游节点的请求确认， 并记录请求确认状态
             new Sender(mirrorOut).writeBlock(originalBlock, targetStorageTypes[0],
                 blockToken, clientname, targets, targetStorageTypes,
                 srcDataNode, stage, pipelineSize, minBytesRcvd, maxBytesRcvd,
                 latestGenerationStamp, requestedChecksum, cachingStrategy,
                 allowLazyPersist, false, targetPinnings,
                 targetStorageId, targetStorageIds);
+
           }
 
           mirrorOut.flush();
@@ -929,10 +1056,15 @@ class DataXceiver extends Receiver implements Runnable {
 
           // read connect ack (only for clients, not for replication req)
           if (isClient) {
-            BlockOpResponseProto connectAck =
-              BlockOpResponseProto.parseFrom(PBHelperClient.vintPrefixed(mirrorIn));
+            //接收来自下游节点的请求确认， 并记录请求确认状态
+            BlockOpResponseProto connectAck =  BlockOpResponseProto.parseFrom(PBHelperClient.vintPrefixed(mirrorIn));
+
+
             mirrorInStatus = connectAck.getStatus();
+
             firstBadLink = connectAck.getFirstBadLink();
+
+
             if (mirrorInStatus != SUCCESS) {
               LOG.debug("Datanode {} got response for connect" +
                   "ack  from downstream datanode with firstbadlink as {}",
@@ -941,6 +1073,7 @@ class DataXceiver extends Receiver implements Runnable {
           }
 
         } catch (IOException e) {
+          //出现异常， 向上游节点发送异常响应
           if (isClient) {
             BlockOpResponseProto.newBuilder()
               .setStatus(ERROR)
@@ -950,6 +1083,8 @@ class DataXceiver extends Receiver implements Runnable {
               .writeDelimitedTo(replyOut);
             replyOut.flush();
           }
+
+          // 关闭到下游节点的Socket、 输入流以及输出流
           IOUtils.closeStream(mirrorOut);
           mirrorOut = null;
           IOUtils.closeStream(mirrorIn);
@@ -970,49 +1105,62 @@ class DataXceiver extends Receiver implements Runnable {
 
       // send connect-ack to source for clients and not transfer-RBW/Finalized
       if (isClient && !isTransfer) {
+
         if (mirrorInStatus != SUCCESS) {
           LOG.debug("Datanode {} forwarding connect ack to upstream " +
               "firstbadlink is {}", targets.length, firstBadLink);
         }
+
+        // 向上游节点返回请求确认
         BlockOpResponseProto.newBuilder()
           .setStatus(mirrorInStatus)
           .setFirstBadLink(firstBadLink)
           .build()
           .writeDelimitedTo(replyOut);
+
+
         replyOut.flush();
       }
 
       // receive the block and mirror to the next target
       if (blockReceiver != null) {
-        String mirrorAddr = (mirrorSock == null) ? null : mirrorNode;
-        blockReceiver.receiveBlock(mirrorOut, mirrorIn, replyOut,
-            mirrorAddr, null, targets, false);
 
+        String mirrorAddr = (mirrorSock == null) ? null : mirrorNode;
+
+        // 调用BlockReceiver.receiveBlock()从上游节点接收数据块， 然后将数据块发送到下游节点
+        blockReceiver.receiveBlock(mirrorOut, mirrorIn, replyOut,  mirrorAddr, null, targets, false);
+
+
+        // 对于复制操作， 不需要向下游节点转发数据块， 也不需要接收下游节点的确认
+        // 所以成功接收完数据块之后， 在当前节点直接返回确认消息
         // send close-ack for transfer-RBW/Finalized 
         if (isTransfer) {
           LOG.trace("TRANSFER: send close-ack");
           writeResponse(SUCCESS, null, replyOut);
         }
+
       }
 
       // update its generation stamp
-      if (isClient && 
-          stage == BlockConstructionStage.PIPELINE_CLOSE_RECOVERY) {
+      if (isClient &&   stage == BlockConstructionStage.PIPELINE_CLOSE_RECOVERY) {
+
         block.setGenerationStamp(latestGenerationStamp);
+
         block.setNumBytes(minBytesRcvd);
       }
       
       // if this write is for a replication request or recovering
       // a failed close for client, then confirm block. For other client-writes,
       // the block is finalized in the PacketResponder.
-      if (isDatanode ||
-          stage == BlockConstructionStage.PIPELINE_CLOSE_RECOVERY) {
+      if (isDatanode || stage == BlockConstructionStage.PIPELINE_CLOSE_RECOVERY) {
+
         datanode.closeBlock(block, null, storageUuid, isOnTransientStorage);
-        LOG.info("Received {} src: {} dest: {} of size {}",
-            block, remoteAddress, localAddress, block.getNumBytes());
+
+        LOG.info("Received {} src: {} dest: {} of size {}", block, remoteAddress, localAddress, block.getNumBytes());
       }
 
       if(isClient) {
+
         size = block.getNumBytes();
       }
     } catch (IOException ioe) {
@@ -1021,6 +1169,7 @@ class DataXceiver extends Receiver implements Runnable {
       incrDatanodeNetworkErrors();
       throw ioe;
     } finally {
+      // 关闭上下游节点的输入／ 输 出流， 同时关闭blockReceiver对象
       // close all opened streams
       IOUtils.closeStream(mirrorOut);
       IOUtils.closeStream(mirrorIn);
@@ -1032,6 +1181,7 @@ class DataXceiver extends Receiver implements Runnable {
 
     //update metrics
     datanode.getMetrics().addWriteBlockOp(elapsed());
+
     datanode.getMetrics().incrWritesFromClient(peer.isLocal(), size);
   }
 

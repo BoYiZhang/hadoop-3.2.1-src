@@ -1167,23 +1167,31 @@ public class DataNode extends ReconfigurableBase
     if (secureResources != null) {
       tcpPeerServer = new TcpPeerServer(secureResources);
     } else {
+      // 设置TCP接收缓冲区 ipc.server.listen.queue.size  128
       int backlogLength = getConf().getInt(
           CommonConfigurationKeysPublic.IPC_SERVER_LISTEN_QUEUE_SIZE_KEY,
           CommonConfigurationKeysPublic.IPC_SERVER_LISTEN_QUEUE_SIZE_DEFAULT);
-      tcpPeerServer = new TcpPeerServer(dnConf.socketWriteTimeout,
-          DataNode.getStreamingAddr(getConf()), backlogLength);
+      // TcpPeerServer(/0.0.0.0:9866)
+      tcpPeerServer = new TcpPeerServer(dnConf.socketWriteTimeout,  DataNode.getStreamingAddr(getConf()), backlogLength);
+
     }
+
     if (dnConf.getTransferSocketRecvBufferSize() > 0) {
-      tcpPeerServer.setReceiveBufferSize(
-          dnConf.getTransferSocketRecvBufferSize());
+
+      tcpPeerServer.setReceiveBufferSize(  dnConf.getTransferSocketRecvBufferSize());
     }
+    // /0.0.0.0:9866
     streamingAddr = tcpPeerServer.getStreamingAddr();
     LOG.info("Opened streaming server at {}", streamingAddr);
+    // 构造DataXceiverServer对象  并设置分组为: dataXceiverServer
     this.threadGroup = new ThreadGroup("dataXceiverServer");
     xserver = new DataXceiverServer(tcpPeerServer, getConf(), this);
+    //将DataXceiverServer线程组设置为守护线程
     this.dataXceiverServer = new Daemon(threadGroup, xserver);
     this.threadGroup.setDaemon(true); // auto destroy when empty
 
+    //短路读取情况
+    //dfs.client.domain.socket.data.traffic : false
     if (getConf().getBoolean(
         HdfsClientConfigKeys.Read.ShortCircuit.KEY,
         HdfsClientConfigKeys.Read.ShortCircuit.DEFAULT) ||
@@ -1191,15 +1199,18 @@ public class DataNode extends ReconfigurableBase
             HdfsClientConfigKeys.DFS_CLIENT_DOMAIN_SOCKET_DATA_TRAFFIC,
             HdfsClientConfigKeys
               .DFS_CLIENT_DOMAIN_SOCKET_DATA_TRAFFIC_DEFAULT)) {
-      DomainPeerServer domainPeerServer =
-                getDomainPeerServer(getConf(), streamingAddr.getPort());
+      //构造DomainPeerServer (底层基于DomainSocket,用于本进程间通信）
+      DomainPeerServer domainPeerServer =  getDomainPeerServer(getConf(), streamingAddr.getPort());
+
       if (domainPeerServer != null) {
+        //构造localDataXceiverServer
         this.localDataXceiverServer = new Daemon(threadGroup,
             new DataXceiverServer(domainPeerServer, getConf(), this));
         LOG.info("Listening on UNIX domain socket: {}",
             domainPeerServer.getBindPath());
       }
     }
+    //创建ShortCircuitRegistry对象
     this.shortCircuitRegistry = new ShortCircuitRegistry(getConf());
   }
 

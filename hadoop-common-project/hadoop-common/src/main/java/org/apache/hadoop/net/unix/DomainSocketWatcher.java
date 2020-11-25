@@ -243,6 +243,7 @@ public final class DomainSocketWatcher implements Closeable {
     if (loadingFailureReason != null) {
       throw new UnsupportedOperationException(loadingFailureReason);
     }
+
     Preconditions.checkArgument(interruptCheckPeriodMs > 0);
     this.interruptCheckPeriodMs = interruptCheckPeriodMs;
     notificationSockets = DomainSocket.socketpair();
