@@ -58,8 +58,7 @@ public class BlockScanner {
   /**
    * Maps Storage IDs to VolumeScanner objects.
    */
-  private final TreeMap<String, VolumeScanner> scanners =
-      new TreeMap<String, VolumeScanner>();
+  private final TreeMap<String, VolumeScanner> scanners = new TreeMap<String, VolumeScanner>();
 
   /**
    * The scanner configuration.

@@ -295,14 +295,22 @@ public class VolumeScanner extends Thread {
   }
 
   VolumeScanner(Conf conf, DataNode datanode, FsVolumeReference ref) {
+    //BlockScanner$Conf   targetBytesPerSec = 1048576 [1mb/s] maxStalenessMs = 900000 [15min] scanPeriodMs = 1814400000 [21天 = 三周]   cursorSaveMs = 600000 [10min]
     this.conf = conf;
+    // DataNode{data=null, localName='192.168.8.188:9866', datanodeUuid='9efa402a-df6b-48cf-9273-5468f68cc42f', xmitsInProgress=0}
     this.datanode = datanode;
+
     this.metrics = datanode.getMetrics();
+    // volume /opt/tools/hadoop-3.2.1/data/hdfs/data
     this.ref = ref;
+    // /opt/tools/hadoop-3.2.1/data/hdfs/data
     this.volume = ref.getVolume();
+
     ScanResultHandler handler;
     try {
+      // 构建 ScanResultHandler
       handler = conf.resultHandler.newInstance();
+
     } catch (Throwable e) {
       LOG.error("unable to instantiate {}", conf.resultHandler, e);
       handler = new ScanResultHandler();
@@ -415,6 +423,7 @@ public class VolumeScanner extends Thread {
     // information.
     ExtendedBlock block = null;
     try {
+
       Block b = volume.getDataset().getStoredBlock(
           cblock.getBlockPoolId(), cblock.getBlockId());
       if (b == null) {
@@ -436,15 +445,22 @@ public class VolumeScanner extends Thread {
     LOG.debug("start scanning block {}", block);
     BlockSender blockSender = null;
     try {
+
+      //构造BlockSender对象， 将数据块发送到空的输出流中
       blockSender = new BlockSender(block, 0, -1,
           false, true, true, datanode, null,
           CachingStrategy.newDropBehind());
+
+      // 限流
       throttler.setBandwidth(bytesPerSec);
       long bytesRead = blockSender.sendBlock(nullStream, null, throttler);
+
+      /// 数据块验证正确， 调用updateScanStatus()方法更新数据块扫描状态
       resultHandler.handle(block, null);
       metrics.incrBlocksVerified();
       return bytesRead;
     } catch (IOException e) {
+      //如果检查数据块失败....
       resultHandler.handle(block, e);
     } finally {
       IOUtils.cleanup(null, blockSender);
@@ -599,11 +615,15 @@ public class VolumeScanner extends Thread {
 
   @Override
   public void run() {
+    // 记录scanner的启动事件
     // Record the minute on which the scanner started.
-    this.startMinute =
-        TimeUnit.MINUTES.convert(Time.monotonicNow(), TimeUnit.MILLISECONDS);
+    this.startMinute =  TimeUnit.MINUTES.convert(Time.monotonicNow(), TimeUnit.MILLISECONDS);
     this.curMinute = startMinute;
+
+
     try {
+
+
       LOG.trace("{}: thread starting.", this);
       resultHandler.setup(this);
       try {
@@ -623,8 +643,11 @@ public class VolumeScanner extends Thread {
                 break;
               }
             }
+            //处理  有问题的 block 数据
             suspectBlock = popNextSuspectBlock();
           }
+
+          // 处理任务!!!!
           timeout = runLoop(suspectBlock);
         }
       } catch (InterruptedException e) {
@@ -637,9 +660,12 @@ public class VolumeScanner extends Thread {
       LOG.info("{} exiting.", this);
       // Save the current position of all block iterators and close them.
       for (BlockIterator iter : blockIters) {
+
         saveBlockIterator(iter);
         IOUtils.cleanup(null, iter);
       }
+
+
     } finally {
       // When the VolumeScanner exits, release the reference we were holding
       // on the volume.  This will allow the volume to be removed later.

@@ -70,12 +70,20 @@ public class DirectoryScanner implements Runnable {
       + " and throttle limit of %dms/s";
 
   private final FsDatasetSpi<?> dataset;
+
   private final ExecutorService reportCompileThreadPool;
+
+  // 主线程， 定期调用DirectoryScanner.run()方法， 执行整个扫描逻 辑。
   private final ScheduledExecutorService masterThread;
+
   private final long scanPeriodMsecs;
+
   private final int throttleLimitMsPerSec;
+
   private volatile boolean shouldRun = false;
+
   private boolean retainDiffs = false;
+
   private final DataNode datanode;
 
   /**
@@ -90,14 +98,17 @@ public class DirectoryScanner implements Runnable {
    */
   @VisibleForTesting
   final AtomicLong timeWaitingMs = new AtomicLong(0L);
+
+
   /**
    * The complete list of block differences indexed by block pool ID.
    */
   @VisibleForTesting
   final ScanInfoPerBlockPool diffs = new ScanInfoPerBlockPool();
+
+
   /**
-   * Statistics about the block differences in each blockpool, indexed by
-   * block pool ID.
+   * Statistics about the block differences in each blockpool, indexed by block pool ID.
    */
   @VisibleForTesting
   final Map<String, Stats> stats = new HashMap<String, Stats>();
@@ -219,14 +230,20 @@ public class DirectoryScanner implements Runnable {
    */
   public DirectoryScanner(DataNode datanode, FsDatasetSpi<?> dataset,
       Configuration conf) {
+
     this.datanode = datanode;
+
     this.dataset = dataset;
+
+    // dfs.datanode.directoryscan.interval : 21600 (6小时)
     int interval = (int) conf.getTimeDuration(
         DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY,
         DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_DEFAULT,
         TimeUnit.SECONDS);
-    scanPeriodMsecs = interval * MILLIS_PER_SECOND; //msec
 
+    //扫描周期
+    scanPeriodMsecs = interval * MILLIS_PER_SECOND; //msec
+    // dfs.datanode.directoryscan.throttle.limit.ms.per.sec : 1000
     int throttle =
         conf.getInt(
           DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_THROTTLE_LIMIT_MS_PER_SEC_KEY,
@@ -247,16 +264,21 @@ public class DirectoryScanner implements Runnable {
 
       throttleLimitMsPerSec =
           DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_THROTTLE_LIMIT_MS_PER_SEC_DEFAULT;
+
     } else {
       throttleLimitMsPerSec = throttle;
     }
 
+    // dfs.datanode.directoryscan.threads : 1
     int threads = 
         conf.getInt(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_THREADS_KEY,
                     DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_THREADS_DEFAULT);
 
+    // 异步收集磁盘上数据块信息的线程池
     reportCompileThreadPool = Executors.newFixedThreadPool(threads, 
         new Daemon.DaemonFactory());
+
+
     masterThread = new ScheduledThreadPoolExecutor(1,
         new Daemon.DaemonFactory());
   }
@@ -266,24 +288,32 @@ public class DirectoryScanner implements Runnable {
    * {@link DFSConfigKeys#DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY} seconds.
    */
   void start() {
+
     shouldRun = true;
+
     long offset = ThreadLocalRandom.current().nextInt(
         (int) (scanPeriodMsecs/MILLIS_PER_SECOND)) * MILLIS_PER_SECOND; //msec
+
+
     long firstScanTime = Time.now() + offset;
     String logMsg;
 
+
     if (throttleLimitMsPerSec < MILLIS_PER_SECOND) {
+
+
       logMsg = String.format(START_MESSAGE_WITH_THROTTLE,
           FastDateFormat.getInstance().format(firstScanTime), scanPeriodMsecs,
           throttleLimitMsPerSec);
     } else {
+
       logMsg = String.format(START_MESSAGE,
           FastDateFormat.getInstance().format(firstScanTime), scanPeriodMsecs);
     }
 
     LOG.info(logMsg);
-    masterThread.scheduleAtFixedRate(this, offset, scanPeriodMsecs, 
-                                     TimeUnit.MILLISECONDS);
+
+    masterThread.scheduleAtFixedRate(this, offset, scanPeriodMsecs,   TimeUnit.MILLISECONDS);
   }
   
   /**
@@ -373,7 +403,13 @@ public class DirectoryScanner implements Runnable {
    */
   @VisibleForTesting
   public void reconcile() throws IOException {
+
+    //调用scan()方法收集磁盘上数据块与内存中数据块的差异信息
+    // 不同的地方会放到diffs集合中
     scan();
+
+
+    //调用FsDatasetImpl.checkAndUpdate()更新FsDataset保存的数据块， 完成同步
     for (Entry<String, LinkedList<ScanInfo>> entry : diffs.entrySet()) {
       String bpid = entry.getKey();
       LinkedList<ScanInfo> diff = entry.getValue();
