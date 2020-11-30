@@ -216,11 +216,11 @@ public class DFSInputStream extends FSInputStream
     final DfsClientConf conf = dfsClient.getConf();
     synchronized(infoLock) {
 
-      //获取文件对应的所有数据块的位置信
-      //息， 然后更新当前文件的最后一个数据块的长度。 由于文件的最后一个数据块可能处于构
-      //建状态（正在被写入） ， 那么Namenode命名空间中保存的数据块长度就有可能小于
-      //Datanode实际存储数据块的长度， 所以这里需要与Datanode通信以确认文件最后一个数据
-      //块的真实长度。
+      //获取文件对应的所有数据块的位置信 息， 然后更新当前文件的最后一个数据块的长度。
+      // 由于文件的最后一个数据块可能处于构建状态（正在被写入） ，
+      //
+      // 那么Namenode命名空间中保存的数据块长度就有可能小于 Datanode实际存储数据块的长度，
+      // 所以这里需要与Datanode通信以确认文件最后一个数据块的真实长度。
 
       //获取文件对应的所有数据块的位置信息
       lastBlockBeingWrittenLength =

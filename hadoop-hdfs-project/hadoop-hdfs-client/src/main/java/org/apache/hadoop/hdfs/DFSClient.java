@@ -981,13 +981,19 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
    */
   public HdfsDataInputStream createWrappedInputStream(DFSInputStream dfsis)
       throws IOException {
+
     FileEncryptionInfo feInfo = dfsis.getFileEncryptionInfo();
+
     if (feInfo != null) {
+
       CryptoInputStream cryptoIn;
+
       try (TraceScope ignored = getTracer().newScope("decryptEDEK")) {
-        cryptoIn = HdfsKMSUtil.createWrappedInputStream(dfsis,
-            getKeyProvider(), feInfo, getConfiguration());
+
+        cryptoIn = HdfsKMSUtil.createWrappedInputStream(dfsis,  getKeyProvider(), feInfo, getConfiguration());
+
       }
+
       return new HdfsDataInputStream(cryptoIn);
     } else {
       // No FileEncryptionInfo so no encryption.
@@ -1061,10 +1067,14 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
    */
   public DFSInputStream open(String src, int buffersize, boolean verifyChecksum)
       throws IOException {
+
     checkOpen();
+
     //    Get block info from namenode
     try (TraceScope ignored = newPathTraceScope("newDFSInputStream", src)) {
+
       LocatedBlocks locatedBlocks = getLocatedBlocks(src, 0);
+
       return openInternal(locatedBlocks, src, verifyChecksum);
     }
   }
@@ -1096,13 +1106,18 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
 
   private DFSInputStream openInternal(LocatedBlocks locatedBlocks, String src,
       boolean verifyChecksum) throws IOException {
+
     if (locatedBlocks != null) {
+
       ErasureCodingPolicy ecPolicy = locatedBlocks.getErasureCodingPolicy();
+
       if (ecPolicy != null) {
         return new DFSStripedInputStream(this, src, verifyChecksum, ecPolicy,
             locatedBlocks);
       }
+
       return new DFSInputStream(this, src, verifyChecksum, locatedBlocks);
+
     } else {
       throw new IOException("Cannot open filename " + src);
     }

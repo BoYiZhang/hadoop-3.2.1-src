@@ -309,15 +309,22 @@ public class DistributedFileSystem extends FileSystem
   @Override
   public FSDataInputStream open(Path f, final int bufferSize)
       throws IOException {
+
     statistics.incrementReadOps(1);
+
     storageStatistics.incrementOpCounter(OpType.OPEN);
+    // /README.txt
     Path absF = fixRelativePart(f);
+
     return new FileSystemLinkResolver<FSDataInputStream>() {
       @Override
       public FSDataInputStream doCall(final Path p) throws IOException {
-        final DFSInputStream dfsis =
-            dfs.open(getPathName(p), bufferSize, verifyChecksum);
+
+        final DFSInputStream dfsis =  dfs.open(getPathName(p), bufferSize, verifyChecksum);
+
+
         return dfs.createWrappedInputStream(dfsis);
+
       }
       @Override
       public FSDataInputStream next(final FileSystem fs, final Path p)

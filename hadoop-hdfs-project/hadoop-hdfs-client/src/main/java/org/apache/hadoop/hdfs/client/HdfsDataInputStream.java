@@ -44,9 +44,12 @@ public class HdfsDataInputStream extends FSDataInputStream {
   }
 
   public HdfsDataInputStream(CryptoInputStream in) {
+
     super(in);
-    Preconditions.checkArgument(in.getWrappedStream() instanceof DFSInputStream,
-        "CryptoInputStream should wrap a DFSInputStream");
+
+    //构造方法对传入的InputStream进行判断是否实现了DFSInputStream类
+    Preconditions.checkArgument(in.getWrappedStream() instanceof DFSInputStream, "CryptoInputStream should wrap a DFSInputStream");
+
   }
 
   private DFSInputStream getDFSInputStream() {
