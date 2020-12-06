@@ -104,6 +104,12 @@ public class CompositeService extends AbstractService {
     if (LOG.isDebugEnabled()) {
       LOG.debug(getName() + ": initing services, size=" + services.size());
     }
+
+
+    for (Service service : services) {
+      LOG.info("Resource Manager # serviceInit : {}  " ,service.getName());
+    }
+
     for (Service service : services) {
       service.init(conf);
     }

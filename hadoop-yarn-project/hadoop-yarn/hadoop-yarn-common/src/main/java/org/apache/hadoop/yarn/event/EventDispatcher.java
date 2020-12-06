@@ -40,14 +40,23 @@ public class EventDispatcher<T extends Event> extends
     AbstractService implements EventHandler<T> {
 
   private final EventHandler<T> handler;
-  private final BlockingQueue<T> eventQueue =
-      new LinkedBlockingDeque<>();
+
+  // 他也有一个事件阻塞队列
+  private final BlockingQueue<T> eventQueue =  new LinkedBlockingDeque<>();
+
+  // 处理事件的队列
   private final Thread eventProcessor;
+
+  // 线程应该停止与否的标志
   private volatile boolean stopped = false;
+
+  // 在执行事件过程中如果遇到异常是否应该导致程序退出
   private boolean shouldExitOnError = true;
 
   private static final Log LOG = LogFactory.getLog(EventDispatcher.class);
 
+
+  // 处理事件的线程，跟前面的 createThread 线程类似
   private final class EventProcessor implements Runnable {
     @Override
     public void run() {
@@ -63,6 +72,7 @@ public class EventDispatcher<T extends Event> extends
         }
 
         try {
+          // 注意这里，把事件直接交给了我们的主角-EventHandler ！！
           handler.handle(event);
         } catch (Throwable t) {
           // An error occurred, but we are shutting down anyway.
@@ -84,6 +94,7 @@ public class EventDispatcher<T extends Event> extends
     }
   }
 
+  // 构造方法，在前面介绍过，是RM在serviceInit方法中调用
   public EventDispatcher(EventHandler<T> handler, String name) {
     super(name);
     this.handler = handler;
@@ -121,6 +132,7 @@ public class EventDispatcher<T extends Event> extends
         LOG.info("Very low remaining capacity on " + getName() + "" +
             "event queue: " + remCapacity);
       }
+      // 处理事件就是放入自己的阻塞队列，让处理线程去处理
       this.eventQueue.put(event);
     } catch (InterruptedException e) {
       LOG.info("Interrupted. Trying to exit gracefully.");

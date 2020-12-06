@@ -252,21 +252,30 @@ public class ResourceManager extends CompositeService
   @Override
   protected void serviceInit(Configuration conf) throws Exception {
     this.conf = conf;
+
     UserGroupInformation.setConfiguration(conf);
+
     this.rmContext = new RMContextImpl();
+
     rmContext.setResourceManager(this);
 
-    this.configurationProvider =
-        ConfigurationProviderFactory.getConfigurationProvider(conf);
+
+    // todo 配置管理初始化
+    this.configurationProvider =  ConfigurationProviderFactory.getConfigurationProvider(conf);
+
+
     this.configurationProvider.init(this.conf);
+
     rmContext.setConfigurationProvider(configurationProvider);
 
     // load core-site.xml
     loadConfigurationXml(YarnConfiguration.CORE_SITE_CONFIGURATION_FILE);
 
+
     // Do refreshSuperUserGroupsConfiguration with loaded core-site.xml
     // Or use RM specific configurations to overwrite the common ones first
     // if they exist
+    // todo  从已加载的 core-site.xml文件中获取 用户<->组 的映射表
     RMServerUtils.processRMProxyUsersConf(conf);
     ProxyUsers.refreshSuperUserGroupsConfiguration(this.conf);
 
@@ -274,7 +283,9 @@ public class ResourceManager extends CompositeService
     loadConfigurationXml(YarnConfiguration.YARN_SITE_CONFIGURATION_FILE);
 
     validateConfigs(this.conf);
-    
+
+
+    // todo  填充是否配置了RM 高可用
     // Set HA configuration should be done before login
     this.rmContext.setHAEnabled(HAUtil.isHAEnabled(this.conf));
     if (this.rmContext.isHAEnabled()) {
@@ -292,8 +303,16 @@ public class ResourceManager extends CompositeService
     }
 
     // register the handlers for all AlwaysOn services using setupDispatcher().
+    // todo register the handlers for all AlwaysOn services using setupDispatcher().
+    // todo  注册一个异步Dispatcher，有一个单独的线程来处理所有持续开启的服务的各种EventType。
+    // todo  Yarn中采用了事件驱动的编程模型,后面很多不同的事件都用了这个dispatcher来处理。后面会详细说
     rmDispatcher = setupDispatcher();
+
+    // todo  将rmDispatcher放到CompositeService的serviceList
     addIfService(rmDispatcher);
+
+
+    // todo  并放入RM上下文中
     rmContext.setDispatcher(rmDispatcher);
 
     // The order of services below should not be changed as services will be
@@ -301,6 +320,9 @@ public class ResourceManager extends CompositeService
     // As elector service needs admin service to be initialized and started,
     // first we add admin service then elector service
 
+    // todo  注册管理员服务
+    // todo  AdminService为管理员提供了一套独立的服务接口，以防止大量的普通用户的请求使得管理员发送的管理命令饿死。
+    // todo  管理员可以通过这些接口命令管理集群，比如动态更新节点列表，更新ACL列表，更新队列信息等
     adminService = createAdminService();
     addService(adminService);
     rmContext.setRMAdminService(adminService);
@@ -319,12 +341,15 @@ public class ResourceManager extends CompositeService
 
     rmContext.setYarnConfiguration(conf);
 
+    //todo 创建activeServices
     createAndInitActiveServices(false);
 
+    // 构建web
     webAppAddress = WebAppUtils.getWebAppBindURL(this.conf,
                       YarnConfiguration.RM_BIND_HOST,
                       WebAppUtils.getRMWebAppURLWithoutScheme(this.conf));
 
+    // todo  持久化RMApp, RMAppAttempt, RMContainer的信息
     RMApplicationHistoryWriter rmApplicationHistoryWriter =
         createRMApplicationHistoryWriter();
     addService(rmApplicationHistoryWriter);
@@ -339,6 +364,7 @@ public class ResourceManager extends CompositeService
       rmContext.setRMTimelineCollectorManager(timelineCollectorManager);
     }
 
+    // todo  生产系统指标数据
     SystemMetricsPublisher systemMetricsPublisher =
         createSystemMetricsPublisher();
     addIfService(systemMetricsPublisher);
@@ -346,6 +372,8 @@ public class ResourceManager extends CompositeService
 
     registerMXBean();
 
+
+    // todo  接着调用父类CompositeService的serviceInit方法，将他管理的服务全部初始化
     super.serviceInit(this.conf);
   }
 
@@ -618,13 +646,14 @@ public class ResourceManager extends CompositeService
     }
   }
 
-  /**
+  /** RMActiveServices 处理所有RM中的活跃的(Active)服务
    * RMActiveServices handles all the Active services in the RM.
    */
   @Private
   public class RMActiveServices extends CompositeService {
 
     private DelegationTokenRenewer delegationTokenRenewer;
+    // 调度器对应的EventHandler
     private EventHandler<SchedulerEvent> schedulerDispatcher;
     private ApplicationMasterLauncher applicationMasterLauncher;
     private ContainerAllocationExpirer containerAllocationExpirer;
@@ -640,96 +669,132 @@ public class ResourceManager extends CompositeService
 
     @Override
     protected void serviceInit(Configuration configuration) throws Exception {
+
       standByTransitionRunnable = new StandByTransitionRunnable();
 
+      //RMSecretManagerService 主要提供了一些Token相关服务
       rmSecretManagerService = createRMSecretManagerService();
+
       addService(rmSecretManagerService);
 
+      // 监控Container是否过期（提交ApplicationMaster时检查）
       containerAllocationExpirer = new ContainerAllocationExpirer(rmDispatcher);
+
       addService(containerAllocationExpirer);
+
       rmContext.setContainerAllocationExpirer(containerAllocationExpirer);
 
+      // AM存活监控，继承自AbstractLivelinessMonitor，过期发生时会触发回调函数
       AMLivelinessMonitor amLivelinessMonitor = createAMLivelinessMonitor();
       addService(amLivelinessMonitor);
       rmContext.setAMLivelinessMonitor(amLivelinessMonitor);
 
+      // AM结束监控
       AMLivelinessMonitor amFinishingMonitor = createAMLivelinessMonitor();
       addService(amFinishingMonitor);
       rmContext.setAMFinishingMonitor(amFinishingMonitor);
-      
+
+      //
       RMAppLifetimeMonitor rmAppLifetimeMonitor = createRMAppLifetimeMonitor();
       addService(rmAppLifetimeMonitor);
       rmContext.setRMAppLifetimeMonitor(rmAppLifetimeMonitor);
 
+
+      // RM Node标签管理者
       RMNodeLabelsManager nlm = createNodeLabelManager();
       nlm.setRMContext(rmContext);
       addService(nlm);
+
+
+
       rmContext.setNodeLabelManager(nlm);
+
 
       NodeAttributesManager nam = createNodeAttributesManager();
       addService(nam);
       rmContext.setNodeAttributesManager(nam);
 
-      AllocationTagsManager allocationTagsManager =
-          createAllocationTagsManager();
+
+
+      AllocationTagsManager allocationTagsManager =  createAllocationTagsManager();
       rmContext.setAllocationTagsManager(allocationTagsManager);
 
-      PlacementConstraintManagerService placementConstraintManager =
-          createPlacementConstraintManager();
+
+      PlacementConstraintManagerService placementConstraintManager =  createPlacementConstraintManager();
       addService(placementConstraintManager);
       rmContext.setPlacementConstraintManager(placementConstraintManager);
 
+
+
       // add resource profiles here because it's used by AbstractYarnScheduler
-      ResourceProfilesManager resourceProfilesManager =
-          createResourceProfileManager();
+      ResourceProfilesManager resourceProfilesManager = createResourceProfileManager();
       resourceProfilesManager.init(conf);
       rmContext.setResourceProfilesManager(resourceProfilesManager);
 
-      MultiNodeSortingManager<SchedulerNode> multiNodeSortingManager =
-          createMultiNodeSortingManager();
+
+      MultiNodeSortingManager<SchedulerNode> multiNodeSortingManager =  createMultiNodeSortingManager();
       multiNodeSortingManager.setRMContext(rmContext);
       addService(multiNodeSortingManager);
       rmContext.setMultiNodeSortingManager(multiNodeSortingManager);
 
-      RMDelegatedNodeLabelsUpdater delegatedNodeLabelsUpdater =
-          createRMDelegatedNodeLabelsUpdater();
+
+
+      RMDelegatedNodeLabelsUpdater delegatedNodeLabelsUpdater =  createRMDelegatedNodeLabelsUpdater();
+
+
       if (delegatedNodeLabelsUpdater != null) {
+
+
         addService(delegatedNodeLabelsUpdater);
         rmContext.setRMDelegatedNodeLabelsUpdater(delegatedNodeLabelsUpdater);
       }
 
-      recoveryEnabled = conf.getBoolean(YarnConfiguration.RECOVERY_ENABLED,
-          YarnConfiguration.DEFAULT_RM_RECOVERY_ENABLED);
+      recoveryEnabled = conf.getBoolean(YarnConfiguration.RECOVERY_ENABLED, YarnConfiguration.DEFAULT_RM_RECOVERY_ENABLED);
 
+
+      // 管理RM状态的存储，我们用的是ZKRMStateStore
+      // 这个配置是 yarn.resourcemanager.sotre.class
       RMStateStore rmStore = null;
+
       if (recoveryEnabled) {
+
         rmStore = RMStateStoreFactory.getStore(conf);
-        boolean isWorkPreservingRecoveryEnabled =
-            conf.getBoolean(
-              YarnConfiguration.RM_WORK_PRESERVING_RECOVERY_ENABLED,
-              YarnConfiguration.DEFAULT_RM_WORK_PRESERVING_RECOVERY_ENABLED);
-        rmContext
-            .setWorkPreservingRecoveryEnabled(isWorkPreservingRecoveryEnabled);
+
+        boolean isWorkPreservingRecoveryEnabled =  conf.getBoolean( YarnConfiguration.RM_WORK_PRESERVING_RECOVERY_ENABLED, YarnConfiguration.DEFAULT_RM_WORK_PRESERVING_RECOVERY_ENABLED);
+
+        rmContext.setWorkPreservingRecoveryEnabled(isWorkPreservingRecoveryEnabled);
       } else {
+
         rmStore = new NullRMStateStore();
       }
 
       try {
+
         rmStore.setResourceManager(rm);
+
         rmStore.init(conf);
+
         rmStore.setRMDispatcher(rmDispatcher);
+
       } catch (Exception e) {
         // the Exception from stateStore.init() needs to be handled for
         // HA and we need to give up master status if we got fenced
         LOG.error("Failed to init state store", e);
         throw e;
       }
+
       rmContext.setStateStore(rmStore);
 
       if (UserGroupInformation.isSecurityEnabled()) {
+
         delegationTokenRenewer = createDelegationTokenRenewer();
+
         rmContext.setDelegationTokenRenewer(delegationTokenRenewer);
       }
+
+
+      //  Node列表管理器，
+      //  还用rmDispatcher注册了一个NodesListManagerEventType事件处理(节点可用\不可用)
 
       // Register event handler for NodesListManager
       nodesListManager = new NodesListManager(rmContext);
@@ -737,36 +802,48 @@ public class ResourceManager extends CompositeService
       addService(nodesListManager);
       rmContext.setNodesListManager(nodesListManager);
 
+
       // Initialize the scheduler
+      // ResourceScheduler 调度器的创建,他的子类之一就是FairScheduler
       scheduler = createScheduler();
       scheduler.setRMContext(rmContext);
       addIfService(scheduler);
       rmContext.setScheduler(scheduler);
 
+      // 用rmDispatcher注册了一个SchedulerEventType事件处理
       schedulerDispatcher = createSchedulerEventDispatcher();
       addIfService(schedulerDispatcher);
       rmDispatcher.register(SchedulerEventType.class, schedulerDispatcher);
 
+      // Register event handler for RmAppEvents（App事件）
       // Register event handler for RmAppEvents
-      rmDispatcher.register(RMAppEventType.class,
-          new ApplicationEventDispatcher(rmContext));
+      rmDispatcher.register(RMAppEventType.class,   new ApplicationEventDispatcher(rmContext));
 
       // Register event handler for RmAppAttemptEvents
-      rmDispatcher.register(RMAppAttemptEventType.class,
-          new ApplicationAttemptEventDispatcher(rmContext));
+      rmDispatcher.register(RMAppAttemptEventType.class, new ApplicationAttemptEventDispatcher(rmContext));
 
+      // Register event handler for RmNodes（RM节点事件）
       // Register event handler for RmNodes
-      rmDispatcher.register(
-          RMNodeEventType.class, new NodeEventDispatcher(rmContext));
+      rmDispatcher.register(  RMNodeEventType.class, new NodeEventDispatcher(rmContext));
 
+      //NM存活监控
       nmLivelinessMonitor = createNMLivelinessMonitor();
+
       addService(nmLivelinessMonitor);
 
+      /**
+       * 创建资源管理服务。处理来自NodeManager的请求，主要包括两种请求：注册和心跳.
+       * 其中，注册是NodeManager启动时发生的行为，请求包中包含节点ID，可用的资源上限等信息;
+       * 而心跳是周期性行为，包含各个Container运行状态，运行的Application列表、节点健康状况（可通过一个脚本设置），
+       * 以上请求调用通过hadoop自己实现的一套RPC协议实现，具体看看YarnRPC。
+       */
       resourceTracker = createResourceTrackerService();
       addService(resourceTracker);
       rmContext.setResourceTrackerService(resourceTracker);
 
+      // 监控jvm运行状况，异常就记录日志
       MetricsSystem ms = DefaultMetricsSystem.initialize("ResourceManager");
+
       if (fromActive) {
         JvmMetrics.reattach(ms, jvmMetrics);
         UserGroupInformation.reattachMetrics();
@@ -774,69 +851,102 @@ public class ResourceManager extends CompositeService
         jvmMetrics = JvmMetrics.initSingleton("ResourceManager", null);
       }
 
+
       JvmPauseMonitor pauseMonitor = new JvmPauseMonitor();
       addService(pauseMonitor);
+
       jvmMetrics.setPauseMonitor(pauseMonitor);
 
       // Initialize the Reservation system
-      if (conf.getBoolean(YarnConfiguration.RM_RESERVATION_SYSTEM_ENABLE,
-          YarnConfiguration.DEFAULT_RM_RESERVATION_SYSTEM_ENABLE)) {
+      if (conf.getBoolean(YarnConfiguration.RM_RESERVATION_SYSTEM_ENABLE,   YarnConfiguration.DEFAULT_RM_RESERVATION_SYSTEM_ENABLE)) {
+
         reservationSystem = createReservationSystem();
+
         if (reservationSystem != null) {
+
           reservationSystem.setRMContext(rmContext);
+
           addIfService(reservationSystem);
+
           rmContext.setReservationSystem(reservationSystem);
+
           LOG.info("Initialized Reservation system");
         }
       }
 
+
+      /**
+       * 用于对所有提交的ApplicationMaster进行管理。
+       * 该组件响应所有来自AM的请求，实现了ApplicationMasterProtocol协议，这个协议是AM与RM通信的唯一协议。
+       * 主要包括以下任务：
+       * 注册新的AM、来自任意正在结束的AM的终止/取消注册请求、认证来自不同AM的所有请求，
+       * 确保合法的AM发送的请求传递给RM中的应用程序对象、获取来自所有运行AM的Container的分配和释放请求、异步的转发给Yarn调度器。
+       * ApplicaitonMaster Service确保了任意时间点、任意AM只有一个线程可以发送请求给RM，因为在RM上所有来自AM的RPC请求都串行化了。
+       */
       masterService = createApplicationMasterService();
       createAndRegisterOpportunisticDispatcher(masterService);
       addService(masterService) ;
       rmContext.setApplicationMasterService(masterService);
 
 
+      // app访问控制
       applicationACLsManager = new ApplicationACLsManager(conf);
-
       queueACLsManager = createQueueACLsManager(scheduler, conf);
 
+      // 维护applications list，管理app提交、结束、恢复等
       rmAppManager = createRMAppManager();
+
+
       // Register event handler for RMAppManagerEvents
       rmDispatcher.register(RMAppManagerEventType.class, rmAppManager);
 
+      // 负责处理面向客户端使用的接口，内部实现了 Client和RM之间通讯的ApplicationClientProtocol协议
       clientRM = createClientRMService();
       addService(clientRM);
       rmContext.setClientRMService(clientRM);
 
+      // 负责启动和停止AM
       applicationMasterLauncher = createAMLauncher();
-      rmDispatcher.register(AMLauncherEventType.class,
-          applicationMasterLauncher);
+
+      rmDispatcher.register(AMLauncherEventType.class,  applicationMasterLauncher);
 
       addService(applicationMasterLauncher);
+
       if (UserGroupInformation.isSecurityEnabled()) {
+
         addService(delegationTokenRenewer);
+
         delegationTokenRenewer.setRMContext(rmContext);
       }
 
       if(HAUtil.isFederationEnabled(conf)) {
+
         String cId = YarnConfiguration.getClusterId(conf);
+
         if (cId.isEmpty()) {
+
           String errMsg =
               "Cannot initialize RM as Federation is enabled"
                   + " but cluster id is not configured.";
+
           LOG.error(errMsg);
           throw new YarnRuntimeException(errMsg);
         }
+
         federationStateStoreService = createFederationStateStoreService();
+
         addIfService(federationStateStoreService);
+
         LOG.info("Initialized Federation membership.");
       }
 
+      // 用JMX接口展现NodeManager节点状态信息
       rmnmInfo = new RMNMInfo(rmContext, scheduler);
 
-      if (conf.getBoolean(YarnConfiguration.YARN_API_SERVICES_ENABLE,
-          false)) {
+      if (conf.getBoolean(YarnConfiguration.YARN_API_SERVICES_ENABLE, false)) {
+
         SystemServiceManager systemServiceManager = createServiceManager();
+
         addIfService(systemServiceManager);
       }
 
@@ -1330,19 +1440,21 @@ public class ResourceManager extends CompositeService
     }
     LOG.info("Transitioned to standby state");
   }
-
   @Override
   protected void serviceStart() throws Exception {
     if (this.rmContext.isHAEnabled()) {
       transitionToStandby(false);
     }
 
+    // 启动web 服务
     startWepApp();
     if (getConfig().getBoolean(YarnConfiguration.IS_MINI_YARN_CLUSTER,
         false)) {
       int port = webApp.port();
       WebAppUtils.setRMWebAppPort(conf, port);
     }
+
+    // 启动所有内置服务
     super.serviceStart();
 
     // Non HA case, start after RM services are started.
@@ -1513,6 +1625,7 @@ public class ResourceManager extends CompositeService
     Thread.setDefaultUncaughtExceptionHandler(new YarnUncaughtExceptionHandler());
     StringUtils.startupShutdownMessage(ResourceManager.class, argv, LOG);
     try {
+
       Configuration conf = new YarnConfiguration();
       GenericOptionsParser hParser = new GenericOptionsParser(conf, argv);
       argv = hParser.getRemainingArgs();
@@ -1527,11 +1640,19 @@ public class ResourceManager extends CompositeService
           printUsage(System.err);
         }
       } else {
+
+
+        // 构建ResourceManager  ==>  name  :  ResourceManager
         ResourceManager resourceManager = new ResourceManager();
+
         ShutdownHookManager.get().addShutdownHook(
           new CompositeServiceShutdownHook(resourceManager),
           SHUTDOWN_HOOK_PRIORITY);
+
+        //初始化资源
         resourceManager.init(conf);
+
+        //启动服务
         resourceManager.start();
       }
     } catch (Throwable t) {

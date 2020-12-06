@@ -72,8 +72,7 @@ public interface ResourceManagerAdministrationProtocol extends GetUserMappingsPr
 
   @Private
   @Idempotent
-  public RefreshSuperUserGroupsConfigurationResponse 
-  refreshSuperUserGroupsConfiguration(
+  public RefreshSuperUserGroupsConfigurationResponse  refreshSuperUserGroupsConfiguration(
       RefreshSuperUserGroupsConfigurationRequest request)
   throws StandbyException, YarnException, IOException;
 

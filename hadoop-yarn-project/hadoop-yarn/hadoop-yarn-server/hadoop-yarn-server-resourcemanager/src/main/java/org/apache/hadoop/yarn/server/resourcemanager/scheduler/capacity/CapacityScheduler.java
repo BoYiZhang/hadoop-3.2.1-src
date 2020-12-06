@@ -321,9 +321,12 @@ public class CapacityScheduler extends
       IOException {
     try {
       writeLock.lock();
+
+
       String confProviderStr = configuration.get(
           YarnConfiguration.SCHEDULER_CONFIGURATION_STORE_CLASS,
           YarnConfiguration.DEFAULT_CONFIGURATION_STORE);
+
       switch (confProviderStr) {
       case YarnConfiguration.FILE_CONFIGURATION_STORE:
         this.csConfProvider =
