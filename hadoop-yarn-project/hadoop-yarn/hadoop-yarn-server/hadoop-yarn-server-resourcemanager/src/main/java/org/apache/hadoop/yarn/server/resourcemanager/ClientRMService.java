@@ -213,9 +213,16 @@ public class ClientRMService extends AbstractService implements
 
   private static final Log LOG = LogFactory.getLog(ClientRMService.class);
 
+  // 应用程序计数器
   final private AtomicInteger applicationCounter = new AtomicInteger(0);
+
+  // yarn调度器
   final private YarnScheduler scheduler;
+
+  // ResourceManager上下文对象RMContext
   final private RMContext rmContext;
+
+  //应用程序管理
   private final RMAppManager rmAppManager;
 
   private Server server;
@@ -236,8 +243,8 @@ public class ClientRMService extends AbstractService implements
 
   private boolean filterAppsByUser = false;
 
-  private static final EnumSet<RMAppState> ACTIVE_APP_STATES = EnumSet.of(
-      RMAppState.ACCEPTED, RMAppState.RUNNING);
+  //活跃节点列表
+  private static final EnumSet<RMAppState> ACTIVE_APP_STATES = EnumSet.of(RMAppState.ACCEPTED, RMAppState.RUNNING);
 
   private ResourceProfilesManager resourceProfilesManager;
   private boolean timelineServiceV2Enabled;
@@ -381,14 +388,17 @@ public class ClientRMService extends AbstractService implements
   }
 
   @Override
-  public GetNewApplicationResponse getNewApplication(
-      GetNewApplicationRequest request) throws YarnException {
+  public GetNewApplicationResponse getNewApplication( GetNewApplicationRequest request) throws YarnException {
+
     GetNewApplicationResponse response = recordFactory
         .newRecordInstance(GetNewApplicationResponse.class);
+
+    // 返回  ApplicationId
     response.setApplicationId(getNewApplicationId());
+
+    // 返回 集群所能分配的最大资源
     // Pick up min/max resource from scheduler...
-    response.setMaximumResourceCapability(scheduler
-        .getMaximumResourceCapability());       
+    response.setMaximumResourceCapability(scheduler.getMaximumResourceCapability());
     
     return response;
   }
@@ -400,6 +410,8 @@ public class ClientRMService extends AbstractService implements
   @Override
   public GetApplicationReportResponse getApplicationReport(
       GetApplicationReportRequest request) throws YarnException {
+
+    // 获取ApplicationId
     ApplicationId applicationId = request.getApplicationId();
     if (applicationId == null) {
       throw new ApplicationNotFoundException("Invalid application id: null");
@@ -413,6 +425,7 @@ public class ClientRMService extends AbstractService implements
       throw RPCUtil.getRemoteException(ie);
     }
 
+    // 获取application
     RMApp application = this.rmContext.getRMApps().get(applicationId);
     if (application == null) {
       // If the RM doesn't have the application, throw
@@ -422,12 +435,16 @@ public class ClientRMService extends AbstractService implements
           + "that the job submission was successful.");
     }
 
+    // 权限检测
     boolean allowAccess = checkAccess(callerUGI, application.getUser(),
         ApplicationAccessType.VIEW_APP, application);
+
+    // 获取报告信息
     ApplicationReport report =
         application.createAndGetApplicationReport(callerUGI.getUserName(),
             allowAccess);
 
+    // 设置响应信息
     GetApplicationReportResponse response = recordFactory
         .newRecordInstance(GetApplicationReportResponse.class);
     response.setApplicationReport(report);
@@ -586,9 +603,13 @@ public class ClientRMService extends AbstractService implements
   @Override
   public SubmitApplicationResponse submitApplication(
       SubmitApplicationRequest request) throws YarnException, IOException {
-    ApplicationSubmissionContext submissionContext = request
-        .getApplicationSubmissionContext();
+
+    // 获取 请求的 ApplicationSubmissionContext
+    ApplicationSubmissionContext submissionContext = request.getApplicationSubmissionContext();
+
+    // 获取 ApplicationId
     ApplicationId applicationId = submissionContext.getApplicationId();
+    // 获取 CallerContext
     CallerContext callerContext = CallerContext.getCurrent();
 
     // ApplicationSubmissionContext needs to be validated for safety - only
@@ -596,6 +617,7 @@ public class ClientRMService extends AbstractService implements
     // checked here, those that are dependent on RM configuration are validated
     // in RMAppManager.
 
+    // 验证权限信息
     String user = null;
     try {
       // Safety
@@ -609,6 +631,7 @@ public class ClientRMService extends AbstractService implements
       throw RPCUtil.getRemoteException(ie);
     }
 
+    // timeline 服务
     if (timelineServiceV2Enabled) {
       // Sanity check for flow run
       String value = null;
@@ -634,6 +657,7 @@ public class ClientRMService extends AbstractService implements
       }
     }
 
+    // 检测 app是否已经放入到 rmContext 如果已经提交过了,直接返回一个空的响应
     // Check whether app has already been put into rmContext,
     // If it is, simply return the response
     if (rmContext.getRMApps().get(applicationId) != null) {
@@ -641,6 +665,7 @@ public class ClientRMService extends AbstractService implements
       return SubmitApplicationResponse.newInstance();
     }
 
+    // 获取 token配置 信息
     ByteBuffer tokenConf =
         submissionContext.getAMContainerSpec().getTokensConf();
     if (tokenConf != null) {
@@ -656,13 +681,18 @@ public class ClientRMService extends AbstractService implements
                 + tokenConf.capacity() + " bytes.");
       }
     }
+
+    //设置队列, 默认 : default
     if (submissionContext.getQueue() == null) {
       submissionContext.setQueue(YarnConfiguration.DEFAULT_QUEUE_NAME);
     }
+    // 设置ApplicationName  默认: N/A
     if (submissionContext.getApplicationName() == null) {
       submissionContext.setApplicationName(
           YarnConfiguration.DEFAULT_APPLICATION_NAME);
     }
+
+    // 设置ApplicationType类型  默认: YARN
     if (submissionContext.getApplicationType() == null) {
       submissionContext
         .setApplicationType(YarnConfiguration.DEFAULT_APPLICATION_TYPE);
@@ -673,10 +703,11 @@ public class ClientRMService extends AbstractService implements
             YarnConfiguration.APPLICATION_TYPE_LENGTH));
       }
     }
-
+    // 获取预留资源id
     ReservationId reservationId = request.getApplicationSubmissionContext()
             .getReservationID();
 
+    // 检测权限
     checkReservationACLs(submissionContext.getQueue(), AuditConstants
             .SUBMIT_RESERVATION_REQUEST, reservationId);
 
@@ -686,12 +717,13 @@ public class ClientRMService extends AbstractService implements
     }
 
     try {
+      // 请求RMAppManager 提交application
       // call RMAppManager to submit application directly
-      rmAppManager.submitApplication(submissionContext,
-          System.currentTimeMillis(), user);
+      rmAppManager.submitApplication(submissionContext, System.currentTimeMillis(), user);
 
-      LOG.info("Application with id " + applicationId.getId() + 
-          " submitted by user " + user);
+      LOG.info("Application with id " + applicationId.getId() +  " submitted by user " + user);
+
+      // 审计 打印日志
       RMAuditLogger.logSuccess(user, AuditConstants.SUBMIT_APP_REQUEST,
           "ClientRMService", applicationId, callerContext,
           submissionContext.getQueue());
@@ -754,9 +786,11 @@ public class ClientRMService extends AbstractService implements
   public KillApplicationResponse forceKillApplication(
       KillApplicationRequest request) throws YarnException {
 
+    // 获取applicationId
     ApplicationId applicationId = request.getApplicationId();
     CallerContext callerContext = CallerContext.getCurrent();
 
+    // 权限验证
     UserGroupInformation callerUGI;
     try {
       callerUGI = UserGroupInformation.getCurrentUser();
@@ -767,7 +801,9 @@ public class ClientRMService extends AbstractService implements
               applicationId, callerContext);
       throw RPCUtil.getRemoteException(ie);
     }
+    // 获取application 信息
     RMApp application = this.rmContext.getRMApps().get(applicationId);
+
     if (application == null) {
       RMAuditLogger.logFailure(callerUGI.getUserName(),
           AuditConstants.KILL_APP_REQUEST, "UNKNOWN", "ClientRMService",
@@ -808,6 +844,7 @@ public class ClientRMService extends AbstractService implements
       message.append(diagnostics);
     }
 
+    // 想 Dispatcher 发送kill event
     this.rmContext.getDispatcher().getEventHandler()
         .handle(new RMAppKillByClientEvent(applicationId, message.toString(),
             callerUGI, remoteAddress));
@@ -824,14 +861,22 @@ public class ClientRMService extends AbstractService implements
         .newRecordInstance(GetClusterMetricsResponse.class);
     YarnClusterMetrics ymetrics = recordFactory
         .newRecordInstance(YarnClusterMetrics.class);
+    // 设置NodeManager数量
     ymetrics.setNumNodeManagers(this.rmContext.getRMNodes().size());
+
     ClusterMetrics clusterMetrics = ClusterMetrics.getMetrics();
-    ymetrics.setNumDecommissionedNodeManagers(clusterMetrics
-      .getNumDecommisionedNMs());
+    // 设置退役节点数量
+    ymetrics.setNumDecommissionedNodeManagers(clusterMetrics.getNumDecommisionedNMs());
+    // 设置acitve  NodeManager树龄
     ymetrics.setNumActiveNodeManagers(clusterMetrics.getNumActiveNMs());
+
+    // 设置 丢失 NodeManager 数量
     ymetrics.setNumLostNodeManagers(clusterMetrics.getNumLostNMs());
+    // 设置 不健康的NodeManager 数量
     ymetrics.setNumUnhealthyNodeManagers(clusterMetrics.getUnhealthyNMs());
+    // 设置重启 NodeManager 数量
     ymetrics.setNumRebootedNodeManagers(clusterMetrics.getNumRebootedNMs());
+
     response.setClusterMetrics(ymetrics);
     return response;
   }
@@ -999,8 +1044,7 @@ public class ClientRMService extends AbstractService implements
   @Override
   public GetClusterNodesResponse getClusterNodes(GetClusterNodesRequest request)
       throws YarnException {
-    GetClusterNodesResponse response = 
-      recordFactory.newRecordInstance(GetClusterNodesResponse.class);
+    GetClusterNodesResponse response =  recordFactory.newRecordInstance(GetClusterNodesResponse.class);
     EnumSet<NodeState> nodeStates = request.getNodeStates();
     if (nodeStates == null || nodeStates.isEmpty()) {
       nodeStates = EnumSet.allOf(NodeState.class);
@@ -1010,6 +1054,7 @@ public class ClientRMService extends AbstractService implements
     
     List<NodeReport> nodeReports = new ArrayList<NodeReport>(nodes.size());
     for (RMNode nodeInfo : nodes) {
+      // 赋值
       nodeReports.add(createNodeReports(nodeInfo));
     }
     response.setNodeReports(nodeReports);
@@ -1081,11 +1126,15 @@ public class ClientRMService extends AbstractService implements
     Resource used = BuilderUtils.newResource(0, 0);
     int numContainers = 0;
     if (schedulerNodeReport != null) {
+      // 资源使用量
       used = schedulerNodeReport.getUsedResource();
+      // container 数量
       numContainers = schedulerNodeReport.getNumContainers();
     }
 
     Set<NodeAttribute> attrs = rmNode.getAllNodeAttributes();
+
+    // node id, 状态,http地址,机架名字,使用量,总容量,container数量,健康状态,最后一次汇报时间,标签,平均利用率,总利用率
     NodeReport report =
         BuilderUtils.newNodeReport(rmNode.getNodeID(), rmNode.getState(),
             rmNode.getHttpAddress(), rmNode.getRackName(), used,
@@ -1490,7 +1539,9 @@ public class ClientRMService extends AbstractService implements
   @Override
   public GetNodesToLabelsResponse getNodeToLabels(
       GetNodesToLabelsRequest request) throws YarnException, IOException {
+    //  获取 RMNodeLabelsManager
     RMNodeLabelsManager labelsMgr = rmContext.getNodeLabelManager();
+
     return GetNodesToLabelsResponse.newInstance(labelsMgr.getNodeLabels());
   }
 

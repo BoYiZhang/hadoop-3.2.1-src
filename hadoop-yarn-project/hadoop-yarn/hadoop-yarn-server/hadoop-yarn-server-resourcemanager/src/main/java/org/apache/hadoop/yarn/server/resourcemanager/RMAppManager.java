@@ -769,27 +769,42 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
    */
   public void moveApplicationAcrossQueue(ApplicationId applicationId, String targetQueue)
       throws YarnException {
+
+    // 获取 application
     RMApp app = this.rmContext.getRMApps().get(applicationId);
+
+
+    // Capacity 调度器将会遵循以下规则
+    // 1. 检查变更是正确的.
+    // 2. 更新存储信息
+    // 3. 执行实际操作,并且更新内存结构
 
     // Capacity scheduler will directly follow below approach.
     // 1. Do a pre-validate check to ensure that changes are fine.
     // 2. Update this information to state-store
     // 3. Perform real move operation and update in-memory data structures.
     synchronized (applicationId) {
+
+      // 验证app是否为null 或者已经执行完
       if (app == null || app.isAppInCompletedStates()) {
         return;
       }
-
+      // 获取 源 queue
       String sourceQueue = app.getQueue();
+
+      // 1. 验证移动application请求是否有访问权限或者其他的错误,如果验证失败,抛出YarnException
+
       // 1. pre-validate move application request to check for any access
       // violations or other errors. If there are any violations, YarnException
       // will be thrown.
+      //
       rmContext.getScheduler().preValidateMoveApplication(applicationId,
           targetQueue);
-
+      // 2. 使用新的队列, 更新存储信息
       // 2. Update to state store with new queue and throw exception is failed.
       updateAppDataToStateStore(targetQueue, app, false);
 
+      // 3. 执行真实操作 , 根据调度器的不同,执行 moveApplication 方法
       // 3. Perform the real move application
       String queue = "";
       try {
@@ -802,7 +817,7 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
         throw e;
       }
 
-      // update in-memory
+      // 更新内存信息   update in-memory
       if (queue != null && !queue.isEmpty()) {
         app.setQueue(queue);
       }

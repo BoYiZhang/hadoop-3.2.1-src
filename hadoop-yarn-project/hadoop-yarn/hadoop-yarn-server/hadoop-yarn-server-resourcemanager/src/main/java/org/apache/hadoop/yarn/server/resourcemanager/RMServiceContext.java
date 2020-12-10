@@ -41,18 +41,28 @@ import org.apache.hadoop.yarn.server.resourcemanager.timelineservice.RMTimelineC
 @Unstable
 public class RMServiceContext {
 
+  //中央异步调度器
   private Dispatcher rmDispatcher;
   private boolean isHAEnabled;
   private HAServiceState haServiceState =
       HAServiceProtocol.HAServiceState.INITIALIZING;
+
   private AdminService adminService;
+
   private ConfigurationProvider configurationProvider;
+
   private Configuration yarnConfiguration;
+
   private RMApplicationHistoryWriter rmApplicationHistoryWriter;
+
   private SystemMetricsPublisher systemMetricsPublisher;
+
   private EmbeddedElector elector;
+
   private final Object haServiceStateLock = new Object();
+
   private ResourceManager resourceManager;
+
   private RMTimelineCollectorManager timelineCollectorManager;
 
   public ResourceManager getResourceManager() {

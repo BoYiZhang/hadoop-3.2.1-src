@@ -70,24 +70,37 @@ public class RMActiveServiceContext {
   private static final Log LOG = LogFactory
       .getLog(RMActiveServiceContext.class);
 
-  private final ConcurrentMap<ApplicationId, RMApp> applications =
-      new ConcurrentHashMap<ApplicationId, RMApp>();
+  //应用程序列表
+  private final ConcurrentMap<ApplicationId, RMApp> applications = new ConcurrentHashMap<ApplicationId, RMApp>();
 
-  private final ConcurrentMap<NodeId, RMNode> nodes =
-      new ConcurrentHashMap<NodeId, RMNode>();
+  //节点列表
+  private final ConcurrentMap<NodeId, RMNode> nodes = new ConcurrentHashMap<NodeId, RMNode>();
 
-  private final ConcurrentMap<NodeId, RMNode> inactiveNodes =
-      new ConcurrentHashMap<NodeId, RMNode>();
+  //非活跃节点列表
+  private final ConcurrentMap<NodeId, RMNode> inactiveNodes = new ConcurrentHashMap<NodeId, RMNode>();
 
-  private final ConcurrentMap<ApplicationId, ByteBuffer> systemCredentials =
-      new ConcurrentHashMap<ApplicationId, ByteBuffer>();
+  private final ConcurrentMap<ApplicationId, ByteBuffer> systemCredentials = new ConcurrentHashMap<ApplicationId, ByteBuffer>();
 
   private boolean isWorkPreservingRecoveryEnabled;
 
+  //运行中的AM心跳监控
   private AMLivelinessMonitor amLivelinessMonitor;
+
+  //运行完成的AM心跳监控
   private AMLivelinessMonitor amFinishingMonitor;
+
+  //ResourceManager状态保存处
   private RMStateStore stateStore = null;
+
+  //Container超时监控， 应用程序必须在一定时间内使用分配到的Container， 否则将被回收
   private ContainerAllocationExpirer containerAllocationExpirer;
+
+  // 资源调度器
+  private ResourceScheduler scheduler;
+
+  // 节点管理器
+  private NodesListManager nodesListManager;
+
   private DelegationTokenRenewer delegationTokenRenewer;
   private AMRMTokenSecretManager amRMTokenSecretManager;
   private RMContainerTokenSecretManager containerTokenSecretManager;
@@ -95,9 +108,9 @@ public class RMActiveServiceContext {
   private ClientToAMTokenSecretManagerInRM clientToAMTokenSecretManager;
   private ClientRMService clientRMService;
   private RMDelegationTokenSecretManager rmDelegationTokenSecretManager;
-  private ResourceScheduler scheduler;
+
   private ReservationSystem reservationSystem;
-  private NodesListManager nodesListManager;
+
   private ResourceTrackerService resourceTrackerService;
   private ApplicationMasterService applicationMasterService;
 
