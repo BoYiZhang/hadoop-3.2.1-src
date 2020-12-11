@@ -434,6 +434,8 @@ public class AdminService extends CompositeService implements
   @Private
   public void refreshQueues() throws IOException, YarnException {
     Configuration conf = loadNewConfiguration();
+
+    // ResourceScheduler 重新加在配置文件
     rm.getRMContext().getScheduler().reinitialize(conf,
         this.rm.getRMContext());
     // refresh the reservation system
@@ -515,6 +517,7 @@ public class AdminService extends CompositeService implements
         getConfiguration(new Configuration(false),
             YarnConfiguration.CORE_SITE_CONFIGURATION_FILE,
             YarnConfiguration.YARN_SITE_CONFIGURATION_FILE);
+    // 刷新配置 yarn-site.xml 和 core-site.xml
     RMServerUtils.processRMProxyUsersConf(conf);
     ProxyUsers.refreshSuperUserGroupsConfiguration(conf);
   }
@@ -803,6 +806,7 @@ public class AdminService extends CompositeService implements
     AddToClusterNodeLabelsResponse response =
         recordFactory.newRecordInstance(AddToClusterNodeLabelsResponse.class);
     try {
+      // 使用RMNodeLabelsManager添加标签信息
       rm.getRMContext().getNodeLabelManager()
           .addToCluserNodeLabels(request.getNodeLabels());
       RMAuditLogger.logSuccess(user.getShortUserName(), operation,
@@ -826,6 +830,7 @@ public class AdminService extends CompositeService implements
     RemoveFromClusterNodeLabelsResponse response =
         recordFactory.newRecordInstance(RemoveFromClusterNodeLabelsResponse.class);
     try {
+      // 移除标签信息
       rm.getRMContext().getNodeLabelManager()
           .removeFromClusterNodeLabels(request.getNodeLabels());
       RMAuditLogger
@@ -857,8 +862,11 @@ public class AdminService extends CompositeService implements
         recordFactory.newRecordInstance(ReplaceLabelsOnNodeResponse.class);
 
     if (request.getFailOnUnknownNodes()) {
+      // 验证节点是否已经注册 .
       // verify if nodes have registered to RM
       List<NodeId> unknownNodes = new ArrayList<>();
+
+      // 获取node的标签信息
       for (NodeId requestedNode : request.getNodeToLabels().keySet()) {
         boolean isKnown = false;
         // both active and inactive nodes are recognized as known nodes
@@ -900,6 +908,7 @@ public class AdminService extends CompositeService implements
       }
     }
     try {
+      // 替换 标签信息
       rm.getRMContext().getNodeLabelManager().replaceLabelsOnNode(
           request.getNodeToLabels());
       RMAuditLogger
