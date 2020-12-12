@@ -41,15 +41,29 @@ public abstract class AbstractLivelinessMonitor<O> extends AbstractService {
 
   //thread which runs periodically to see the last time since a heartbeat is
   //received.
+
+  // 定时检测心跳的线程
   private Thread checkerThread;
+
+  // 标识是否停止.
   private volatile boolean stopped;
+
+  // 默认过期时间 5min
   public static final int DEFAULT_EXPIRE = 5*60*1000;//5 mins
+
+  // 过期时间
   private long expireInterval = DEFAULT_EXPIRE;
+
+  // 监控间隔, 过期时间的 / 3
   private long monitorInterval = expireInterval / 3;
+
+  // 在启动时 是否 重置Timer
   private volatile boolean resetTimerOnStart = true;
 
+  // 时钟对象
   private final Clock clock;
 
+  // 正在监控程序的清单    对象 -> 上一次心跳时间
   private Map<O, Long> running = new HashMap<O, Long>();
 
   public AbstractLivelinessMonitor(String name, Clock clock) {
@@ -133,17 +147,24 @@ public abstract class AbstractLivelinessMonitor<O> extends AbstractService {
     public void run() {
       while (!stopped && !Thread.currentThread().isInterrupted()) {
         synchronized (AbstractLivelinessMonitor.this) {
+
+          // 获取 running 中要监控对象的结合
           Iterator<Map.Entry<O, Long>> iterator = running.entrySet().iterator();
 
           // avoid calculating current time everytime in loop
+          // 获取当前时间
           long currentTime = clock.getTime();
 
           while (iterator.hasNext()) {
+            // 获取监控对象
             Map.Entry<O, Long> entry = iterator.next();
             O key = entry.getKey();
+            // 获取过期间隔
             long interval = getExpireInterval(key);
+            // 判断是否过期,  当前时间 > 心跳时间+过期时间 ?
             if (currentTime > entry.getValue() + interval) {
               iterator.remove();
+              // 触发回调函数
               expire(key);
               LOG.info("Expired:" + entry.getKey().toString()
                   + " Timed out after " + interval / 1000 + " secs");

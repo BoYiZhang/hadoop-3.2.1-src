@@ -43,9 +43,12 @@ public class AMLivelinessMonitor extends AbstractLivelinessMonitor<ApplicationAt
 
   public void serviceInit(Configuration conf) throws Exception {
     super.serviceInit(conf);
+
+    // 设置过期间隔: 10min
     int expireIntvl = conf.getInt(YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS,
             YarnConfiguration.DEFAULT_RM_AM_EXPIRY_INTERVAL_MS);
     setExpireInterval(expireIntvl);
+    // 设置 监控间隔   , 过期间隔的三分之一
     setMonitorInterval(expireIntvl/3);
   }
 

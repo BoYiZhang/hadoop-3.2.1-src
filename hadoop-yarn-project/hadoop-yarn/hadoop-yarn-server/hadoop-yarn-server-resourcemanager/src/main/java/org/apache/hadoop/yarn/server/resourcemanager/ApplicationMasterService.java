@@ -277,7 +277,7 @@ public class ApplicationMasterService extends AbstractService implements
           throw new InvalidApplicationMasterRequestException(message);
         }
       }
-
+      // 更新心跳时间
       this.amLivelinessMonitor.receivedPing(applicationAttemptId);
 
       // Setting the response id to 0 to identify if the
@@ -394,6 +394,7 @@ public class ApplicationMasterService extends AbstractService implements
     ApplicationAttemptId appAttemptId =
         amrmTokenIdentifier.getApplicationAttemptId();
 
+    // 更新心跳时间
     this.amLivelinessMonitor.receivedPing(appAttemptId);
 
     /* check if its in cache */
