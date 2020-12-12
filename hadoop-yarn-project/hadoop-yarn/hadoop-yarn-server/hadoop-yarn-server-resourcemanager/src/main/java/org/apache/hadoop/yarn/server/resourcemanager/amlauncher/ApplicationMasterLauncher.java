@@ -37,14 +37,18 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
 
 public class ApplicationMasterLauncher extends AbstractService implements
     EventHandler<AMLauncherEvent> {
-  private static final Log LOG = LogFactory.getLog(
-      ApplicationMasterLauncher.class);
+  private static final Log LOG = LogFactory.getLog(  ApplicationMasterLauncher.class);
+
+  // ApplicationMasterLauncher 线程池
   private ThreadPoolExecutor launcherPool;
+
+  // [ 主 ]工作线程, 用于监控masterEvents队列, 并将任务下发给launcherPool执行.
   private LauncherThread launcherHandlingThread;
-  
-  private final BlockingQueue<Runnable> masterEvents
-    = new LinkedBlockingQueue<Runnable>();
-  
+
+  // 阻塞式队列
+  private final BlockingQueue<Runnable> masterEvents  = new LinkedBlockingQueue<Runnable>();
+
+  // RM的 context信息 : RMContextImpl
   protected final RMContext context;
   
   public ApplicationMasterLauncher(RMContext context) {
@@ -55,17 +59,25 @@ public class ApplicationMasterLauncher extends AbstractService implements
   
   @Override
   protected void serviceInit(Configuration conf) throws Exception {
+
+    // 默认线程数量 : 50
     int threadCount = conf.getInt(
         YarnConfiguration.RM_AMLAUNCHER_THREAD_COUNT,
         YarnConfiguration.DEFAULT_RM_AMLAUNCHER_THREAD_COUNT);
     ThreadFactory tf = new ThreadFactoryBuilder()
         .setNameFormat("ApplicationMasterLauncher #%d")
         .build();
+
+    // 构架线程池
     launcherPool = new ThreadPoolExecutor(threadCount, threadCount, 1,
         TimeUnit.HOURS, new LinkedBlockingQueue<Runnable>());
+
+    // 构建线程工厂类
     launcherPool.setThreadFactory(tf);
 
     Configuration newConf = new YarnConfiguration(conf);
+
+    // 最大重试次数: 10
     newConf.setInt(CommonConfigurationKeysPublic.
             IPC_CLIENT_CONNECT_MAX_RETRIES_ON_SOCKET_TIMEOUTS_KEY,
         conf.getInt(YarnConfiguration.RM_NODEMANAGER_CONNECT_RETRIES,
@@ -116,7 +128,9 @@ public class ApplicationMasterLauncher extends AbstractService implements
       while (!this.isInterrupted()) {
         Runnable toLaunch;
         try {
+          // 从队列汇总获取任务.
           toLaunch = masterEvents.take();
+          // 线程池用于处理 masterEvents 队列中的事件
           launcherPool.execute(toLaunch);
         } catch (InterruptedException e) {
           LOG.warn(this.getClass().getName() + " interrupted. Returning.");
