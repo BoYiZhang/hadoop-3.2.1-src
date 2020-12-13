@@ -38,9 +38,14 @@ public class NMLivelinessMonitor extends AbstractLivelinessMonitor<NodeId> {
   }
 
   public void serviceInit(Configuration conf) throws Exception {
+    // yarn.nm.liveness-monitor.expiry-interval-ms : 600000
     int expireIntvl = conf.getInt(YarnConfiguration.RM_NM_EXPIRY_INTERVAL_MS,
             YarnConfiguration.DEFAULT_RM_NM_EXPIRY_INTERVAL_MS);
+
+    // 设置过期时效为10min
     setExpireInterval(expireIntvl);
+
+    // 监控间隔 expireIntvl/3  = 3min 30s
     setMonitorInterval(expireIntvl/3);
     super.serviceInit(conf);
   }
