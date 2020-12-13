@@ -93,7 +93,8 @@ public class NodesListManager extends CompositeService implements
   protected void serviceInit(Configuration conf) throws Exception {
 
     this.conf = conf;
-
+    //  节点IP缓存的过期间隔。-1  禁用
+    //  yarn.resourcemanager.node-ip-cache.expiry-interval-secs :  -1
     int nodeIpCacheTimeout = conf.getInt(
         YarnConfiguration.RM_NODE_IP_CACHE_EXPIRY_INTERVAL_SECS,
         YarnConfiguration.DEFAULT_RM_NODE_IP_CACHE_EXPIRY_INTERVAL_SECS);
@@ -107,13 +108,20 @@ public class NodesListManager extends CompositeService implements
 
     // Read the hosts/exclude files to restrict access to the RM
     try {
+      // 白名单   yarn.resourcemanager.nodes.include-path: ""
       this.includesFile = conf.get(YarnConfiguration.RM_NODES_INCLUDE_FILE_PATH,
           YarnConfiguration.DEFAULT_RM_NODES_INCLUDE_FILE_PATH);
+
+      // 黑名单 yarn.resourcemanager.nodes.exclude-path: ""
       this.excludesFile = conf.get(YarnConfiguration.RM_NODES_EXCLUDE_FILE_PATH,
           YarnConfiguration.DEFAULT_RM_NODES_EXCLUDE_FILE_PATH);
+
+      // 构建HostsFileReader 读取 黑/白名单
       this.hostsReader =
           createHostsFileReader(this.includesFile, this.excludesFile);
+
       setDecomissionedNMs();
+
       printConfiguredHosts();
     } catch (YarnException ex) {
       disableHostsFileReader(ex);
@@ -121,37 +129,52 @@ public class NodesListManager extends CompositeService implements
       disableHostsFileReader(ioe);
     }
 
+    // yarn.resourcemanager.node-removal-untracked.timeout-ms : 60000 =  10min
     final int nodeRemovalTimeout =
         conf.getInt(
             YarnConfiguration.RM_NODEMANAGER_UNTRACKED_REMOVAL_TIMEOUT_MSEC,
             YarnConfiguration.
                 DEFAULT_RM_NODEMANAGER_UNTRACKED_REMOVAL_TIMEOUT_MSEC);
+
+    // 处理间隔   5min , 最大10min
     nodeRemovalCheckInterval = (Math.min(nodeRemovalTimeout/2,
         600000));
+
+    // 构建节点监控计时器
     removalTimer = new Timer("Node Removal Timer");
 
+    // 启动服务  每10分钟一次, 间隔5min
     removalTimer.schedule(new TimerTask() {
       @Override
       public void run() {
+        // 获取当前时间戳
         long now = Time.monotonicNow();
-        for (Map.Entry<NodeId, RMNode> entry :
-            rmContext.getInactiveRMNodes().entrySet()) {
+
+        // 遍历所有的node
+        for (Map.Entry<NodeId, RMNode> entry : rmContext.getInactiveRMNodes().entrySet()) {
+
           NodeId nodeId = entry.getKey();
           RMNode rmNode = entry.getValue();
+          //是否处于黑白名单之中
           if (isUntrackedNode(rmNode.getHostName())) {
+            //未在黑白名单之中
             if (rmNode.getUntrackedTimeStamp() == 0) {
+              // 设置 监控 时间戳
               rmNode.setUntrackedTimeStamp(now);
             } else
-              if (now - rmNode.getUntrackedTimeStamp() >
-                  nodeRemovalTimeout) {
+
+              if (now - rmNode.getUntrackedTimeStamp() >  nodeRemovalTimeout) {
+                // 超时, 移除node
                 RMNode result = rmContext.getInactiveRMNodes().remove(nodeId);
                 if (result != null) {
+                  // 更新集群缓存信息
                   decrInactiveNMMetrics(rmNode);
                   LOG.info("Removed " +result.getState().toString() + " node "
                       + result.getHostName() + " from inactive nodes list");
                 }
               }
           } else {
+            // 设置未监控时间戳为0
             rmNode.setUntrackedTimeStamp(0);
           }
         }
@@ -396,6 +419,7 @@ public class NodesListManager extends CompositeService implements
 
     @Override
     protected void serviceStart() throws Exception {
+      //设置 checkingTimer 启动服务
       checkingTimer.scheduleAtFixedRate(
           expireChecker, checkIntervalMs, checkIntervalMs);
       super.serviceStart();
@@ -571,12 +595,16 @@ public class NodesListManager extends CompositeService implements
   }
 
   public boolean isUntrackedNode(String hostName) {
+    // 获取id
     String ip = resolver.resolve(hostName);
-
+    // 从配置文件获取host详情
     HostDetails hostDetails = hostsReader.getHostDetails();
+    // 白名单
     Set<String> hostsList = hostDetails.getIncludedHosts();
+    // 黑名单
     Set<String> excludeList = hostDetails.getExcludedHosts();
-
+    // 验证是否为 未追踪 node
+    // 白名单不为空 && 未包含在白名单 && 黑名单不为空 && 未包含在黑名单
     return !hostsList.isEmpty() && !hostsList.contains(hostName)
         && !hostsList.contains(ip) && !excludeList.contains(hostName)
         && !excludeList.contains(ip);
