@@ -325,17 +325,28 @@ public class ResourceTrackerService extends AbstractService implements
   public RegisterNodeManagerResponse registerNodeManager(
       RegisterNodeManagerRequest request) throws YarnException,
       IOException {
+
+    //获取NodeId
     NodeId nodeId = request.getNodeId();
+    // 获取host
     String host = nodeId.getHost();
+    // 获取cm端口
     int cmPort = nodeId.getPort();
+    // 获取http端口
     int httpPort = request.getHttpPort();
+    // 获取资源容量
     Resource capability = request.getResource();
+
+    // 获取NM版本
     String nodeManagerVersion = request.getNMVersion();
+    // 获取物理资源
     Resource physicalResource = request.getPhysicalResource();
+
 
     RegisterNodeManagerResponse response = recordFactory
         .newRecordInstance(RegisterNodeManagerResponse.class);
 
+    // 更新NM的版本信息
     if (!minimumNodeManagerVersion.equals("NONE")) {
       if (minimumNodeManagerVersion.equals("EqualToRM")) {
         minimumNodeManagerVersion = YarnVersionInfo.getVersion();
@@ -354,7 +365,7 @@ public class ResourceTrackerService extends AbstractService implements
         return response;
       }
     }
-
+    // 验证该node是有效
     // Check if this node is a 'valid' node
     if (!this.nodesListManager.isValidNode(host) &&
         !isNodeInDecommissioning(nodeId)) {
@@ -366,10 +377,10 @@ public class ResourceTrackerService extends AbstractService implements
       response.setNodeAction(NodeAction.SHUTDOWN);
       return response;
     }
-
+    // 检查节点的容量是否从  dynamic-resources.xml 加载
     // check if node's capacity is load from dynamic-resources.xml
     String nid = nodeId.toString();
-
+    // 获取哦动态 资源容量
     Resource dynamicLoadCapability = loadNodeResourceFromDRConfiguration(nid);
     if (dynamicLoadCapability != null) {
       if (LOG.isDebugEnabled()) {
@@ -381,7 +392,7 @@ public class ResourceTrackerService extends AbstractService implements
       // sync back with new resource.
       response.setResource(capability);
     }
-
+    // 检测该node是否有最小资源限制
     // Check if this node has minimum allocations
     if (capability.getMemorySize() < minAllocMb
         || capability.getVirtualCores() < minAllocVcores) {
@@ -401,11 +412,14 @@ public class ResourceTrackerService extends AbstractService implements
     response.setNMTokenMasterKey(nmTokenSecretManager
         .getCurrentKey());
 
+
+    // 构建RMNode对象
     RMNode rmNode = new RMNodeImpl(nodeId, rmContext, host, cmPort, httpPort,
         resolve(host), capability, nodeManagerVersion, physicalResource);
 
     RMNode oldNode = this.rmContext.getRMNodes().putIfAbsent(nodeId, rmNode);
     if (oldNode == null) {
+      // 新构建 RMnode
       RMNodeStartedEvent startEvent = new RMNodeStartedEvent(nodeId,
           request.getNMContainerStatuses(),
           request.getRunningApplications());
@@ -422,6 +436,7 @@ public class ResourceTrackerService extends AbstractService implements
       this.rmContext.getDispatcher().getEventHandler().handle(
           startEvent);
     } else {
+      // 移除注册
       LOG.info("Reconnect from the node at: " + host);
       this.nmLivelinessMonitor.unregister(nodeId);
 
@@ -443,6 +458,8 @@ public class ResourceTrackerService extends AbstractService implements
             .handle(new NodeRemovedSchedulerEvent(rmNode));
 
         this.rmContext.getRMNodes().put(nodeId, rmNode);
+
+        // 重新连接
         this.rmContext.getDispatcher().getEventHandler()
             .handle(new RMNodeStartedEvent(nodeId, null, null));
       } else {
@@ -471,7 +488,7 @@ public class ResourceTrackerService extends AbstractService implements
         }
       }
     }
-
+    // 更新node 标签
     // Update node's labels to RM's NodeLabelManager.
     Set<String> nodeLabels = NodeLabelsUtils.convertToStringSet(
         request.getNodeLabels());
@@ -533,6 +550,13 @@ public class ResourceTrackerService extends AbstractService implements
 
     NodeStatus remoteNodeStatus = request.getNodeStatus();
     /**
+     * 这里是node心跳顺序
+     * 1. 检查是否是有效node
+     * 2. 检查是否被注册, 跟新心跳
+     * 3. 检查是否是新的心跳,而不是重复的.
+     * 4. 发送心跳状态给 RMNode
+     * 5. 如果启用了分布式节点标签配置，则更新节点的标签
+     *
      * Here is the node heartbeat sequence...
      * 1. Check if it's a valid (i.e. not excluded) node
      * 2. Check if it's a registered node
@@ -541,7 +565,7 @@ public class ResourceTrackerService extends AbstractService implements
      * 5. Update node's labels if distributed Node Labels configuration is enabled
      */
     NodeId nodeId = remoteNodeStatus.getNodeId();
-
+    // 1. 检查node是否有效, 检查是否退役中.
     // 1. Check if it's a valid (i.e. not excluded) node, if not, see if it is
     // in decommissioning.
     if (!this.nodesListManager.isValidNode(nodeId.getHost())
@@ -553,21 +577,22 @@ public class ResourceTrackerService extends AbstractService implements
       return YarnServerBuilderUtils.newNodeHeartbeatResponse(
           NodeAction.SHUTDOWN, message);
     }
-
+    // 2. 检查node 是否被注册
     // 2. Check if it's a registered node
     RMNode rmNode = this.rmContext.getRMNodes().get(nodeId);
     if (rmNode == null) {
+      // 不存在报错...
       /* node does not exist */
       String message = "Node not found resyncing " + remoteNodeStatus.getNodeId();
       LOG.info(message);
       return YarnServerBuilderUtils.newNodeHeartbeatResponse(NodeAction.RESYNC,
           message);
     }
-
+    // 发送心跳数据给监控
     // Send ping
     this.nmLivelinessMonitor.receivedPing(nodeId);
     this.decommissioningWatcher.update(rmNode, remoteNodeStatus);
-
+    // 3. 检查心跳是否是新的,而不是重复的.
     // 3. Check if it's a 'fresh' heartbeat i.e. not duplicate heartbeat
     NodeHeartbeatResponse lastNodeHeartbeatResponse = rmNode.getLastNodeHeartBeatResponse();
     if (getNextResponseId(
@@ -583,13 +608,14 @@ public class ResourceTrackerService extends AbstractService implements
               + lastNodeHeartbeatResponse.getResponseId() + " nm response id:"
               + remoteNodeStatus.getResponseId();
       LOG.info(message);
+      // 直接给RMnode 发送重启命令
       // TODO: Just sending reboot is not enough. Think more.
       this.rmContext.getDispatcher().getEventHandler().handle(
           new RMNodeEvent(nodeId, RMNodeEventType.REBOOTING));
       return YarnServerBuilderUtils.newNodeHeartbeatResponse(NodeAction.RESYNC,
           message);
     }
-
+    // 检查是否是退役中或者已经退役.
     // Evaluate whether a DECOMMISSIONING node is ready to be DECOMMISSIONED.
     if (rmNode.getState() == NodeState.DECOMMISSIONING &&
         decommissioningWatcher.checkReadyToBeDecommissioned(
@@ -608,7 +634,7 @@ public class ResourceTrackerService extends AbstractService implements
       // Check & update collectors info from request.
       updateAppCollectorsMap(request);
     }
-
+    // 构建心跳响应...
     // Heartbeat response
     NodeHeartbeatResponse nodeHeartBeatResponse =
         YarnServerBuilderUtils.newNodeHeartbeatResponse(
@@ -629,7 +655,7 @@ public class ResourceTrackerService extends AbstractService implements
       setAppCollectorsMapToResponse(rmNode.getRunningApps(),
           nodeHeartBeatResponse);
     }
-
+    // 4. 发送响应给RMNode. 保存最后一次请求
     // 4. Send status to RMNode, saving the latest response.
     RMNodeStatusEvent nodeStatusEvent =
         new RMNodeStatusEvent(nodeId, remoteNodeStatus);
@@ -639,7 +665,7 @@ public class ResourceTrackerService extends AbstractService implements
         .getLogAggregationReportsForApps());
     }
     this.rmContext.getDispatcher().getEventHandler().handle(nodeStatusEvent);
-
+    // 5. 更新node的标签信息
     // 5. Update node's labels to RM's NodeLabelManager.
     if (isDistributedNodeLabelsConf && request.getNodeLabels() != null) {
       try {
@@ -653,7 +679,7 @@ public class ResourceTrackerService extends AbstractService implements
         nodeHeartBeatResponse.setAreNodeLabelsAcceptedByRM(false);
       }
     }
-
+    // 6. 检查节点的容量是否是从dynamic-resources.xml 加载, 如果是的话,发送更新资源信息
     // 6. check if node's capacity is load from dynamic-resources.xml
     // if so, send updated resource back to NM.
     String nid = nodeId.toString();
@@ -662,7 +688,7 @@ public class ResourceTrackerService extends AbstractService implements
     if (capability != null) {
       nodeHeartBeatResponse.setResource(capability);
     }
-
+    // 7. 发送Container的数量限制给node, 如果超出node中队列限制,则进行截取操作..
     // 7. Send Container Queuing Limits back to the Node. This will be used by
     // the node to truncate the number of Containers queued for execution.
     if (this.rmContext.getNodeManagerQueueLimitCalculator() != null) {
@@ -670,7 +696,7 @@ public class ResourceTrackerService extends AbstractService implements
           this.rmContext.getNodeManagerQueueLimitCalculator()
               .createContainerQueuingLimit());
     }
-
+    // 8. 获取node 属性, 并进行更新操作.
     // 8. Get node's attributes and update node-to-attributes mapping
     // in RMNodeAttributeManager.
     if (request.getNodeAttributes() != null) {

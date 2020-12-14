@@ -75,13 +75,14 @@ public abstract class ContainerLaunchContext {
       Map<String, ByteBuffer> serviceData, ByteBuffer tokens,
       Map<ApplicationAccessType, String> acls,
       ContainerRetryContext containerRetryContext) {
-    ContainerLaunchContext container =
-        Records.newRecord(ContainerLaunchContext.class);
+
+    ContainerLaunchContext container =  Records.newRecord(ContainerLaunchContext.class);
     container.setLocalResources(localResources);
     container.setEnvironment(environment);
     container.setCommands(commands);
     container.setServiceData(serviceData);
     container.setTokens(tokens);
+
     container.setApplicationACLs(acls);
     container.setContainerRetryContext(containerRetryContext);
     return container;
