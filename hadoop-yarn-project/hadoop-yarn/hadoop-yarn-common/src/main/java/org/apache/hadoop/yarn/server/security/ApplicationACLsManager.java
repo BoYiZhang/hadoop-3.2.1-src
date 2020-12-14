@@ -40,15 +40,19 @@ import com.google.common.annotations.VisibleForTesting;
 @InterfaceAudience.Private
 public class ApplicationACLsManager {
 
-  private static final Log LOG = LogFactory
-      .getLog(ApplicationACLsManager.class);
+  private static final Log LOG = LogFactory.getLog(ApplicationACLsManager.class);
 
-  private static AccessControlList DEFAULT_YARN_APP_ACL 
-    = new AccessControlList(YarnConfiguration.DEFAULT_YARN_APP_ACL);
+  // 访问控制列表
+  private static AccessControlList DEFAULT_YARN_APP_ACL   = new AccessControlList(YarnConfiguration.DEFAULT_YARN_APP_ACL);
+
+  // 配置文件
   private final Configuration conf;
+
+  // AdminACLsManager
   private final AdminACLsManager adminAclsManager;
-  private final ConcurrentMap<ApplicationId, Map<ApplicationAccessType, AccessControlList>> applicationACLS
-    = new ConcurrentHashMap<ApplicationId, Map<ApplicationAccessType, AccessControlList>>();
+
+  // ApplicationId访问控制清单
+  private final ConcurrentMap<ApplicationId, Map<ApplicationAccessType, AccessControlList>> applicationACLS  = new ConcurrentHashMap<ApplicationId, Map<ApplicationAccessType, AccessControlList>>();
 
   @VisibleForTesting
   public ApplicationACLsManager() {
@@ -79,6 +83,10 @@ public class ApplicationACLsManager {
   }
 
   /**
+   * 如果鉴权被启用, 检查用户是否有指定的application权限
+   * application的所有者可以拥有application上的所有权限
+   * 非application所有者,检查权限
+   *
    * If authorization is enabled, checks whether the user (in the callerUGI) is
    * authorized to perform the access specified by 'applicationAccessType' on
    * the application by checking if the user is applicationOwner or part of
@@ -104,13 +112,17 @@ public class ApplicationACLsManager {
           + applicationOwner);
     }
 
+    // 获取用户
     String user = callerUGI.getShortUserName();
+
+    // 是否开启权限控制
     if (!areACLsEnabled()) {
       return true;
     }
+
     AccessControlList applicationACL = DEFAULT_YARN_APP_ACL;
-    Map<ApplicationAccessType, AccessControlList> acls = this.applicationACLS
-        .get(applicationId);
+    // 获取application的权限
+    Map<ApplicationAccessType, AccessControlList> acls = this.applicationACLS.get(applicationId);
     if (acls == null) {
       if (LOG.isDebugEnabled()) {
         LOG.debug("ACL not found for application "
@@ -119,8 +131,10 @@ public class ApplicationACLsManager {
             + YarnConfiguration.DEFAULT_YARN_APP_ACL + "]");
       }
     } else {
+      // 获取授权列表
       AccessControlList applicationACLInMap = acls.get(applicationAccessType);
       if (applicationACLInMap != null) {
+        // 如果权限不为空
         applicationACL = applicationACLInMap;
       } else if (LOG.isDebugEnabled()) {
         LOG.debug("ACL not found for access-type " + applicationAccessType
@@ -129,7 +143,7 @@ public class ApplicationACLsManager {
             + YarnConfiguration.DEFAULT_YARN_APP_ACL + "]");
       }
     }
-
+    // 如果是管理员或者application的创建或者已经分配权限,直接返回true
     // Allow application-owner for any type of access on the application
     if (this.adminAclsManager.isAdmin(callerUGI)
         || user.equals(applicationOwner)

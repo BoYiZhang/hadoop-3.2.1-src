@@ -51,9 +51,11 @@ public class AccessControlList implements Writable {
         public Writable newInstance() { return new AccessControlList(); }
       });
   }
-
+  // 所有用户的 ACL权限控制 : *
   // Indicates an ACL string that represents access to all users
   public static final String WILDCARD_ACL_VALUE = "*";
+
+  // 初始容量 256
   private static final int INITIAL_CAPACITY = 256;
 
   // Set of users who are granted access.
@@ -63,6 +65,7 @@ public class AccessControlList implements Writable {
   // Whether all users are granted access.
   private boolean allAllowed;
 
+  //  缓存 group 映射信息
   private Groups groupsMapping = Groups.getUserToGroupsMappingService(new Configuration());
 
   /**
@@ -97,6 +100,7 @@ public class AccessControlList implements Writable {
   }
 
   /**
+   * 根据给定的字符串构建ACL . 改string包含以逗号分隔的值.
    * Build ACL from the given array of strings.
    * The strings contain comma separated values.
    *
@@ -106,18 +110,23 @@ public class AccessControlList implements Writable {
     users = new HashSet<String>();
     groups = new HashSet<String>();
     for (String aclPart : userGroupStrings) {
+      // 验证是否具备所有权限.
       if (aclPart != null && isWildCardACLValue(aclPart)) {
         allAllowed = true;
         break;
       }
     }
-    if (!allAllowed) {      
+    if (!allAllowed) {
+      // 验证权限
       if (userGroupStrings.length >= 1 && userGroupStrings[0] != null) {
+        // 获取用户 [多个]
         users = StringUtils.getTrimmedStringCollection(userGroupStrings[0]);
       } 
       
       if (userGroupStrings.length == 2 && userGroupStrings[1] != null) {
+        // 获取用户组 [多个]
         groups = StringUtils.getTrimmedStringCollection(userGroupStrings[1]);
+        // 构建缓存组
         groupsMapping.cacheGroupsAdd(new LinkedList<String>(groups));
       }
     }
@@ -222,17 +231,23 @@ public class AccessControlList implements Writable {
   }
 
   /**
+   * 根据提供的UserGroupInformation中的用户,检查该用户是否存在访问控制列表中.
    * Checks if a user represented by the provided {@link UserGroupInformation}
    * is a member of the Access Control List
-   * @param ugi UserGroupInformation to check if contained in the ACL
+   *
+   *             要检查ACL中是否包含的UserGroupInformation 如果ture 在访问控制列表中.
+   * @param ugi  UserGroupInformation to check if contained in the ACL
    * @return true if ugi is member of the list
    */
   public final boolean isUserInList(UserGroupInformation ugi) {
+    //如果全员访问,或者用户包含访问控制清单中 返回true
     if (allAllowed || users.contains(ugi.getShortUserName())) {
       return true;
     } else if (!groups.isEmpty()) {
+      // 验证是否在group 中...
       for (String group : ugi.getGroups()) {
         if (groups.contains(group)) {
+          // 有权限,直接返回
           return true;
         }
       }

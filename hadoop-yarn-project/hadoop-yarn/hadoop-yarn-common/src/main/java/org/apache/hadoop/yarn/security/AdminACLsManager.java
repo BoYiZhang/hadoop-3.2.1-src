@@ -63,17 +63,20 @@ public class AdminACLsManager {
    */
   public AdminACLsManager(Configuration conf) {
 
+    // yarn.admin.acl : *
     this.adminAcl = new AccessControlList(conf.get(
           YarnConfiguration.YARN_ADMIN_ACL,
           YarnConfiguration.DEFAULT_YARN_ADMIN_ACL));
     try {
+      // 获取当前用户
       owner = UserGroupInformation.getCurrentUser();
+      // 设置用户 adminAcl
       adminAcl.addUser(owner.getShortUserName());
     } catch (IOException e){
       LOG.warn("Could not add current user to admin:" + e);
       throw new YarnRuntimeException(e);
     }
-
+    // 是否开启权限控制:  yarn.acl.enable : false
     aclsEnabled = conf.getBoolean(YarnConfiguration.YARN_ACL_ENABLE,
         YarnConfiguration.DEFAULT_YARN_ACL_ENABLE);
   }
