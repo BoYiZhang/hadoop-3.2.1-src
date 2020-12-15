@@ -81,23 +81,39 @@ import org.apache.hadoop.yarn.util.StringHelper;
 /**
  * This class manages the list of applications for the resource manager. 
  */
-public class RMAppManager implements EventHandler<RMAppManagerEvent>, 
-                                        Recoverable {
+public class RMAppManager implements EventHandler<RMAppManagerEvent>,Recoverable {
 
   private static final Log LOG = LogFactory.getLog(RMAppManager.class);
 
+  // application内存最大存储数量
+  // yarn.resourcemanager.max-completed-applications : 1000
   private int maxCompletedAppsInMemory;
+  // 最大存储容量
+  // yarn.resourcemanager.state-store.max-completed-applications : maxCompletedAppsInMemory [1000]
   private int maxCompletedAppsInStateStore;
+
+  // 完成application存储的数量
   protected int completedAppsInStateStore = 0;
+
+  // 已完成的application
   protected LinkedList<ApplicationId> completedApps = new LinkedList<>();
 
+  // RM的 Context
   private final RMContext rmContext;
+
+  // 负责与ApplicationMaster通讯
   private final ApplicationMasterService masterService;
+  // 调度器
   private final YarnScheduler scheduler;
+  // 访问控制清单
   private final ApplicationACLsManager applicationACLsManager;
+  //配置
   private Configuration conf;
+  // 权限相关
   private YarnAuthorizationProvider authorizer;
+  // 是否启动timelineServer
   private boolean timelineServiceV2Enabled;
+  // 是否启动node label
   private boolean nodeLabelsEnabled;
 
   public RMAppManager(RMContext context,
@@ -108,19 +124,28 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
     this.masterService = masterService;
     this.applicationACLsManager = applicationACLsManager;
     this.conf = conf;
+
+    // yarn.resourcemanager.max-completed-applications : 1000
     this.maxCompletedAppsInMemory = conf.getInt(
         YarnConfiguration.RM_MAX_COMPLETED_APPLICATIONS,
         YarnConfiguration.DEFAULT_RM_MAX_COMPLETED_APPLICATIONS);
+    // yarn.resourcemanager.state-store.max-completed-applications : maxCompletedAppsInMemory [1000]
     this.maxCompletedAppsInStateStore =
         conf.getInt(
           YarnConfiguration.RM_STATE_STORE_MAX_COMPLETED_APPLICATIONS,
           this.maxCompletedAppsInMemory);
+
+    // 如果最大存储大于内存中的存储, 将最大存储设置为内存存储的数量
     if (this.maxCompletedAppsInStateStore > this.maxCompletedAppsInMemory) {
       this.maxCompletedAppsInStateStore = this.maxCompletedAppsInMemory;
     }
+    // 构建权限
     this.authorizer = YarnAuthorizationProvider.getInstance(conf);
+
+    // timelineService 是否启用 : yarn.timeline-service.versions == 2 启用
     this.timelineServiceV2Enabled = YarnConfiguration.
         timelineServiceV2Enabled(conf);
+    // nodeLabel 是否启用 : yarn.node-labels.enabled : false
     this.nodeLabelsEnabled = YarnConfiguration
         .areNodeLabelsEnabled(rmContext.getYarnConfiguration());
   }
@@ -251,11 +276,12 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
     if (applicationId == null) {
       LOG.error("RMAppManager received completed appId of null, skipping");
     } else {
+      //验证权限
       // Inform the DelegationTokenRenewer
       if (UserGroupInformation.isSecurityEnabled()) {
         rmContext.getDelegationTokenRenewer().applicationFinished(applicationId);
       }
-      
+      // 设置状态
       completedApps.add(applicationId);
       completedAppsInStateStore++;
       writeAuditLog(applicationId);
@@ -367,13 +393,17 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
   protected void submitApplication(
       ApplicationSubmissionContext submissionContext, long submitTime,
       String user) throws YarnException {
+    // 获取applicationId
     ApplicationId applicationId = submissionContext.getApplicationId();
 
-    // Passing start time as -1. It will be eventually set in RMAppImpl
-    // constructor.
-    RMAppImpl application = createAndPopulateNewRMApp(
-        submissionContext, submitTime, user, false, -1, null);
+
+    // 构建 RMAppImpl
+    // 设置startTime为-1,在构造方法中会初始化
+    // Passing start time as -1. It will be eventually set in RMAppImpl constructor.
+    RMAppImpl application = createAndPopulateNewRMApp( submissionContext, submitTime, user, false, -1, null);
+
     try {
+      // 验证权限
       if (UserGroupInformation.isSecurityEnabled()) {
         this.rmContext.getDelegationTokenRenewer()
             .addApplicationAsync(applicationId,
@@ -382,6 +412,10 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
                 application.getUser(),
                 BuilderUtils.parseTokensConf(submissionContext));
       } else {
+
+        // 处理任务 RMAppEvent 启动
+        // Dispatcher这时候还没有启动,所以dispatcher应该在启动的时候处理队列中的event
+
         // Dispatcher is not yet started at this time, so these START events
         // enqueued should be guaranteed to be first processed when dispatcher
         // gets started.
