@@ -22,6 +22,9 @@ import org.apache.hadoop.classification.InterfaceAudience.Public;
 import org.apache.hadoop.classification.InterfaceStability.Evolving;
 
 /**
+ *
+ * SingleArcTransition定义了转换的一个钩子，并且定义了事件，注意，它的返回类型是void.
+ *
  * Hook for Transition. This lead to state machine to move to 
  * the post state as registered in the state machine.
  */

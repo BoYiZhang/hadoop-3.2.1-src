@@ -32,6 +32,7 @@ public interface MultipleArcTransition
         <OPERAND, EVENT, STATE extends Enum<STATE>> {
 
   /**
+   * MultipleArcTransition的transition是有返回类型的
    * Transition hook.
    * @return the postState. Post state must be one of the 
    *                      valid post states registered in StateMachine.

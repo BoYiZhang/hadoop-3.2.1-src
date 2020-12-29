@@ -80,8 +80,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.RMServerUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.blacklist.BlacklistManager;
 import org.apache.hadoop.yarn.server.resourcemanager.blacklist.DisabledBlacklistManager;
 import org.apache.hadoop.yarn.server.resourcemanager.blacklist.SimpleBlacklistManager;
-import org.apache.hadoop.yarn.server.resourcemanager.placement
-    .ApplicationPlacementContext;
+import org.apache.hadoop.yarn.server.resourcemanager.placement.ApplicationPlacementContext;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore.RMState;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.Recoverable;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.records.ApplicationStateData;
@@ -120,68 +119,103 @@ public class RMAppImpl implements RMApp, Recoverable {
   private static final String UNAVAILABLE = "N/A";
   private static final String UNLIMITED = "UNLIMITED";
   private static final long UNKNOWN = -1L;
+
+  // 已完结的状态
   private static final EnumSet<RMAppState> COMPLETED_APP_STATES =
       EnumSet.of(RMAppState.FINISHED, RMAppState.FINISHING, RMAppState.FAILED,
           RMAppState.KILLED, RMAppState.FINAL_SAVING, RMAppState.KILLING);
+
   private static final String STATE_CHANGE_MESSAGE =
       "%s State change from %s to %s on event = %s";
   private static final String RECOVERY_MESSAGE =
       "Recovering app: %s with %d attempts and final state = %s";
 
+  // 固定字段属性
   // Immutable fields
+
+  // applicationId
   private final ApplicationId applicationId;
+
   private final RMContext rmContext;
   private final Configuration conf;
+  // 用户
   private final String user;
+  // 名称
   private final String name;
+  // 权限
   private final ApplicationSubmissionContext submissionContext;
+
   private final Dispatcher dispatcher;
+
   private final YarnScheduler scheduler;
   private final ApplicationMasterService masterService;
+  // 诊断??
   private final StringBuilder diagnostics = new StringBuilder();
+  // 最大尝试次数
   private final int maxAppAttempts;
+  // 读锁
   private final ReadLock readLock;
+  // 写锁
   private final WriteLock writeLock;
-  private final Map<ApplicationAttemptId, RMAppAttempt> attempts
-      = new LinkedHashMap<ApplicationAttemptId, RMAppAttempt>();
+  // attempts
+  private final Map<ApplicationAttemptId, RMAppAttempt> attempts = new LinkedHashMap<ApplicationAttemptId, RMAppAttempt>();
+  // 提交时间
   private final long submitTime;
+  //RMNode 状态
   private final Map<RMNode, NodeUpdateType> updatedNodes = new HashMap<>();
+  //application状态
   private final String applicationType;
+  // application 标签
   private final Set<String> applicationTags;
+  // application调度环境
   private Map<String, String> applicationSchedulingEnvs = new HashMap<>();
 
+  //失败尝试间隔
   private final long attemptFailuresValidityInterval;
+  // AM黑名单是否启用
   private boolean amBlacklistingEnabled = false;
+  // 黑名单禁用阈值
   private float blacklistDisableThreshold;
-
+  // 时钟对象
   private Clock systemClock;
-
+  // 是否超出重试阈值 尝试... [不明白啥意思]
   private boolean isNumAttemptsBeyondThreshold = false;
 
 
-
+  // 可变字段属性
   // Mutable fields
+  // 开始时间
   private long startTime;
+  // 启动时间
   private long launchTime = 0;
+  // 完成时间
   private long finishTime = 0;
+  // 存储完成时间
   private long storedFinishTime = 0;
+  //
   private int firstAttemptIdInStateStore = 1;
+  // 下一次AttemptId
   private int nextAttemptId = 1;
   private AppCollectorData collectorData;
   private CollectorInfo collectorInfo;
   // This field isn't protected by readlock now.
   private volatile RMAppAttempt currentAttempt;
+
+  // 队列
   private String queue;
+
+  // 事件处理handler
   private EventHandler handler;
-  private static final AppFinishedTransition FINISHED_TRANSITION =
-      new AppFinishedTransition();
+
+  private static final AppFinishedTransition FINISHED_TRANSITION =new AppFinishedTransition();
   private Set<NodeId> ranNodes = new ConcurrentSkipListSet<NodeId>();
 
   private final RMAppLogAggregation logAggregation;
-  private Map<ApplicationTimeoutType, Long> applicationTimeouts =
-      new HashMap<ApplicationTimeoutType, Long>();
+  // application超时控制
+  private Map<ApplicationTimeoutType, Long> applicationTimeouts = new HashMap<ApplicationTimeoutType, Long>();
 
   // These states stored are only valid when app is at killing or final_saving.
+  // application在killing或者final_saving 生效
   private RMAppState stateBeforeKilling;
   private RMAppState stateBeforeFinalSaving;
   private RMAppEvent eventCausingFinalSaving;
@@ -452,9 +486,10 @@ public class RMAppImpl implements RMApp, Recoverable {
       // considered as normal.
       this.applicationPriority = Priority.newInstance(0);
     }
-
+    // yarn.resourcemanager.am.max-attempts: 2
     int globalMaxAppAttempts = conf.getInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,
         YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS);
+
     int individualMaxAppAttempts = submissionContext.getMaxAppAttempts();
     if (individualMaxAppAttempts <= 0 ||
         individualMaxAppAttempts > globalMaxAppAttempts) {
@@ -877,6 +912,7 @@ public class RMAppImpl implements RMApp, Recoverable {
           + event.getType());
       final RMAppState oldState = getState();
       try {
+        // 状态机 同步操作.
         /* keep the master in sync with the state machine */
         this.stateMachine.doTransition(event.getType(), event);
       } catch (InvalidStateTransitionException e) {
@@ -884,7 +920,7 @@ public class RMAppImpl implements RMApp, Recoverable {
             + " can't handle this event at current state", e);
         onInvalidStateTransition(event.getType(), oldState);
       }
-
+      // 记录日志信息
       // Log at INFO if we're not recovering or not in a terminal state.
       // Log at DEBUG otherwise.
       if ((oldState != getState()) &&
