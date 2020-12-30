@@ -95,6 +95,7 @@ final public class StateMachineFactory  <OPERAND, STATE extends Enum<STATE>,  EV
   // addTransition内部创建StateMachineFactory对象。
   private StateMachineFactory(StateMachineFactory<OPERAND, STATE, EVENTTYPE, EVENT> that,
        ApplicableTransition<OPERAND, STATE, EVENTTYPE, EVENT> t) {
+    System.out.println("that : "+that +" -> t : "+this);
     this.defaultInitialState = that.defaultInitialState;
     this.transitionsListNode 
         = new TransitionsListNode(t, that.transitionsListNode);
@@ -110,14 +111,48 @@ final public class StateMachineFactory  <OPERAND, STATE extends Enum<STATE>,  EV
     this.transitionsListNode = that.transitionsListNode;
     this.optimized = optimized;
 
+    //输出transitionsListNode中的结构
+    getInfo(this.transitionsListNode);
+
     // 当optimized为true是，
     // 会在构造函数中调用makeStateMachineTable对stateMachineTable进行赋值。
     if (optimized) {
       makeStateMachineTable();
+
+      if(stateMachineTable != null){
+        for (STATE state:stateMachineTable.keySet()) {
+
+          System.out.println("--------------- "+state.name()+" start ---------------------------------");
+
+          Map<EVENTTYPE,  Transition<OPERAND, STATE, EVENTTYPE, EVENT>> data = stateMachineTable.get(state);
+
+          if(null != data){
+            for (EVENTTYPE eventtype : data.keySet()) {
+              System.out.println(String.format(" state :  %s , eventtype :  %s  ",state.name(),eventtype));
+            }
+          }
+
+          System.out.println("----------------"+state.name()+" end --------------------------------");
+        }
+      }
+
+
     } else {
       stateMachineTable = null;
     }
   }
+  public void getInfo(TransitionsListNode transitionsListNode){
+
+    if(null != transitionsListNode){
+      ApplicableSingleOrMultipleTransition asmt = (ApplicableSingleOrMultipleTransition) transitionsListNode.transition;
+      System.out.println(String.format("StateMachineFactory :   preState : %s ,  eventType : %s , transition : %s  ", asmt.preState,asmt.eventType,asmt.transition));
+      TransitionsListNode next  = transitionsListNode.next ;
+      if(null != next){
+        getInfo(next);
+      }
+    }
+  }
+
 
   // ApplicableTransition是一个接口，有一个apply方法
   private interface ApplicableTransition
@@ -128,7 +163,7 @@ final public class StateMachineFactory  <OPERAND, STATE extends Enum<STATE>,  EV
 
 
   // 链表的数据结构  本次转换和下一个结点。
-  private class TransitionsListNode {
+  public class TransitionsListNode {
 
 
     // ApplicableSingleOrMultipleTransition 实现了该接口
@@ -138,6 +173,10 @@ final public class StateMachineFactory  <OPERAND, STATE extends Enum<STATE>,  EV
 
     // 从构造函数中可以看出transition是当前状态转移对应的处理类，
     // next指向的是下一个TransitionsListNode，
+    //  **********!!!!!!!! **********
+    // 注意这里的next 是上一节点的 StateMachineFactory实例的TransitionsListNode .
+    // 所以这里的链表一直是倒叙添加的,不是顺序添加的!!!!!!!!!!
+    // 后面会使用stack存储, 把数据正过来,然后再添加到stateMachineTable里面
     TransitionsListNode
         (ApplicableTransition<OPERAND, STATE, EVENTTYPE, EVENT> transition,
         TransitionsListNode next) {
@@ -348,8 +387,7 @@ final public class StateMachineFactory  <OPERAND, STATE extends Enum<STATE>,  EV
    * @param event causal eventType context
    * @return transitioned state
    */
-  private STATE doTransition (OPERAND operand, STATE oldState, EVENTTYPE eventType, EVENT event)
-      throws InvalidStateTransitionException {
+  private STATE doTransition (OPERAND operand, STATE oldState, EVENTTYPE eventType, EVENT event)  throws InvalidStateTransitionException {
     // We can assume that stateMachineTable is non-null because we call
     //  maybeMakeStateMachineTable() when we build an InnerStateMachine ,
     //  and this code only gets called from inside a working InnerStateMachine .
@@ -535,8 +573,11 @@ final public class StateMachineFactory  <OPERAND, STATE extends Enum<STATE>,  EV
 
   // 状态机的具体实现类
   private class InternalStateMachine implements StateMachine<STATE, EVENTTYPE, EVENT> {
+    // 操作
     private final OPERAND operand;
+    // 当前状态
     private STATE currentState;
+    // 监听器
     private final StateTransitionListener<OPERAND, EVENT, STATE> listener;
 
     InternalStateMachine(OPERAND operand, STATE initialState) {
@@ -563,7 +604,7 @@ final public class StateMachineFactory  <OPERAND, STATE extends Enum<STATE>,  EV
     public synchronized STATE doTransition(EVENTTYPE eventType, EVENT event)
          throws InvalidStateTransitionException  {
 
-
+      //监听 处理数据
       listener.preTransition(operand, currentState, event);
 
       STATE oldState = currentState;

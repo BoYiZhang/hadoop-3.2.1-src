@@ -227,22 +227,34 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       .addTransition(NodeState.RUNNING, NodeState.REBOOTED,
           RMNodeEventType.REBOOTING,
           new DeactivateNodeTransition(NodeState.REBOOTED))
+
+
+
       .addTransition(NodeState.RUNNING, NodeState.RUNNING,
           RMNodeEventType.CLEANUP_APP, new CleanUpAppTransition())
+
       .addTransition(NodeState.RUNNING, NodeState.RUNNING,
           RMNodeEventType.CLEANUP_CONTAINER, new CleanUpContainerTransition())
+
       .addTransition(NodeState.RUNNING, NodeState.RUNNING,
           RMNodeEventType.FINISHED_CONTAINERS_PULLED_BY_AM,
           new AddContainersToBeRemovedFromNMTransition())
+
       .addTransition(NodeState.RUNNING, EnumSet.of(NodeState.RUNNING),
           RMNodeEventType.RECONNECTED, new ReconnectNodeTransition())
+
       .addTransition(NodeState.RUNNING, NodeState.RUNNING,
           RMNodeEventType.RESOURCE_UPDATE, new UpdateNodeResourceWhenRunningTransition())
+
       .addTransition(NodeState.RUNNING, NodeState.RUNNING,
           RMNodeEventType.UPDATE_CONTAINER,
           new UpdateContainersTransition())
+
       .addTransition(NodeState.RUNNING, NodeState.RUNNING,
           RMNodeEventType.SIGNAL_CONTAINER, new SignalContainerTransition())
+
+
+
       .addTransition(NodeState.RUNNING, NodeState.SHUTDOWN,
           RMNodeEventType.SHUTDOWN,
           new DeactivateNodeTransition(NodeState.SHUTDOWN))
@@ -264,32 +276,41 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       .addTransition(NodeState.DECOMMISSIONING, NodeState.DECOMMISSIONED,
           RMNodeEventType.DECOMMISSION,
           new DeactivateNodeTransition(NodeState.DECOMMISSIONED))
+
       .addTransition(NodeState.DECOMMISSIONING, NodeState.RUNNING,
           RMNodeEventType.RECOMMISSION,
           new RecommissionNodeTransition(NodeState.RUNNING))
+
+
       .addTransition(NodeState.DECOMMISSIONING, NodeState.DECOMMISSIONING,
           RMNodeEventType.RESOURCE_UPDATE,
           new UpdateNodeResourceWhenRunningTransition())
+
       .addTransition(NodeState.DECOMMISSIONING,
           EnumSet.of(NodeState.DECOMMISSIONING, NodeState.DECOMMISSIONED),
           RMNodeEventType.STATUS_UPDATE,
           new StatusUpdateWhenHealthyTransition())
+
       .addTransition(NodeState.DECOMMISSIONING, NodeState.DECOMMISSIONING,
           RMNodeEventType.GRACEFUL_DECOMMISSION,
           new DecommissioningNodeTransition(NodeState.DECOMMISSIONING,
               NodeState.DECOMMISSIONING))
+
       .addTransition(NodeState.DECOMMISSIONING, NodeState.LOST,
           RMNodeEventType.EXPIRE,
           new DeactivateNodeTransition(NodeState.LOST))
+
       .addTransition(NodeState.DECOMMISSIONING, NodeState.REBOOTED,
           RMNodeEventType.REBOOTING,
           new DeactivateNodeTransition(NodeState.REBOOTED))
+
       .addTransition(NodeState.DECOMMISSIONING, NodeState.DECOMMISSIONING,
          RMNodeEventType.FINISHED_CONTAINERS_PULLED_BY_AM,
          new AddContainersToBeRemovedFromNMTransition())
 
       .addTransition(NodeState.DECOMMISSIONING, NodeState.DECOMMISSIONING,
           RMNodeEventType.CLEANUP_APP, new CleanUpAppTransition())
+
       .addTransition(NodeState.DECOMMISSIONING, NodeState.SHUTDOWN,
           RMNodeEventType.SHUTDOWN,
           new DeactivateNodeTransition(NodeState.SHUTDOWN))
@@ -297,16 +318,16 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       // TODO (in YARN-3223) update resource when container finished.
       .addTransition(NodeState.DECOMMISSIONING, NodeState.DECOMMISSIONING,
           RMNodeEventType.CLEANUP_CONTAINER, new CleanUpContainerTransition())
+
       // TODO (in YARN-3223) update resource when container finished.
       .addTransition(NodeState.DECOMMISSIONING, NodeState.DECOMMISSIONING,
           RMNodeEventType.FINISHED_CONTAINERS_PULLED_BY_AM,
           new AddContainersToBeRemovedFromNMTransition())
+
       .addTransition(NodeState.DECOMMISSIONING, EnumSet.of(
           NodeState.DECOMMISSIONING, NodeState.DECOMMISSIONED),
           RMNodeEventType.RECONNECTED, new ReconnectNodeTransition())
-      .addTransition(NodeState.DECOMMISSIONING, NodeState.DECOMMISSIONING,
-          RMNodeEventType.RESOURCE_UPDATE,
-          new UpdateNodeResourceWhenRunningTransition())
+
 
       //Transitions from LOST state
       .addTransition(NodeState.LOST, NodeState.LOST,
@@ -321,33 +342,44 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
           EnumSet.of(NodeState.UNHEALTHY, NodeState.RUNNING),
           RMNodeEventType.STATUS_UPDATE,
           new StatusUpdateWhenUnHealthyTransition())
+
       .addTransition(NodeState.UNHEALTHY, NodeState.DECOMMISSIONED,
           RMNodeEventType.DECOMMISSION,
           new DeactivateNodeTransition(NodeState.DECOMMISSIONED))
+
       .addTransition(NodeState.UNHEALTHY, NodeState.DECOMMISSIONING,
           RMNodeEventType.GRACEFUL_DECOMMISSION,
           new DecommissioningNodeTransition(NodeState.UNHEALTHY,
               NodeState.DECOMMISSIONING))
+
       .addTransition(NodeState.UNHEALTHY, NodeState.LOST,
           RMNodeEventType.EXPIRE,
           new DeactivateNodeTransition(NodeState.LOST))
+
       .addTransition(NodeState.UNHEALTHY, NodeState.REBOOTED,
           RMNodeEventType.REBOOTING,
           new DeactivateNodeTransition(NodeState.REBOOTED))
+
       .addTransition(NodeState.UNHEALTHY, EnumSet.of(NodeState.UNHEALTHY),
           RMNodeEventType.RECONNECTED, new ReconnectNodeTransition())
+
       .addTransition(NodeState.UNHEALTHY, NodeState.UNHEALTHY,
           RMNodeEventType.CLEANUP_APP, new CleanUpAppTransition())
+
       .addTransition(NodeState.UNHEALTHY, NodeState.UNHEALTHY,
           RMNodeEventType.CLEANUP_CONTAINER, new CleanUpContainerTransition())
+
       .addTransition(NodeState.UNHEALTHY, NodeState.UNHEALTHY,
           RMNodeEventType.RESOURCE_UPDATE,
           new UpdateNodeResourceWhenUnusableTransition())
+
       .addTransition(NodeState.UNHEALTHY, NodeState.UNHEALTHY,
           RMNodeEventType.FINISHED_CONTAINERS_PULLED_BY_AM,
           new AddContainersToBeRemovedFromNMTransition())
+
       .addTransition(NodeState.UNHEALTHY, NodeState.UNHEALTHY,
           RMNodeEventType.SIGNAL_CONTAINER, new SignalContainerTransition())
+
       .addTransition(NodeState.UNHEALTHY, NodeState.SHUTDOWN,
           RMNodeEventType.SHUTDOWN,
           new DeactivateNodeTransition(NodeState.SHUTDOWN))

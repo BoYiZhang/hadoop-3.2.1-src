@@ -244,14 +244,21 @@ public class RMAppImpl implements RMApp, Recoverable {
      // Transitions from NEW state
     .addTransition(RMAppState.NEW, RMAppState.NEW,
         RMAppEventType.NODE_UPDATE, new RMAppNodeUpdateTransition())
+
     .addTransition(RMAppState.NEW, RMAppState.NEW_SAVING,
         RMAppEventType.START, new RMAppNewlySavingTransition())
+
+    // 一个初始状态、多个最终状态，一个事件，多个回调
     .addTransition(RMAppState.NEW, EnumSet.of(RMAppState.SUBMITTED,
             RMAppState.ACCEPTED, RMAppState.FINISHED, RMAppState.FAILED,
             RMAppState.KILLED, RMAppState.FINAL_SAVING),
         RMAppEventType.RECOVER, new RMAppRecoveredTransition())
+
+
     .addTransition(RMAppState.NEW, RMAppState.KILLED, RMAppEventType.KILL,
         new AppKilledTransition())
+
+
     .addTransition(RMAppState.NEW, RMAppState.FINAL_SAVING,
         RMAppEventType.APP_REJECTED,
         new FinalSavingTransition(new AppRejectedTransition(),
@@ -260,28 +267,36 @@ public class RMAppImpl implements RMApp, Recoverable {
     // Transitions from NEW_SAVING state
     .addTransition(RMAppState.NEW_SAVING, RMAppState.NEW_SAVING,
         RMAppEventType.NODE_UPDATE, new RMAppNodeUpdateTransition())
+
     .addTransition(RMAppState.NEW_SAVING, RMAppState.SUBMITTED,
         RMAppEventType.APP_NEW_SAVED, new AddApplicationToSchedulerTransition())
+
+    // 这个有点特殊....
     .addTransition(RMAppState.NEW_SAVING, RMAppState.FINAL_SAVING,
         RMAppEventType.KILL,
         new FinalSavingTransition(
           new AppKilledTransition(), RMAppState.KILLED))
+
     .addTransition(RMAppState.NEW_SAVING, RMAppState.FINAL_SAVING,
         RMAppEventType.APP_REJECTED,
           new FinalSavingTransition(new AppRejectedTransition(),
             RMAppState.FAILED))
+
       .addTransition(RMAppState.NEW_SAVING, RMAppState.FAILED,
           RMAppEventType.APP_SAVE_FAILED, new AppRejectedTransition())
 
      // Transitions from SUBMITTED state
     .addTransition(RMAppState.SUBMITTED, RMAppState.SUBMITTED,
         RMAppEventType.NODE_UPDATE, new RMAppNodeUpdateTransition())
+
     .addTransition(RMAppState.SUBMITTED, RMAppState.FINAL_SAVING,
         RMAppEventType.APP_REJECTED,
         new FinalSavingTransition(
           new AppRejectedTransition(), RMAppState.FAILED))
+
     .addTransition(RMAppState.SUBMITTED, RMAppState.ACCEPTED,
         RMAppEventType.APP_ACCEPTED, new StartAppAttemptTransition())
+
     .addTransition(RMAppState.SUBMITTED, RMAppState.FINAL_SAVING,
         RMAppEventType.KILL,
         new FinalSavingTransition(
@@ -290,9 +305,11 @@ public class RMAppImpl implements RMApp, Recoverable {
      // Transitions from ACCEPTED state
     .addTransition(RMAppState.ACCEPTED, RMAppState.ACCEPTED,
         RMAppEventType.NODE_UPDATE, new RMAppNodeUpdateTransition())
+
     .addTransition(RMAppState.ACCEPTED, RMAppState.RUNNING,
         RMAppEventType.ATTEMPT_REGISTERED, new RMAppStateUpdateTransition(
             YarnApplicationState.RUNNING))
+
     .addTransition(RMAppState.ACCEPTED,
         EnumSet.of(RMAppState.ACCEPTED, RMAppState.FINAL_SAVING),
         // ACCEPTED state is possible to receive ATTEMPT_FAILED/ATTEMPT_FINISHED
@@ -300,40 +317,54 @@ public class RMAppImpl implements RMApp, Recoverable {
         // directly and waiting for the previous AM to exit.
         RMAppEventType.ATTEMPT_FAILED,
         new AttemptFailedTransition(RMAppState.ACCEPTED))
+
     .addTransition(RMAppState.ACCEPTED, RMAppState.FINAL_SAVING,
         RMAppEventType.ATTEMPT_FINISHED,
         new FinalSavingTransition(FINISHED_TRANSITION, RMAppState.FINISHED))
+
     .addTransition(RMAppState.ACCEPTED, RMAppState.KILLING,
         RMAppEventType.KILL, new KillAttemptTransition())
+
     .addTransition(RMAppState.ACCEPTED, RMAppState.FINAL_SAVING,
         RMAppEventType.ATTEMPT_KILLED,
         new FinalSavingTransition(new AppKilledTransition(), RMAppState.KILLED))
+
     .addTransition(RMAppState.ACCEPTED, RMAppState.ACCEPTED, 
         RMAppEventType.APP_RUNNING_ON_NODE,
         new AppRunningOnNodeTransition())
+
+
       // Handle AppAttemptLaunch to upate the launchTime and publish to ATS
       .addTransition(RMAppState.ACCEPTED, RMAppState.ACCEPTED,
         RMAppEventType.ATTEMPT_LAUNCHED,
         new AttemptLaunchedTransition())
 
+
+
+
      // Transitions from RUNNING state
     .addTransition(RMAppState.RUNNING, RMAppState.RUNNING,
         RMAppEventType.NODE_UPDATE, new RMAppNodeUpdateTransition())
+
     .addTransition(RMAppState.RUNNING, RMAppState.FINAL_SAVING,
         RMAppEventType.ATTEMPT_UNREGISTERED,
         new FinalSavingTransition(
           new AttemptUnregisteredTransition(),
           RMAppState.FINISHING, RMAppState.FINISHED))
+
     .addTransition(RMAppState.RUNNING, RMAppState.FINISHED,
       // UnManagedAM directly jumps to finished
         RMAppEventType.ATTEMPT_FINISHED, FINISHED_TRANSITION)
+
     .addTransition(RMAppState.RUNNING, RMAppState.RUNNING, 
         RMAppEventType.APP_RUNNING_ON_NODE,
         new AppRunningOnNodeTransition())
+
     .addTransition(RMAppState.RUNNING,
         EnumSet.of(RMAppState.ACCEPTED, RMAppState.FINAL_SAVING),
         RMAppEventType.ATTEMPT_FAILED,
         new AttemptFailedTransition(RMAppState.ACCEPTED))
+
     .addTransition(RMAppState.RUNNING, RMAppState.KILLING,
         RMAppEventType.KILL, new KillAttemptTransition())
 
@@ -356,9 +387,11 @@ public class RMAppImpl implements RMApp, Recoverable {
      // Transitions from FINISHING state
     .addTransition(RMAppState.FINISHING, RMAppState.FINISHED,
         RMAppEventType.ATTEMPT_FINISHED, FINISHED_TRANSITION)
+
     .addTransition(RMAppState.FINISHING, RMAppState.FINISHING, 
         RMAppEventType.APP_RUNNING_ON_NODE,
         new AppRunningOnNodeTransition())
+
     // ignorable transitions
     .addTransition(RMAppState.FINISHING, RMAppState.FINISHING,
       EnumSet.of(RMAppEventType.NODE_UPDATE,
@@ -429,8 +462,7 @@ public class RMAppImpl implements RMApp, Recoverable {
 
      .installTopology();
 
-  private final StateMachine<RMAppState, RMAppEventType, RMAppEvent>
-                                                                 stateMachine;
+  private final StateMachine<RMAppState, RMAppEventType, RMAppEvent>  stateMachine;
 
   private static final int DUMMY_APPLICATION_ATTEMPT_NUMBER = -1;
   private static final float MINIMUM_AM_BLACKLIST_THRESHOLD_VALUE = 0.0f;

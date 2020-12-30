@@ -246,6 +246,11 @@
       <artifactId>jersey-test-framework-grizzly2</artifactId>
       <scope>test</scope>
     </dependency>
+      <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-server-nodemanager</artifactId>
+          <scope>test</scope>
+      </dependency>
   </dependencies>
 
   <build>
