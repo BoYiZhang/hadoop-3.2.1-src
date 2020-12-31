@@ -339,9 +339,6 @@ public class RMAppImpl implements RMApp, Recoverable {
         RMAppEventType.ATTEMPT_LAUNCHED,
         new AttemptLaunchedTransition())
 
-
-
-
      // Transitions from RUNNING state
     .addTransition(RMAppState.RUNNING, RMAppState.RUNNING,
         RMAppEventType.NODE_UPDATE, new RMAppNodeUpdateTransition())
