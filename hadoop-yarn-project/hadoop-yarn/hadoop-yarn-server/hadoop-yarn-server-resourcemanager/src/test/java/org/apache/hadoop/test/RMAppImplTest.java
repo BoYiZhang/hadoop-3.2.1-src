@@ -6,6 +6,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
 
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptImpl;
 import org.apache.hadoop.yarn.state.StateMachine;
 import org.apache.hadoop.yarn.state.StateMachineFactory;
 
@@ -216,6 +218,10 @@ public class RMAppImplTest {
     public static void main(String[] args) {
 //        StateMachine stateMachine = stateMachineFactory.make(this);
 //        System.out.println(stateMachine);
+
+//        RMAppAttempt attempt =
+//                new RMAppAttemptImpl(null, null, null, null,
+//                        null, null, null, null, null);
     }
 
 
