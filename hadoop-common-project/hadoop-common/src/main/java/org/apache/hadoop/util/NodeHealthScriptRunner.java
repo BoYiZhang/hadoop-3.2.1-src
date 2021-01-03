@@ -46,38 +46,51 @@ public class NodeHealthScriptRunner extends AbstractService {
   private static final Logger LOG =
       LoggerFactory.getLogger(NodeHealthScriptRunner.class);
 
+  // 健康检查脚本绝对路径
   /** Absolute path to the health script. */
   private String nodeHealthScript;
+  // 健康检查脚本执行间隔, 默认10min
   /** Delay after which node health script to be executed */
   private long intervalTime;
+
+  // 健康检查脚本超时时间
   /** Time after which the script should be timedout */
   private long scriptTimeout;
+
+  // 定时器
   /** Timer used to schedule node health monitoring script execution */
   private Timer nodeHealthScriptScheduler;
 
+  // 执行健康检查脚本的工具类
   /** ShellCommandExecutor used to execute monitoring script */
   ShellCommandExecutor shexec = null;
 
+  // 异常信息的开头定义: ERROR
   /** Pattern used for searching in the output of the node health script */
   static private final String ERROR_PATTERN = "ERROR";
 
+  // 健康检查脚本超时提示信息
   /** Time out error message */
   public static final String NODE_HEALTH_SCRIPT_TIMED_OUT_MSG = "Node health script timed out";
 
+  // 是否健康
   private boolean isHealthy;
 
+  // 健康检查脚本报告
   private String healthReport;
 
+  // 健康检查 最后一次时间戳
   private long lastReportedTime;
 
+  // 定时器 task
   private TimerTask timer;
   
   private enum HealthCheckerExitStatus {
-    SUCCESS,
-    TIMED_OUT,
-    FAILED_WITH_EXIT_CODE,
-    FAILED_WITH_EXCEPTION,
-    FAILED
+    SUCCESS,                // 成功
+    TIMED_OUT,              // 超时
+    FAILED_WITH_EXIT_CODE,  // 已知的错误, 有错误码
+    FAILED_WITH_EXCEPTION,  // 未知错误
+    FAILED                  // 失败
   }
 
 
@@ -104,6 +117,7 @@ public class NodeHealthScriptRunner extends AbstractService {
     public void run() {
       HealthCheckerExitStatus status = HealthCheckerExitStatus.SUCCESS;
       try {
+        // 执行健康检查脚本..
         shexec.execute();
       } catch (ExitCodeException e) {
         // ignore the exit code of the script
@@ -123,10 +137,12 @@ public class NodeHealthScriptRunner extends AbstractService {
         exceptionStackTrace = StringUtils.stringifyException(e);
       } finally {
         if (status == HealthCheckerExitStatus.SUCCESS) {
+          // 处理输出 是否已"ERROR" 开头的错误信息
           if (hasErrors(shexec.getOutput())) {
             status = HealthCheckerExitStatus.FAILED;
           }
         }
+        // 报告健康状态
         reportHealthStatus(status);
       }
     }

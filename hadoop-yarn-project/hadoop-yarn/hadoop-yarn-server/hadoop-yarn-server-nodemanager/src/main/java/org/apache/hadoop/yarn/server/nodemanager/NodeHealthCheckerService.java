@@ -34,11 +34,18 @@ import java.util.Collections;
  */
 public class NodeHealthCheckerService extends CompositeService {
 
+  // 健康检查线程类 : 周期性执行节点健康状况检测脚本
   private NodeHealthScriptRunner nodeHealthScriptRunner;
+
+  // 提供检查节点本地目录运行状况的功能的类。
   private LocalDirsHandlerService dirsHandler;
+
+  // 异常信息
   private Exception nodeHealthException;
+  // 异常事件.
   private long nodeHealthExceptionReportTime;
 
+  // 分隔符
   static final String SEPARATOR = ";";
 
   public NodeHealthCheckerService(NodeHealthScriptRunner scriptRunner,
@@ -63,16 +70,22 @@ public class NodeHealthCheckerService extends CompositeService {
    * @return the reporting string of health of the node
    */
   String getHealthReport() {
+    // 脚本运行报告.
     String scriptReport = Strings.emptyToNull(
         nodeHealthScriptRunner == null ? null :
         nodeHealthScriptRunner.getHealthReport());
+
+    // 文件目录报过.
     String discReport =
         Strings.emptyToNull(
             dirsHandler.getDisksHealthReport(false));
+
+    // 异常报告.
     String exceptionReport = Strings.emptyToNull(
         nodeHealthException == null ? null :
         nodeHealthException.getMessage());
 
+    // 输出报告结果... 以  分号 " ; " 分隔..
     return Joiner.on(SEPARATOR).skipNulls()
         .join(scriptReport, discReport, exceptionReport);
   }

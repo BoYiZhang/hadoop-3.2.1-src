@@ -137,7 +137,7 @@ public class NodeManager extends CompositeService
   // 扩展属性
   private NodeAttributesProvider nodeAttributesProvider;
 
-  // 文件存储 用于健康价差
+  // 文件存储 用于健康检查
   private LocalDirsHandlerService dirsHandler;
 
   // 上线问
@@ -152,7 +152,7 @@ public class NodeManager extends CompositeService
   // the NM collector service is set only if the timeline service v.2 is enabled
   private NMCollectorService nmCollectorService;
 
-  // 狠心大佬:  NodeStatusUpdater是NodeManager与ResourceManager通信的唯一通道。
+  // 核心大佬:  NodeStatusUpdater是NodeManager与ResourceManager通信的唯一通道。
   private NodeStatusUpdater nodeStatusUpdater;
 
   private AtomicBoolean resyncingWithRM = new AtomicBoolean(false);
@@ -378,21 +378,39 @@ public class NodeManager extends CompositeService
     }
   }
 
+  // 构建检查脚本对象
+  //    |名称| 含义 |
+  //    |--|--|
+  //    | yarn.nodemanager.health-checker.script.path  | 健康检查脚本所在的绝对路径 |
+  //    | yarn.nodemanager.health-checker.script.opts  | 健康检查脚本参数 |
+  //    | yarn.nodemanager.health-checker.interval-ms  | 健康检查脚本检测周期 : 10min |
+  //    | yarn.nodemanager.health-checker.script.timeout-ms  | 健康检查脚本超时时间 : 20min |
   public static NodeHealthScriptRunner getNodeHealthScriptRunner(Configuration conf) {
-    String nodeHealthScript = 
-        conf.get(YarnConfiguration.NM_HEALTH_CHECK_SCRIPT_PATH);
+
+    // 健康检查脚本所在的绝对路径
+   String nodeHealthScript =  conf.get(YarnConfiguration.NM_HEALTH_CHECK_SCRIPT_PATH);
+
+   // 脚本是否有效 [是否存在/可执行]
     if(!NodeHealthScriptRunner.shouldRun(nodeHealthScript)) {
       LOG.info("Node Manager health check script is not available "
           + "or doesn't have execute permission, so not "
           + "starting the node health script runner.");
       return null;
     }
+
+    // 健康检查脚本检测周期
+    // yarn.nodemanager.health-checker.interval-ms : 10min
     long nmCheckintervalTime = conf.getLong(
         YarnConfiguration.NM_HEALTH_CHECK_INTERVAL_MS,
         YarnConfiguration.DEFAULT_NM_HEALTH_CHECK_INTERVAL_MS);
+    //健康检查脚本超时时间
+    // yarn.nodemanager.health-checker.script.timeout-ms : 20 min
     long scriptTimeout = conf.getLong(
         YarnConfiguration.NM_HEALTH_CHECK_SCRIPT_TIMEOUT_MS,
         YarnConfiguration.DEFAULT_NM_HEALTH_CHECK_SCRIPT_TIMEOUT_MS);
+
+    // 健康检查脚本参数
+    // yarn.nodemanager.health-checker.script.opts
     String[] scriptArgs = conf.getStrings(
         YarnConfiguration.NM_HEALTH_CHECK_SCRIPT_OPTS, new String[] {});
     return new NodeHealthScriptRunner(nodeHealthScript,
