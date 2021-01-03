@@ -61,6 +61,8 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
 
   // Configuration flag for enabling/disabling draining dispatcher's events on
   // stop functionality.
+
+  // 停止标记
   private volatile boolean drainEventsOnStop = false;
 
   // Indicates all the remaining dispatcher's events on stop have been drained
@@ -74,6 +76,8 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
   // For drainEventsOnStop enabled only, block newly coming events into the
   // queue while stopping.
   private volatile boolean blockNewEvents = false;
+
+  // 通用 事件处理实例
   private final EventHandler<Event> handlerInstance = new GenericEventHandler();
 
   private Thread eventHandlingThread;
@@ -151,6 +155,9 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
   @Override
   protected void serviceInit(Configuration conf) throws Exception{
     super.serviceInit(conf);
+
+    // yarn.dispatcher.print-events-info.threshold : 5000
+    // 打印时间信息间隔 5s
     this.detailsInterval = getConfig().getInt(YarnConfiguration.
                     YARN_DISPATCHER_PRINT_EVENTS_INFO_THRESHOLD,
             YarnConfiguration.
@@ -214,8 +221,10 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
     Class<? extends Enum> type = event.getType().getDeclaringClass();
 
     try{
+      // 根据事件的类型获取对应的 EventHandler
       EventHandler handler = eventDispatchers.get(type);
       if(handler != null) {
+        // 处理事件
         handler.handle(event);
       } else {
         throw new Exception("No handler for registered for " + type);
@@ -244,12 +253,14 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
     eventDispatchers.get(eventType);
     LOG.info("Registering " + eventType + " for " + handler.getClass());
     if (registeredHandler == null) {
+      // 注册事件.
       eventDispatchers.put(eventType, handler);
     } else if (!(registeredHandler instanceof MultiListenerHandler)){
       /* for multiple listeners of an event add the multiple listener handler */
       MultiListenerHandler multiHandler = new MultiListenerHandler();
       multiHandler.addHandler(registeredHandler);
       multiHandler.addHandler(handler);
+      // 注册多handler
       eventDispatchers.put(eventType, multiHandler);
     } else {
       /* already a multilistener, just add to it */
@@ -282,6 +293,7 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
       }
       drained = false;
 
+      // 此方法所做的只是将所有事件排队到队列中
       /* all this method does is enqueue all the events onto the queue */
       int qSize = eventQueue.size();
       if (qSize != 0 && qSize % 1000 == 0
