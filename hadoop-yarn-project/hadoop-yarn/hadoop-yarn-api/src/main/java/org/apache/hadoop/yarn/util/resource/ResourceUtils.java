@@ -504,15 +504,29 @@ public class ResourceUtils {
    */
   public static Map<String, ResourceInformation> getNodeResourceInformation(
       Configuration conf) {
+
+
     if (!initializedNodeResources) {
       synchronized (ResourceUtils.class) {
+
+
         if (!initializedNodeResources) {
-          Map<String, ResourceInformation> nodeResources = initializeNodeResourceInformation(
-              conf);
+
+          Map<String, ResourceInformation> nodeResources = initializeNodeResourceInformation(conf);
+
+
           checkSpecialResources(nodeResources);
+
+
           addMandatoryResources(nodeResources);
+
+
           setAllocationForMandatoryResources(nodeResources, conf);
+
+
           readOnlyNodeResources = Collections.unmodifiableMap(nodeResources);
+
+
           initializedNodeResources = true;
         }
       }
@@ -520,12 +534,11 @@ public class ResourceUtils {
     return readOnlyNodeResources;
   }
 
-  private static Map<String, ResourceInformation> initializeNodeResourceInformation(
-      Configuration conf) {
+  private static Map<String, ResourceInformation> initializeNodeResourceInformation(Configuration conf) {
     Map<String, ResourceInformation> nodeResources = new HashMap<>();
 
-    addResourcesFileToConf(YarnConfiguration.NODE_RESOURCES_CONFIGURATION_FILE,
-        conf);
+
+    addResourcesFileToConf(YarnConfiguration.NODE_RESOURCES_CONFIGURATION_FILE, conf);
 
     for (Map.Entry<String, String> entry : conf) {
       String key = entry.getKey();

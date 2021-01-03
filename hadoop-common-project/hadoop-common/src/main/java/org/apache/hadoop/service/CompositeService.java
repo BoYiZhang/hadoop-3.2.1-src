@@ -107,7 +107,7 @@ public class CompositeService extends AbstractService {
 
 
     for (Service service : services) {
-      LOG.info("Resource Manager # serviceInit : {}  " ,service.getName());
+      LOG.info("CompositeService # serviceInit : {}  " ,service.getName());
     }
 
     for (Service service : services) {
@@ -124,6 +124,7 @@ public class CompositeService extends AbstractService {
     for (Service service : services) {
       // start the service. If this fails that service
       // will be stopped and an exception raised
+      LOG.info("CompositeService#serviceStart : "+ service.getName());
       service.start();
     }
     super.serviceStart();

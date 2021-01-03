@@ -390,6 +390,11 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     // during RM recovery
     synchronized (this.context) {
       List<NMContainerStatus> containerReports = getNMContainerStatuses();
+
+      // nodeId： 该NodeManager所在的host和对外的RPC端口号。   ==>     boyi-pro.lan:61671
+      // httpPort : 该NodeManager对外提供的HTTP端口号， ResourceManager会在界面上提供一个可直接访问NodeManager Web界面的超链接。    ==>     8042
+      //  totalResource： 该NodeManager所在节点总的可分配资源， 当前支持（ 物理） 内存和虚拟CPU两种资源， 管理员可通过参数yarn.nodemanager.resource.cpu-vcores（ 默认是8） 和yarn.nodemanager.resource.memory-mb（ 单位为MB， 默认是8192， 还可通过参数yarn.nodemanager.vmem-pmem-ratio设置物理内存和虚拟内存使用比率， 默认是2.1， 即每使用1MB物理内存， 最多可使用2.1MB虚拟内存） 配置。     ==>  <memory:8192, vCores:8>
+
       RegisterNodeManagerRequest request =
           RegisterNodeManagerRequest.newInstance(nodeId, httpPort, totalResource,
               nodeManagerVersionId, containerReports, getRunningApplications(),
@@ -412,9 +417,9 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
           request.setLogAggregationReportsForApps(logAggregationReports);
         }
       }
-      regNMResponse =
-          resourceTracker.registerNodeManager(request);
+      regNMResponse =  resourceTracker.registerNodeManager(request);
       // Make sure rmIdentifier is set before we release the lock
+      // rmIdentifier： ResourceManager的标示符（ 用于ResourceManager 重启恢复或者HA场景） ， NodeManager通过该标识符判断ApplicationMaster发送的Container来自原始的还是新启动的ResourceManager。
       this.rmIdentifier = regNMResponse.getRMIdentifier();
     }
 
@@ -449,6 +454,8 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
       }
     }
     this.registeredWithRM = true;
+
+    //  新生成的Container Token和Node Token的Master Key。
     MasterKey masterKey = regNMResponse.getContainerTokenMasterKey();
     // do this now so that its set before we start heartbeating to RM
     // It is expected that status updater is started by this point and

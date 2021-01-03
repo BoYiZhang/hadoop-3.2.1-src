@@ -343,8 +343,7 @@ public class ResourceTrackerService extends AbstractService implements
     Resource physicalResource = request.getPhysicalResource();
 
 
-    RegisterNodeManagerResponse response = recordFactory
-        .newRecordInstance(RegisterNodeManagerResponse.class);
+    RegisterNodeManagerResponse response = recordFactory.newRecordInstance(RegisterNodeManagerResponse.class);
 
     // 更新NM的版本信息
     if (!minimumNodeManagerVersion.equals("NONE")) {

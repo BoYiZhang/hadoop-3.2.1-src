@@ -344,36 +344,54 @@ public class NodeManagerHardwareUtils {
    */
   public static Resource getNodeResources(Configuration configuration) {
     Configuration conf = new Configuration(configuration);
+    // memory-mb
     String memory = ResourceInformation.MEMORY_MB.getName();
+    // vcores
     String vcores = ResourceInformation.VCORES.getName();
 
     Resource ret = Resource.newInstance(0, 0);
-    Map<String, ResourceInformation> resourceInformation =
-        ResourceUtils.getNodeResourceInformation(conf);
-    for (Map.Entry<String, ResourceInformation> entry : resourceInformation
-        .entrySet()) {
+
+    Map<String, ResourceInformation> resourceInformation = ResourceUtils.getNodeResourceInformation(conf);
+
+    for (Map.Entry<String, ResourceInformation> entry : resourceInformation .entrySet()) {
+
       ret.setResourceInformation(entry.getKey(), entry.getValue());
+
       LOG.debug("Setting key " + entry.getKey() + " to " + entry.getValue());
     }
     if (resourceInformation.containsKey(memory)) {
+
       Long value = resourceInformation.get(memory).getValue();
+
       if (value > Integer.MAX_VALUE) {
         throw new YarnRuntimeException("Value '" + value
             + "' for resource memory is more than the maximum for an integer.");
       }
+
       ResourceInformation memResInfo = resourceInformation.get(memory);
+
       if(memResInfo.getValue() == 0) {
+
         ret.setMemorySize(getContainerMemoryMB(conf));
+
         LOG.debug("Set memory to " + ret.getMemorySize());
       }
     }
     if (resourceInformation.containsKey(vcores)) {
+
+
       Long value = resourceInformation.get(vcores).getValue();
+
+
       if (value > Integer.MAX_VALUE) {
         throw new YarnRuntimeException("Value '" + value
             + "' for resource vcores is more than the maximum for an integer.");
       }
+
+      // name: vcores, units: , type: COUNTABLE, value: 0, minimum allocation: 1, maximum allocation: 4
       ResourceInformation vcoresResInfo = resourceInformation.get(vcores);
+
+
       if(vcoresResInfo.getValue() == 0) {
         ret.setVirtualCores(getVCores(conf));
         LOG.debug("Set vcores to " + ret.getVirtualCores());

@@ -122,21 +122,45 @@ public class NodeManager extends CompositeService
        LoggerFactory.getLogger(NodeManager.class);
   private static long nmStartupTime = System.currentTimeMillis();
   protected final NodeManagerMetrics metrics = NodeManagerMetrics.create();
+
   private JvmPauseMonitor pauseMonitor;
+
+  // 权限控制
   private ApplicationACLsManager aclsManager;
+
+  // 健康检查
   private NodeHealthCheckerService nodeHealthChecker;
+
+  // 标签管理
   private NodeLabelsProvider nodeLabelsProvider;
+
+  // 扩展属性
   private NodeAttributesProvider nodeAttributesProvider;
+
+  // 文件存储 用于健康价差
   private LocalDirsHandlerService dirsHandler;
+
+  // 上线问
   private Context context;
+
+  // event 处理
   private AsyncDispatcher dispatcher;
+
+  // 核心大佬 :协作共同管理运行在该节点上的所有Container
   private ContainerManagerImpl containerManager;
+
   // the NM collector service is set only if the timeline service v.2 is enabled
   private NMCollectorService nmCollectorService;
+
+  // 狠心大佬:  NodeStatusUpdater是NodeManager与ResourceManager通信的唯一通道。
   private NodeStatusUpdater nodeStatusUpdater;
+
   private AtomicBoolean resyncingWithRM = new AtomicBoolean(false);
+
+  // 资源监控
   private NodeResourceMonitor nodeResourceMonitor;
   private static CompositeServiceShutdownHook nodeManagerShutdownHook;
+  // 存储服务.
   private NMStateStoreService nmStore = null;
   
   private AtomicBoolean isStopping = new AtomicBoolean(false);
@@ -144,6 +168,8 @@ public class NodeManager extends CompositeService
   private boolean shouldExitOnShutdownEvent = false;
 
   private NMLogAggregationStatusTracker nmLogAggregationStatusTracker;
+
+
   /**
    * Default Container State transition listener.
    */
@@ -252,8 +278,10 @@ public class NodeManager extends CompositeService
       ContainerExecutor exec, DeletionService del,
       NodeStatusUpdater nodeStatusUpdater, ApplicationACLsManager aclsManager,
       LocalDirsHandlerService dirsHandler) {
-    return new ContainerManagerImpl(context, exec, del, nodeStatusUpdater,
-        metrics, dirsHandler);
+    // 这个得关注一下 : Service org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManagerImpl in state org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManagerImpl: NOTINITED
+    ContainerManagerImpl containerManager = new ContainerManagerImpl(context, exec, del, nodeStatusUpdater, metrics, dirsHandler);
+
+    return containerManager;
   }
 
   protected NMCollectorService createNMCollectorService(Context ctxt) {
@@ -384,6 +412,7 @@ public class NodeManager extends CompositeService
   }
 
   @Override
+  // 初始化操作, 加载各种服务....
   protected void serviceInit(Configuration conf) throws Exception {
     UserGroupInformation.setConfiguration(conf);
     rmWorkPreservingRestartEnabled = conf.getBoolean(YarnConfiguration
@@ -422,18 +451,26 @@ public class NodeManager extends CompositeService
     pluginManager.initialize(context);
     ((NMContext)context).setResourcePluginManager(pluginManager);
 
+    // 创建 ContainerExecutor =>   yarn.nodemanager.container-executor.class : DefaultContainerExecutor
     ContainerExecutor exec = createContainerExecutor(conf);
+
+
     try {
+      // 执行初始化操作
       exec.init(context);
     } catch (IOException e) {
       throw new YarnRuntimeException("Failed to initialize container executor", e);
-    }    
+    }
+
     DeletionService del = createDeletionService(exec);
     addService(del);
 
     // NodeManager level dispatcher
+    // dispatcher : AsyncDispatcher
     this.dispatcher = createNMDispatcher();
 
+
+    //构建健康检查服务 Service org.apache.hadoop.yarn.server.nodemanager.NodeHealthCheckerService in state org.apache.hadoop.yarn.server.nodemanager.NodeHealthCheckerService: NOTINITED
     nodeHealthChecker =
         new NodeHealthCheckerService(
             getNodeHealthScriptRunner(conf), dirsHandler);
@@ -443,39 +480,42 @@ public class NodeManager extends CompositeService
     ((NMContext)context).setContainerExecutor(exec);
     ((NMContext)context).setDeletionService(del);
 
-    nodeStatusUpdater =
-        createNodeStatusUpdater(context, dispatcher, nodeHealthChecker);
+    // node 状态更细 : org.apache.hadoop.yarn.server.nodemanager.NodeStatusUpdaterImpl
+    nodeStatusUpdater = createNodeStatusUpdater(context, dispatcher, nodeHealthChecker);
 
+    // node label 处理 : null ??
     nodeLabelsProvider = createNodeLabelsProvider(conf);
     if (nodeLabelsProvider != null) {
       addIfService(nodeLabelsProvider);
       nodeStatusUpdater.setNodeLabelsProvider(nodeLabelsProvider);
     }
 
+    // node 属性
     nodeAttributesProvider = createNodeAttributesProvider(conf);
     if (nodeAttributesProvider != null) {
       addIfService(nodeAttributesProvider);
       nodeStatusUpdater.setNodeAttributesProvider(nodeAttributesProvider);
     }
 
+    // node 资源监控服务 : org.apache.hadoop.yarn.server.nodemanager.NodeResourceMonitorImpl: NOTINITED
     nodeResourceMonitor = createNodeResourceMonitor();
     addService(nodeResourceMonitor);
     ((NMContext) context).setNodeResourceMonitor(nodeResourceMonitor);
 
-    containerManager =
-        createContainerManager(context, exec, del, nodeStatusUpdater,
-        this.aclsManager, dirsHandler);
+    // 容器管理服务...
+    containerManager = createContainerManager(context, exec, del, nodeStatusUpdater, this.aclsManager, dirsHandler);
+
     addService(containerManager);
     ((NMContext) context).setContainerManager(containerManager);
 
-    this.nmLogAggregationStatusTracker = createNMLogAggregationStatusTracker(
-        context);
+    //日志汇聚服务???
+    this.nmLogAggregationStatusTracker = createNMLogAggregationStatusTracker(context);
     addService(nmLogAggregationStatusTracker);
     ((NMContext)context).setNMLogAggregationStatusTracker(
         this.nmLogAggregationStatusTracker);
 
-    WebServer webServer = createWebServer(context, containerManager
-        .getContainersMonitor(), this.aclsManager, dirsHandler);
+    // web 通讯服务:
+    WebServer webServer = createWebServer(context, containerManager.getContainersMonitor(), this.aclsManager, dirsHandler);
     addService(webServer);
     ((NMContext) context).setWebServer(webServer);
 
@@ -483,14 +523,19 @@ public class NodeManager extends CompositeService
         new OpportunisticContainerAllocator(
             context.getContainerTokenSecretManager()));
 
+
+
     dispatcher.register(ContainerManagerEventType.class, containerManager);
     dispatcher.register(NodeManagerEventType.class, this);
     addService(dispatcher);
 
+
+    // 暂停监控服务 ???
     pauseMonitor = new JvmPauseMonitor();
     addService(pauseMonitor);
     metrics.getJvmMetrics().setPauseMonitor(pauseMonitor);
 
+    // 度量系统....
     DefaultMetricsSystem.initialize("NodeManager");
 
     if (YarnConfiguration.timelineServiceV2Enabled(conf)) {
@@ -504,6 +549,7 @@ public class NodeManager extends CompositeService
     ((NMContext) context).setNodeStatusUpdater(nodeStatusUpdater);
     nmStore.setNodeStatusUpdater(nodeStatusUpdater);
 
+    // 安全服务 ???
     // Do secure login before calling init for added services.
     try {
       doSecureLogin();
@@ -965,13 +1011,21 @@ public class NodeManager extends CompositeService
         ShutdownHookManager.get().removeShutdownHook(nodeManagerShutdownHook);
       }
 
+      // 钩子...
       nodeManagerShutdownHook = new CompositeServiceShutdownHook(this);
+
       ShutdownHookManager.get().addShutdownHook(nodeManagerShutdownHook,
                                                 SHUTDOWN_HOOK_PRIORITY);
+
       // System exit should be called only when NodeManager is instantiated from
       // main() funtion
       this.shouldExitOnShutdownEvent = true;
+
+      // 执行初始化
       this.init(conf);
+
+
+      // 启动....
       this.start();
     } catch (Throwable t) {
       LOG.error("Error starting NodeManager", t);
@@ -1048,9 +1102,13 @@ public class NodeManager extends CompositeService
     Thread.setDefaultUncaughtExceptionHandler(new YarnUncaughtExceptionHandler());
     StringUtils.startupShutdownMessage(NodeManager.class, args, LOG);
     @SuppressWarnings("resource")
+    // 构建NodeManager
     NodeManager nodeManager = new NodeManager();
+    // 获取配置
     Configuration conf = new YarnConfiguration();
+    //解析配置
     new GenericOptionsParser(conf, args);
+    // 初始化&启动
     nodeManager.initAndStartNodeManager(conf, false);
   }
 

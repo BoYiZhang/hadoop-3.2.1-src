@@ -33,6 +33,8 @@ import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import sun.rmi.runtime.Log;
+
 /**
  * This is the base implementation class for services.
  */
@@ -154,13 +156,18 @@ public abstract class AbstractService implements Service {
       throw new ServiceStateException("Cannot initialize service "
                                       + getName() + ": null configuration");
     }
+    // 初始化...
     if (isInState(STATE.INITED)) {
+      LOG.info("isInState : " + isInState(STATE.INITED) );
       return;
     }
+    LOG.info("stateChangeLock:" + stateChangeLock) ;
+    // 同步代码块....
     synchronized (stateChangeLock) {
       if (enterState(STATE.INITED) != STATE.INITED) {
         setConfig(conf);
         try {
+          // 构建初始化
           serviceInit(config);
           if (isInState(STATE.INITED)) {
             //if the service ended up here during init,
@@ -191,10 +198,14 @@ public abstract class AbstractService implements Service {
       if (stateModel.enterState(STATE.STARTED) != STATE.STARTED) {
         try {
           startTime = System.currentTimeMillis();
+
+          // 启动服务
           serviceStart();
+
           if (isInState(STATE.STARTED)) {
             //if the service started (and isn't now in a later state), notify
             LOG.debug("Service {} is started", getName());
+            // 启动监听功能...
             notifyListeners();
           }
         } catch (Exception e) {
