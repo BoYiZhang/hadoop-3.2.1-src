@@ -44,7 +44,7 @@ public class EventDispatcher<T extends Event> extends
   // 他也有一个事件阻塞队列
   private final BlockingQueue<T> eventQueue =  new LinkedBlockingDeque<>();
 
-  // 处理事件的队列
+  // 处理事件的线程
   private final Thread eventProcessor;
 
   // 线程应该停止与否的标志

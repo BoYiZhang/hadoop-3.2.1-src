@@ -468,8 +468,9 @@ public class ResourceManager extends CompositeService
   }
 
   protected ResourceScheduler createScheduler() {
-    String schedulerClassName = conf.get(YarnConfiguration.RM_SCHEDULER,
-        YarnConfiguration.DEFAULT_RM_SCHEDULER);
+    // 容量调度器.
+    // org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler
+    String schedulerClassName = conf.get(YarnConfiguration.RM_SCHEDULER, YarnConfiguration.DEFAULT_RM_SCHEDULER);
     LOG.info("Using Scheduler: " + schedulerClassName);
     try {
       Class<?> schedulerClazz = Class.forName(schedulerClassName);
@@ -804,8 +805,9 @@ public class ResourceManager extends CompositeService
 
 
       // Initialize the scheduler
-      // ResourceScheduler 调度器的创建,他的子类之一就是FairScheduler
+      // ResourceScheduler 调度器的创建,他的子类之一就是CapacityScheduler
       scheduler = createScheduler();
+
       scheduler.setRMContext(rmContext);
       addIfService(scheduler);
       rmContext.setScheduler(scheduler);
