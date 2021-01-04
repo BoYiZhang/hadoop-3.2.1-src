@@ -181,8 +181,10 @@ public class DirectoryCollection {
       long utilizationSpaceCutOff) {
     conf = new YarnConfiguration();
     try {
-      String diskValidatorName = conf.get(YarnConfiguration.DISK_VALIDATOR,
-          YarnConfiguration.DEFAULT_DISK_VALIDATOR);
+      // yarn.nodemanager.disk-validator : basic
+      String diskValidatorName = conf.get(YarnConfiguration.DISK_VALIDATOR,  YarnConfiguration.DEFAULT_DISK_VALIDATOR);
+
+      // 构建实例 DiskValidatorFactory
       diskValidator = DiskValidatorFactory.getInstance(diskValidatorName);
       LOG.info("Disk Validator '" + diskValidatorName + "' is loaded.");
     } catch (Exception e) {
@@ -190,23 +192,26 @@ public class DirectoryCollection {
     }
 
     localDirs = new CopyOnWriteArrayList<>(dirs);
+
     errorDirs = new CopyOnWriteArrayList<>();
+
     fullDirs = new CopyOnWriteArrayList<>();
+
     directoryErrorInfo = new ConcurrentHashMap<>();
 
     ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
     this.readLock = lock.readLock();
     this.writeLock = lock.writeLock();
 
-    diskUtilizationPercentageCutoffHigh = Math.max(0.0F, Math.min(100.0F,
-        utilizationPercentageCutOffHigh));
-    diskUtilizationPercentageCutoffLow = Math.max(0.0F, Math.min(
-        diskUtilizationPercentageCutoffHigh, utilizationPercentageCutOffLow));
-    diskUtilizationSpaceCutoff =
-        utilizationSpaceCutOff < 0 ? 0 : utilizationSpaceCutOff;
+    diskUtilizationPercentageCutoffHigh = Math.max(0.0F, Math.min(100.0F, utilizationPercentageCutOffHigh));
 
-    dirsChangeListeners = Collections.newSetFromMap(
-        new ConcurrentHashMap<DirsChangeListener, Boolean>());
+
+    diskUtilizationPercentageCutoffLow = Math.max(0.0F, Math.min(  diskUtilizationPercentageCutoffHigh, utilizationPercentageCutOffLow));
+
+    diskUtilizationSpaceCutoff =  utilizationSpaceCutOff < 0 ? 0 : utilizationSpaceCutOff;
+
+    dirsChangeListeners = Collections.newSetFromMap( new ConcurrentHashMap<DirsChangeListener, Boolean>());
   }
 
   void registerDirsChangeListener(
@@ -386,8 +391,7 @@ public class DirectoryCollection {
 
     // move testDirs out of any lock as it could wait for very long time in
     // case of busy IO
-    Map<String, DiskErrorInformation> dirsFailedCheck = testDirs(allLocalDirs,
-        preCheckGoodDirs);
+    Map<String, DiskErrorInformation> dirsFailedCheck = testDirs(allLocalDirs,  preCheckGoodDirs);
 
     this.writeLock.lock();
     try {

@@ -69,8 +69,7 @@ public class LocalDirAllocator {
   //A Map from the config item names like "mapred.local.dir"
   //to the instance of the AllocatorPerContext. This
   //is a static object to make sure there exists exactly one instance per JVM
-  private static Map <String, AllocatorPerContext> contexts = 
-                 new TreeMap<String, AllocatorPerContext>();
+  private static Map <String, AllocatorPerContext> contexts =   new TreeMap<String, AllocatorPerContext>();
   private String contextCfgItemName;
 
   /** Used when size of file to be allocated is unknown. */

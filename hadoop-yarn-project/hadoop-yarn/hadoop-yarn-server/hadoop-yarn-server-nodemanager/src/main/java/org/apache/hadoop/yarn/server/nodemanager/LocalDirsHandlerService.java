@@ -54,80 +54,114 @@ import org.apache.hadoop.yarn.server.nodemanager.metrics.NodeManagerMetrics;
  */
 public class LocalDirsHandlerService extends AbstractService {
 
-  private static final Logger LOG =
-       LoggerFactory.getLogger(LocalDirsHandlerService.class);
+  private static final Logger LOG = LoggerFactory.getLogger(LocalDirsHandlerService.class);
 
+  // 磁盘容量不足异常提示信息
   private static final String diskCapacityExceededErrorMsg =  "usable space is below configured utilization percentage/no more usable space";
 
   /**
-   * Good local directories, use internally,
-   * initial value is the same as NM_LOCAL_DIRS.
+   * 可用的本地目录,内部使用, 和 NM_LOCAL_DIRS同值.
+   * Good local directories, use internally, initial value is the same as NM_LOCAL_DIRS.
+   *  yarn.nodemanager.good-local-dirs
    */
   @Private
-  static final String NM_GOOD_LOCAL_DIRS =
-      YarnConfiguration.NM_PREFIX + "good-local-dirs";
+  static final String NM_GOOD_LOCAL_DIRS = YarnConfiguration.NM_PREFIX + "good-local-dirs";
 
   /**
-   * Good log directories, use internally,
-   * initial value is the same as NM_LOG_DIRS.
+   *
+   * 可用的日志目录,内部使用和 NM_LOG_DIRS 同值
+   * Good log directories, use internally, initial value is the same as NM_LOG_DIRS.
+   *
+   * yarn.nodemanager.good-log-dirs
    */
   @Private
-  static final String NM_GOOD_LOG_DIRS =
-      YarnConfiguration.NM_PREFIX + "good-log-dirs";
+  static final String NM_GOOD_LOG_DIRS =  YarnConfiguration.NM_PREFIX + "good-log-dirs";
 
+  // 用于计划磁盘运行状况监视代码执行的计时器
   /** Timer used to schedule disk health monitoring code execution */
   private Timer dirsHandlerScheduler;
+  // 监控周期...
   private long diskHealthCheckInterval;
+
+  // 磁盘健康检查是否启用...
   private boolean isDiskHealthCheckerEnabled;
+
   /**
-   * Minimum fraction of disks to be healthy for the node to be healthy in
-   * terms of disks. This applies to nm-local-dirs and nm-log-dirs.
+   * 最小可用磁盘的比例.
+   * Minimum fraction of disks to be healthy for the node to be healthy in terms of disks.
+   * This applies to nm-local-dirs and nm-log-dirs.
+   *
    */
   private float minNeededHealthyDisksFactor;
 
+  // TimerTask 实例
   private MonitoringTimerTask monitoringTimerTask;
 
+  // 存储 本地化文件的目录
   /** Local dirs to store localized files in */
   private DirectoryCollection localDirs = null;
 
+  // 存储 container 日志的目录.
   /** storage for container logs*/
   private DirectoryCollection logDirs = null;
 
   /**
+   * 每个人都应该通过共用的 LocalDirAllocator 去 read/write  YarnConfiguration#NM_LOCAL_DIRS 文件
+   *
    * Everybody should go through this LocalDirAllocator object for read/write
    * of any local path corresponding to {@link YarnConfiguration#NM_LOCAL_DIRS}
    * instead of creating his/her own LocalDirAllocator objects
    */ 
   private LocalDirAllocator localDirsAllocator;
+
   /**
+   * 每个人都应该通过共用的 LocalDirAllocator 去 read/write  YarnConfiguration#NM_LOG_DIRS 文件
+   *
    * Everybody should go through this LocalDirAllocator object for read/write
    * of any local path corresponding to {@link YarnConfiguration#NM_LOG_DIRS}
    * instead of creating his/her own LocalDirAllocator objects
    */ 
   private LocalDirAllocator logDirsAllocator;
 
+  // 磁盘健康检查最后一次运行的时间
   /** when disk health checking code was last run */
   private long lastDisksCheckTime;
-  
+
+  // 文件类型
   private static String FILE_SCHEME = "file";
 
+  // 度量信息
   private NodeManagerMetrics nodeManagerMetrics = null;
 
   /**
-   * Class which is used by the {@link Timer} class to periodically execute the
-   * disks' health checker code.
+   * 定时执行磁盘健康检查的代码
+   *
+   * Class which is used by the {@link Timer} class to periodically execute the disks' health checker code.
    */
   private final class MonitoringTimerTask extends TimerTask {
 
     public MonitoringTimerTask(Configuration conf) throws YarnRuntimeException {
+
+      // 磁盘被标记为脱机之后可以使用的最大磁盘空间百分比。 值的范围可以从0.0到100.0。
+      // 如果该值大于或等于100，则NM将检查是否有完整的磁盘。 这适用于nm-local-dirs和nm-log-dirs。
+
+      // yarn.nodemanager.disk-health-checker.max-disk-utilization-per-disk-percentage : 90.0F
       float highUsableSpacePercentagePerDisk =
           conf.getFloat(
             YarnConfiguration.NM_MAX_PER_DISK_UTILIZATION_PERCENTAGE,
             YarnConfiguration.DEFAULT_NM_MAX_PER_DISK_UTILIZATION_PERCENTAGE);
+
+      //将脱机磁盘标记为联机时使用的磁盘空间的低阈值百分比。
+      //值的范围可以从0.0到100.0。 该值不应超过NM_MAX_PER_DISK_UTILIZATION_PERCENTAGE。
+      // 如果其值大于NM_MAX_PER_DISK_UTILIZATION_PERCENTAGE，
+      // 则将其设置为与NM_MAX_PER_DISK_UTILIZATION_PERCENTAGE相同的值。
+      //这适用于nm-local-dirs和nm-log-dirs。
+      // yarn.nodemanager.disk-health-checker.disk-utilization-watermark-low-per-disk-percentage : 90.0F
       float lowUsableSpacePercentagePerDisk =
           conf.getFloat(
               YarnConfiguration.NM_WM_LOW_PER_DISK_UTILIZATION_PERCENTAGE,
               highUsableSpacePercentagePerDisk);
+
       if (lowUsableSpacePercentagePerDisk > highUsableSpacePercentagePerDisk) {
         LOG.warn("Using " + YarnConfiguration.
             NM_MAX_PER_DISK_UTILIZATION_PERCENTAGE + " as " +
@@ -137,39 +171,54 @@ public class LocalDirsHandlerService extends AbstractService {
             " is not configured properly.");
         lowUsableSpacePercentagePerDisk = highUsableSpacePercentagePerDisk;
       }
+
+
+      // 最小空闲磁盘大小
+      // yarn.nodemanager.disk-health-checker.min-free-space-per-disk-mb : 0
       long minFreeSpacePerDiskMB =
           conf.getLong(YarnConfiguration.NM_MIN_PER_DISK_FREE_SPACE_MB,
             YarnConfiguration.DEFAULT_NM_MIN_PER_DISK_FREE_SPACE_MB);
+
+      // 文件存储目录
+      // localDirs : 0 -> /opt/workspace/apache/hadoop-3.2.1-src/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/target/tmp/nm-local-dir
       localDirs =
           new DirectoryCollection(
-              validatePaths(conf
-                  .getTrimmedStrings(YarnConfiguration.NM_LOCAL_DIRS)),
-              highUsableSpacePercentagePerDisk,
-              lowUsableSpacePercentagePerDisk,
-              minFreeSpacePerDiskMB);
-      logDirs =
-          new DirectoryCollection(
-              validatePaths(conf
-                  .getTrimmedStrings(YarnConfiguration.NM_LOG_DIRS)),
+              // yarn.nodemanager.local-dirs : 默认路径: /tmp/nm-local-dir
+              validatePaths(conf.getTrimmedStrings(YarnConfiguration.NM_LOCAL_DIRS)),
               highUsableSpacePercentagePerDisk,
               lowUsableSpacePercentagePerDisk,
               minFreeSpacePerDiskMB);
 
+      // 日志存储目录
+      // localDirs : 0 -> ${yarn.log.dir}/userlogs
+      logDirs = new DirectoryCollection(
+              // yarn.nodemanager.log-dirs 默认: /tmp/logs
+              validatePaths(conf .getTrimmedStrings(YarnConfiguration.NM_LOG_DIRS)),
+              highUsableSpacePercentagePerDisk,
+              lowUsableSpacePercentagePerDisk,
+              minFreeSpacePerDiskMB);
+
+      // yarn.nodemanager.local-dirs:/opt/workspace/apache/hadoop-3.2.1-src/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/target/tmp/nm-local-dir
       String local = conf.get(YarnConfiguration.NM_LOCAL_DIRS);
-      conf.set(NM_GOOD_LOCAL_DIRS,
-          (local != null) ? local : "");
+
+      // yarn.nodemanager.good-local-dirs
+      conf.set(NM_GOOD_LOCAL_DIRS, (local != null) ? local : "");
+      // yarn.nodemanager.disk-validator   :  basic
       String diskValidatorName = conf.get(YarnConfiguration.DISK_VALIDATOR,
               YarnConfiguration.DEFAULT_DISK_VALIDATOR);
       try {
-        DiskValidator diskValidator =
-            DiskValidatorFactory.getInstance(diskValidatorName);
-        localDirsAllocator = new LocalDirAllocator(
-                NM_GOOD_LOCAL_DIRS, diskValidator);
+        //构建  DiskValidator
+        DiskValidator diskValidator = DiskValidatorFactory.getInstance(diskValidatorName);
+
+        // 构建文件存储 LocalDirAllocator : yarn.nodemanager.good-local-dirs
+        localDirsAllocator = new LocalDirAllocator( NM_GOOD_LOCAL_DIRS, diskValidator);
+
+        //  yarn.nodemanager.log-dirs 默认: /tmp/logs
         String log = conf.get(YarnConfiguration.NM_LOG_DIRS);
-        conf.set(NM_GOOD_LOG_DIRS,
-                (log != null) ? log : "");
-        logDirsAllocator = new LocalDirAllocator(
-                NM_GOOD_LOG_DIRS, diskValidator);
+        conf.set(NM_GOOD_LOG_DIRS,  (log != null) ? log : "");
+
+        // 构建日志存储 LocalDirAllocator : yarn.nodemanager.good-local-dirs
+        logDirsAllocator = new LocalDirAllocator( NM_GOOD_LOG_DIRS, diskValidator);
       } catch (DiskErrorException e) {
         throw new YarnRuntimeException(
             "Failed to create DiskValidator of type " + diskValidatorName + "!",
@@ -205,28 +254,45 @@ public class LocalDirsHandlerService extends AbstractService {
   protected void serviceInit(Configuration config) throws Exception {
     // Clone the configuration as we may do modifications to dirs-list
     Configuration conf = new Configuration(config);
-    diskHealthCheckInterval = conf.getLong(
-        YarnConfiguration.NM_DISK_HEALTH_CHECK_INTERVAL_MS,
-        YarnConfiguration.DEFAULT_NM_DISK_HEALTH_CHECK_INTERVAL_MS);
+
+    // yarn.nodemanager.disk-health-checker.interval-ms : 2 * 60 * 1000  = 2min
+    diskHealthCheckInterval = conf.getLong(YarnConfiguration.NM_DISK_HEALTH_CHECK_INTERVAL_MS, YarnConfiguration.DEFAULT_NM_DISK_HEALTH_CHECK_INTERVAL_MS);
+
+
     monitoringTimerTask = new MonitoringTimerTask(conf);
-    isDiskHealthCheckerEnabled = conf.getBoolean(
-        YarnConfiguration.NM_DISK_HEALTH_CHECK_ENABLE, true);
-    minNeededHealthyDisksFactor = conf.getFloat(
-        YarnConfiguration.NM_MIN_HEALTHY_DISKS_FRACTION,
-        YarnConfiguration.DEFAULT_NM_MIN_HEALTHY_DISKS_FRACTION);
+
+    // 启用磁盘健康检查 : 默认启用
+    // yarn.nodemanager.disk-health-checker.enable  : true
+    isDiskHealthCheckerEnabled = conf.getBoolean(  YarnConfiguration.NM_DISK_HEALTH_CHECK_ENABLE, true);
+
+    // 阈值
+    //  yarn.nodemanager.disk-health-checker.min-healthy-disks: 0.25f
+    minNeededHealthyDisksFactor = conf.getFloat(  YarnConfiguration.NM_MIN_HEALTHY_DISKS_FRACTION, YarnConfiguration.DEFAULT_NM_MIN_HEALTHY_DISKS_FRACTION);
+
+    // 更新最后一次检测时间.
     lastDisksCheckTime = System.currentTimeMillis();
     super.serviceInit(conf);
 
+
     FileContext localFs;
     try {
+      // 使用的是本地模式
+      // workingDir : file:/opt/workspace/apache/hadoop-3.2.1-src/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager
       localFs = FileContext.getLocalFSFileContext(config);
+
     } catch (IOException e) {
       throw new YarnRuntimeException("Unable to get the local filesystem", e);
     }
+    // 权限
     FsPermission perm = new FsPermission((short)0755);
+
+    // 设置目录
     boolean createSucceeded = localDirs.createNonExistentDirs(localFs, perm);
+
     createSucceeded &= logDirs.createNonExistentDirs(localFs, perm);
+
     if (!createSucceeded) {
+
       updateDirsAfterTest();
     }
 
@@ -495,10 +561,8 @@ public class LocalDirsHandlerService extends AbstractService {
 
   private void checkDirs() {
     boolean disksStatusChange = false;
-    Set<String> failedLocalDirsPreCheck =
-        new HashSet<String>(localDirs.getFailedDirs());
-    Set<String> failedLogDirsPreCheck =
-        new HashSet<String>(logDirs.getFailedDirs());
+    Set<String> failedLocalDirsPreCheck = new HashSet<String>(localDirs.getFailedDirs());
+    Set<String> failedLogDirsPreCheck =  new HashSet<String>(logDirs.getFailedDirs());
 
     if (localDirs.checkDirs()) {
       disksStatusChange = true;
@@ -507,28 +571,25 @@ public class LocalDirsHandlerService extends AbstractService {
       disksStatusChange = true;
     }
 
-    Set<String> failedLocalDirsPostCheck =
-        new HashSet<String>(localDirs.getFailedDirs());
-    Set<String> failedLogDirsPostCheck =
-        new HashSet<String>(logDirs.getFailedDirs());
+    Set<String> failedLocalDirsPostCheck =  new HashSet<String>(localDirs.getFailedDirs());
+
+    Set<String> failedLogDirsPostCheck = new HashSet<String>(logDirs.getFailedDirs());
 
     boolean disksFailed = false;
     boolean disksTurnedGood = false;
 
-    disksFailed =
-        disksTurnedBad(failedLocalDirsPreCheck, failedLocalDirsPostCheck);
-    disksTurnedGood =
-        disksTurnedGood(failedLocalDirsPreCheck, failedLocalDirsPostCheck);
+    disksFailed = disksTurnedBad(failedLocalDirsPreCheck, failedLocalDirsPostCheck);
 
-    // skip check if we have new failed or good local dirs since we're going to
-    // log anyway
+    disksTurnedGood = disksTurnedGood(failedLocalDirsPreCheck, failedLocalDirsPostCheck);
+
+    // skip check if we have new failed or good local dirs since we're going to log anyway
+
     if (!disksFailed) {
-      disksFailed =
-          disksTurnedBad(failedLogDirsPreCheck, failedLogDirsPostCheck);
+      disksFailed =  disksTurnedBad(failedLogDirsPreCheck, failedLogDirsPostCheck);
     }
+
     if (!disksTurnedGood) {
-      disksTurnedGood =
-          disksTurnedGood(failedLogDirsPreCheck, failedLogDirsPostCheck);
+      disksTurnedGood = disksTurnedGood(failedLogDirsPreCheck, failedLogDirsPostCheck);
     }
 
     logDiskStatus(disksFailed, disksTurnedGood);
