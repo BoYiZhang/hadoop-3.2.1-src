@@ -15,4 +15,21 @@
 -->
 
 <configuration>
+
+    <property>
+        <name>yarn.nodemanager.resource.memory-mb</name>
+        <value>104857600</value>
+    </property>
+
+    <property>
+        <name>yarn.nodemanager.resource.cpu-vcores</name>
+        <value>16</value>
+    </property>
+
+    <property>
+        <name>yarn.nodemanager.resource.detect-hardware-capabilities</name>
+        <value>true</value>
+    </property>
+
+
 </configuration>
