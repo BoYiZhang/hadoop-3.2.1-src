@@ -231,9 +231,11 @@ public class ResourceCalculatorPlugin extends Configured {
    */
   public static ResourceCalculatorPlugin getNodeResourceMonitorPlugin(
       Configuration conf) {
+
     Class<? extends ResourceCalculatorPlugin> clazz = conf.getClass(
         YarnConfiguration.NM_MON_RESOURCE_CALCULATOR, null,
         ResourceCalculatorPlugin.class);
+
     return ResourceCalculatorPlugin.getResourceCalculatorPlugin(clazz, conf);
   }
 

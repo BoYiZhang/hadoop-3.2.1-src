@@ -10,7 +10,7 @@ import org.junit.Test;
 public class NodeManagerTest {
 
     @Test
-    public void testResourceManager() throws Exception {
+    public void testNodeManager() throws Exception {
         NodeManager.main(new String[]{});
 
 

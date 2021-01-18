@@ -169,11 +169,15 @@ public class ResourceUtils {
   private static void setAllocationForMandatoryResources(
       Map<String, ResourceInformation> res, Configuration conf) {
     ResourceInformation mem = res.get(ResourceInformation.MEMORY_MB.getName());
+    // yarn.resource-types.memory-mb.minimum-allocation 如果为-1 这代表没有配置 使用 下面的值:
+    // yarn.scheduler.minimum-allocation-mb : 1024
     mem.setMinimumAllocation(getAllocation(conf,
         YarnConfiguration.RESOURCE_TYPES + "." +
             mem.getName() + MINIMUM_ALLOCATION,
         YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB,
         YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_MB));
+    // yarn.resource-types.memory-mb.maximum-allocation 如果为-1 这代表没有配置 使用 下面的值:
+    // yarn.scheduler.maximum-allocation-mb : 8192
     mem.setMaximumAllocation(getAllocation(conf,
         YarnConfiguration.RESOURCE_TYPES + "." +
             mem.getName() + MAXIMUM_ALLOCATION,
@@ -181,24 +185,30 @@ public class ResourceUtils {
         YarnConfiguration.DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_MB));
 
     ResourceInformation cpu = res.get(ResourceInformation.VCORES.getName());
-
+    // yarn.resource-types.vcores.minimum-allocation 如果为-1 这代表没有配置 使用 下面的值:
+    // yarn.scheduler.minimum-allocation-vcores : 1
     cpu.setMinimumAllocation(getAllocation(conf,
         YarnConfiguration.RESOURCE_TYPES + "." +
             cpu.getName() + MINIMUM_ALLOCATION,
         YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES,
         YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES));
+
+    // yarn.resource-types.vcores.maximum-allocation 如果为-1 这代表没有配置 使用 下面的值:
+    //yarn.scheduler.maximum-allocation-vcores : 4
     cpu.setMaximumAllocation(getAllocation(conf,
         YarnConfiguration.RESOURCE_TYPES + "." +
         cpu.getName() + MAXIMUM_ALLOCATION,
         YarnConfiguration.RM_SCHEDULER_MAXIMUM_ALLOCATION_VCORES,
         YarnConfiguration.DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_VCORES));
+
+
   }
 
   private static long getAllocation(Configuration conf,
       String resourceTypesKey, String schedulerKey, long schedulerDefault) {
     long value = conf.getLong(resourceTypesKey, -1L);
     if (value == -1) {
-      LOG.debug("Mandatory Resource '" + resourceTypesKey + "' is not "
+      LOG.info("Mandatory Resource '" + resourceTypesKey + "' is not "
           + "configured in resource-types config file. Setting allocation "
           + "specified using '" + schedulerKey + "'");
       value = conf.getLong(schedulerKey, schedulerDefault);
@@ -509,9 +519,10 @@ public class ResourceUtils {
     if (!initializedNodeResources) {
       synchronized (ResourceUtils.class) {
 
-
+        // 第一次加载
         if (!initializedNodeResources) {
 
+          // 获取配置
           Map<String, ResourceInformation> nodeResources = initializeNodeResourceInformation(conf);
 
 
@@ -520,7 +531,10 @@ public class ResourceUtils {
 
           addMandatoryResources(nodeResources);
 
-
+          //    Mandatory Resource 'yarn.resource-types.memory-mb.minimum-allocation' is not configured in resource-types config file. Setting allocation specified using 'yarn.scheduler.minimum-allocation-mb'
+          //    Mandatory Resource 'yarn.resource-types.memory-mb.maximum-allocation' is not configured in resource-types config file. Setting allocation specified using 'yarn.scheduler.maximum-allocation-mb'
+          //    Mandatory Resource 'yarn.resource-types.vcores.minimum-allocation' is not configured in resource-types config file. Setting allocation specified using 'yarn.scheduler.minimum-allocation-vcores'
+          //    Mandatory Resource 'yarn.resource-types.vcores.maximum-allocation' is not configured in resource-types config file. Setting allocation specified using 'yarn.scheduler.maximum-allocation-vcores'
           setAllocationForMandatoryResources(nodeResources, conf);
 
 
@@ -538,11 +552,13 @@ public class ResourceUtils {
     Map<String, ResourceInformation> nodeResources = new HashMap<>();
 
 
+    // node-resources.xml
     addResourcesFileToConf(YarnConfiguration.NODE_RESOURCES_CONFIGURATION_FILE, conf);
 
     for (Map.Entry<String, String> entry : conf) {
       String key = entry.getKey();
       String value = entry.getValue();
+      LOG.info("key: {}  --> value : {} ", key,value) ;
       addResourceTypeInformation(key, value, nodeResources);
     }
 
@@ -551,6 +567,9 @@ public class ResourceUtils {
 
   private static void addResourceTypeInformation(String prop, String value,
       Map<String, ResourceInformation> nodeResources) {
+
+
+    // yarn.nodemanager.resource-type
     if (prop.startsWith(YarnConfiguration.NM_RESOURCES_PREFIX)) {
       LOG.info("Found resource entry " + prop);
       String resourceType = prop.substring(

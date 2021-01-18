@@ -189,10 +189,8 @@ public class NodeManager extends CompositeService
     return nmStartupTime;
   }
 
-  protected NodeStatusUpdater createNodeStatusUpdater(Context context,
-      Dispatcher dispatcher, NodeHealthCheckerService healthChecker) {
-    return new NodeStatusUpdaterImpl(context, dispatcher, healthChecker,
-        metrics);
+  protected NodeStatusUpdater createNodeStatusUpdater(Context context,  Dispatcher dispatcher, NodeHealthCheckerService healthChecker) {
+    return new NodeStatusUpdaterImpl(context, dispatcher, healthChecker,metrics);
   }
 
   protected NodeAttributesProvider createNodeAttributesProvider(
