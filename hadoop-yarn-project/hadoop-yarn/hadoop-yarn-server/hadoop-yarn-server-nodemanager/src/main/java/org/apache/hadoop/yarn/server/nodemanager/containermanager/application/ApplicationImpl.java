@@ -144,6 +144,7 @@ public class ApplicationImpl implements Application {
   }
 
   /**
+   * 为应用程序目的封装流上下文的数据对象。
    * Data object that encapsulates the flow context for the application purpose.
    */
   public static class FlowContext {

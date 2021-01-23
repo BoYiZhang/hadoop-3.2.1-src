@@ -352,15 +352,32 @@ public class YARNRunner implements ClientProtocol {
         LocalResourceVisibility.APPLICATION, false);
   }
 
+  /**
+   * 创建 Application Resource 资源文件
+   * @param fs
+   * @param p
+   * @param fileSymlink
+   * @param type
+   * @param viz
+   * @param uploadToSharedCache
+   * @return
+   * @throws IOException
+   */
   private LocalResource createApplicationResource(FileContext fs, Path p,
       String fileSymlink, LocalResourceType type, LocalResourceVisibility viz,
       Boolean uploadToSharedCache) throws IOException {
+    //
+    // 文件缓存限定
+    // 获取本地文件
     LocalResource rsrc = recordFactory.newRecordInstance(LocalResource.class);
+
+    // 获取资源文件的状态
     FileStatus rsrcStat = fs.getFileStatus(p);
     // We need to be careful when converting from path to URL to add a fragment
     // so that the symlink name when localized will be correct.
-    Path qualifiedPath =
-        fs.getDefaultFileSystem().resolvePath(rsrcStat.getPath());
+
+    // 限定路径
+    Path qualifiedPath = fs.getDefaultFileSystem().resolvePath(rsrcStat.getPath());
     URI uriWithFragment = null;
     boolean useFragment = fileSymlink != null && !fileSymlink.equals("");
     try {
@@ -375,11 +392,17 @@ public class YARNRunner implements ClientProtocol {
               + " Path was not able to be converted to a URI: " + qualifiedPath,
           e);
     }
+    // 设置资源文件
     rsrc.setResource(URL.fromURI(uriWithFragment));
+    // 设置资源文件 大小
     rsrc.setSize(rsrcStat.getLen());
+    // 设置资源文件 时间戳
     rsrc.setTimestamp(rsrcStat.getModificationTime());
+    // 设置资源文件 类型
     rsrc.setType(type);
+    // 设置资源文件 可见性
     rsrc.setVisibility(viz);
+    // // 设置资源文件 缓存
     rsrc.setShouldBeUploadedToSharedCache(uploadToSharedCache);
     return rsrc;
   }

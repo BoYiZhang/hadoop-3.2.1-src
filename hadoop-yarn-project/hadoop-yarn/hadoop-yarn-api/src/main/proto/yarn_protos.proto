@@ -224,12 +224,12 @@ enum LocalResourceTypeProto {
 }
 
 message LocalResourceProto {
-  optional URLProto resource = 1;
-  optional int64 size = 2;
-  optional int64 timestamp = 3;
-  optional LocalResourceTypeProto type = 4;
-  optional LocalResourceVisibilityProto visibility = 5;
-  optional string pattern = 6;
+  optional URLProto resource = 1;  //通常是存在HDFS上的文件的路径
+  optional int64 size = 2;  //文件大小
+  optional int64 timestamp = 3;  //最后修改时间
+  optional LocalResourceTypeProto type = 4;  //资源类型
+  optional LocalResourceVisibilityProto visibility = 5;  //资源可见性
+  optional string pattern = 6; //正则表达式， 当资源可见性为PATTERN时有用
   optional bool should_be_uploaded_to_shared_cache = 7;
 }
 

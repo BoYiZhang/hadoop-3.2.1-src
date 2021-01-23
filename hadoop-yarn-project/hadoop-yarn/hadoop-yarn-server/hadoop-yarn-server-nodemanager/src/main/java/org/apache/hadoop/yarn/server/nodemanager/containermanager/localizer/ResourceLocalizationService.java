@@ -150,12 +150,16 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 public class ResourceLocalizationService extends CompositeService
     implements EventHandler<LocalizationEvent>, LocalizationProtocol {
 
-  private static final Logger LOG =
-       LoggerFactory.getLogger(ResourceLocalizationService.class);
+  private static final Logger LOG = LoggerFactory.getLogger(ResourceLocalizationService.class);
+
+  // 私有目录
   public static final String NM_PRIVATE_DIR = "nmPrivate";
+
+  // 私有目录权限
   public static final FsPermission NM_PRIVATE_PERM = new FsPermission((short) 0700);
-  private static final FsPermission PUBLIC_FILECACHE_FOLDER_PERMS =
-      new FsPermission((short) 0755);
+
+  // 共有目录权限
+  private static final FsPermission PUBLIC_FILECACHE_FOLDER_PERMS = new FsPermission((short) 0755);
 
   private Server server;
   private InetSocketAddress localizationServerAddress;
@@ -164,12 +168,19 @@ public class ResourceLocalizationService extends CompositeService
   private long cacheCleanupPeriod;
 
   private final ContainerExecutor exec;
+
   protected final Dispatcher dispatcher;
+
   private final DeletionService delService;
+
   private LocalizerTracker localizerTracker;
+
   private RecordFactory recordFactory;
+
   private final ScheduledExecutorService cacheCleanup;
+
   private LocalizerTokenSecretManager secretManager;
+
   private NMStateStoreService stateStore;
   @VisibleForTesting
   final NodeManagerMetrics metrics;
@@ -178,8 +189,11 @@ public class ResourceLocalizationService extends CompositeService
   LocalResourcesTracker publicRsrc;
 
   private LocalDirsHandlerService dirsHandler;
+
   private DirsChangeListener localDirsChangeListener;
+
   private DirsChangeListener logDirsChangeListener;
+
   private Context nmContext;
   private DiskValidator diskValidator;
 
@@ -188,15 +202,13 @@ public class ResourceLocalizationService extends CompositeService
    * resources.
    */
   @VisibleForTesting
-  final ConcurrentMap<String, LocalResourcesTracker> privateRsrc =
-    new ConcurrentHashMap<String,LocalResourcesTracker>();
+  final ConcurrentMap<String, LocalResourcesTracker> privateRsrc =  new ConcurrentHashMap<String,LocalResourcesTracker>();
 
   /**
    * Map of LocalResourceTrackers keyed by appid, for application
    * resources.
    */
-  private final ConcurrentMap<String,LocalResourcesTracker> appRsrc =
-    new ConcurrentHashMap<String,LocalResourcesTracker>();
+  private final ConcurrentMap<String,LocalResourcesTracker> appRsrc = new ConcurrentHashMap<String,LocalResourcesTracker>();
   
   FileContext lfs;
 
@@ -246,12 +258,15 @@ public class ResourceLocalizationService extends CompositeService
   @Override
   public void serviceInit(Configuration conf) throws Exception {
     this.validateConf(conf);
-    this.publicRsrc = new LocalResourcesTrackerImpl(null, null, dispatcher,
-        true, conf, stateStore, dirsHandler);
+
+    this.publicRsrc = new LocalResourcesTrackerImpl(null, null, dispatcher, true, conf, stateStore, dirsHandler);
+
     this.recordFactory = RecordFactoryProvider.getRecordFactory(conf);
 
     try {
+
       lfs = getLocalFileContext(conf);
+
       lfs.setUMask(new FsPermission((short) FsPermission.DEFAULT_UMASK));
 
       if (!stateStore.canRecover()|| stateStore.isNewlyCreated()) {
@@ -265,12 +280,16 @@ public class ResourceLocalizationService extends CompositeService
         "Failed to initialize LocalizationService", e);
     }
 
-    diskValidator = DiskValidatorFactory.getInstance(
-        YarnConfiguration.DEFAULT_DISK_VALIDATOR);
-    cacheTargetSize =
-      conf.getLong(YarnConfiguration.NM_LOCALIZER_CACHE_TARGET_SIZE_MB, YarnConfiguration.DEFAULT_NM_LOCALIZER_CACHE_TARGET_SIZE_MB) << 20;
-    cacheCleanupPeriod =
-      conf.getLong(YarnConfiguration.NM_LOCALIZER_CACHE_CLEANUP_INTERVAL_MS, YarnConfiguration.DEFAULT_NM_LOCALIZER_CACHE_CLEANUP_INTERVAL_MS);
+    diskValidator = DiskValidatorFactory.getInstance(YarnConfiguration.DEFAULT_DISK_VALIDATOR);
+
+    //
+    cacheTargetSize = conf.getLong(YarnConfiguration.NM_LOCALIZER_CACHE_TARGET_SIZE_MB, YarnConfiguration.DEFAULT_NM_LOCALIZER_CACHE_TARGET_SIZE_MB) << 20;
+
+    //
+    cacheCleanupPeriod =  conf.getLong(YarnConfiguration.NM_LOCALIZER_CACHE_CLEANUP_INTERVAL_MS, YarnConfiguration.DEFAULT_NM_LOCALIZER_CACHE_CLEANUP_INTERVAL_MS);
+
+    // yarn.nodemanager.bind-host
+    // yarn.nodemanager.localizer.address  :  0.0.0.0:8040
     localizationServerAddress = conf.getSocketAddr(
         YarnConfiguration.NM_BIND_HOST,
         YarnConfiguration.NM_LOCALIZER_ADDRESS,
@@ -278,14 +297,22 @@ public class ResourceLocalizationService extends CompositeService
         YarnConfiguration.DEFAULT_NM_LOCALIZER_PORT);
 
     localizerTracker = createLocalizerTracker(conf);
+
+
     addService(localizerTracker);
+
+
     dispatcher.register(LocalizerEventType.class, localizerTracker);
+
+
     localDirsChangeListener = new DirsChangeListener() {
       @Override
       public void onDirsChanged() {
         checkAndInitializeLocalDirs();
       }
     };
+
+
     logDirsChangeListener = new DirsChangeListener() {
       @Override
       public void onDirsChanged() {
@@ -405,7 +432,8 @@ public class ResourceLocalizationService extends CompositeService
     if (UserGroupInformation.isSecurityEnabled()) {
       secretManager = new LocalizerTokenSecretManager();      
     }
-    
+
+    // yarn.nodemanager.localizer.client.thread-count : 5
     Server server = rpc.getServer(LocalizationProtocol.class, this,
         localizationServerAddress, conf, secretManager, 
         conf.getInt(YarnConfiguration.NM_LOCALIZER_CLIENT_THREAD_COUNT, 
@@ -1444,8 +1472,10 @@ public class ResourceLocalizationService extends CompositeService
   }
 
   private void initializeLogDirs(FileContext lfs) {
+    // 获取log 目录
     List<String> logDirs = dirsHandler.getLogDirs();
     for (String logDir : logDirs) {
+      // 循环初始化
       initializeLogDir(lfs, logDir);
     }
   }
@@ -1614,7 +1644,10 @@ public class ResourceLocalizationService extends CompositeService
    */
   @VisibleForTesting
   void checkAndInitializeLocalDirs() {
+    // 获取目录
     List<String> dirs = dirsHandler.getLocalDirs();
+
+
     List<String> checkFailedDirs = new ArrayList<String>();
     for (String dir : dirs) {
       try {
@@ -1623,6 +1656,8 @@ public class ResourceLocalizationService extends CompositeService
         checkFailedDirs.add(dir);
       }
     }
+
+    // 处理异常 目录
     for (String dir : checkFailedDirs) {
       LOG.info("Attempting to initialize " + dir);
       initializeLocalDir(lfs, dir);
