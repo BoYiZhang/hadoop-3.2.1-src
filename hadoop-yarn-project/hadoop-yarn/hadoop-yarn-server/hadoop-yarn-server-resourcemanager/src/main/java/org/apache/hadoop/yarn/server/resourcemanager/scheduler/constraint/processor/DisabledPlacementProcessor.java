@@ -43,6 +43,8 @@ public class DisabledPlacementProcessor extends AbstractPlacementProcessor {
       RegisterApplicationMasterRequest request,
       RegisterApplicationMasterResponse response)
       throws IOException, YarnException {
+
+    // 如果放置策略不为null 直接直接拒绝...
     if (request.getPlacementConstraints() != null && !request
         .getPlacementConstraints().isEmpty()) {
       String message = "Found non empty placement constraints map in "
@@ -54,6 +56,7 @@ public class DisabledPlacementProcessor extends AbstractPlacementProcessor {
       LOG.warn(message);
       throw new YarnException(message);
     }
+    // 向下传递
     nextAMSProcessor.registerApplicationMaster(applicationAttemptId, request,
         response);
   }
@@ -61,6 +64,8 @@ public class DisabledPlacementProcessor extends AbstractPlacementProcessor {
   @Override
   public void allocate(ApplicationAttemptId appAttemptId,
       AllocateRequest request, AllocateResponse response) throws YarnException {
+
+    // 如果放置策略不为null 直接直接拒绝...
     if (request.getSchedulingRequests() != null && !request
         .getSchedulingRequests().isEmpty()) {
       String message = "Found non empty SchedulingRequest in "
@@ -72,6 +77,7 @@ public class DisabledPlacementProcessor extends AbstractPlacementProcessor {
       LOG.warn(message);
       throw new YarnException(message);
     }
+    // 向下传递
     nextAMSProcessor.allocate(appAttemptId, request, response);
   }
 }

@@ -41,7 +41,10 @@ class AMSProcessingChain implements ApplicationMasterServiceProcessor {
 
   private static final Log LOG = LogFactory.getLog(AMSProcessingChain.class);
 
+  // 头结点
   private ApplicationMasterServiceProcessor head;
+
+  // RM 上下文信息
   private RMContext rmContext;
 
   /**
@@ -74,7 +77,10 @@ class AMSProcessingChain implements ApplicationMasterServiceProcessor {
       ApplicationMasterServiceProcessor processor) {
     LOG.info("Adding [" + processor.getClass().getName() + "] tp top of" +
         " AMS Processing chain. ");
+    
+    // 首先初始化 processor
     processor.init(this.rmContext, this.head);
+    // 然后将当前的head设置为新传入的processor 
     this.head = processor;
   }
 

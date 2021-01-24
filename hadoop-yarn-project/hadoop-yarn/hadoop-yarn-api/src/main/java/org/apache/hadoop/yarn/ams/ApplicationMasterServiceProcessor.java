@@ -43,8 +43,7 @@ public interface ApplicationMasterServiceProcessor {
    * @param amsContext AMSContext.
    * @param nextProcessor next ApplicationMasterServiceProcessor
    */
-  void init(ApplicationMasterServiceContext amsContext,
-      ApplicationMasterServiceProcessor nextProcessor);
+  void init(ApplicationMasterServiceContext amsContext,  ApplicationMasterServiceProcessor nextProcessor);
 
   /**
    * Register AM attempt.

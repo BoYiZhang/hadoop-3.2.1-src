@@ -54,7 +54,9 @@ public class BatchedRequests
    * Iterator Type.
    */
   public enum IteratorType {
+    // 串行?
     SERIAL,
+    // 热门标签
     POPULAR_TAGS
   }
 

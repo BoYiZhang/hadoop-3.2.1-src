@@ -85,19 +85,28 @@ public class ApplicationMasterService extends AbstractService implements
     ApplicationMasterProtocol {
   private static final Log LOG = LogFactory.getLog(ApplicationMasterService.class);
 
+  // AM监控
   private final AMLivelinessMonitor amLivelinessMonitor;
+  // 调度器
   private YarnScheduler rScheduler;
+  // 接口地址
   protected InetSocketAddress masterServiceAddress;
-  protected Server server;
-  protected final RecordFactory recordFactory =
-      RecordFactoryProvider.getRecordFactory(null);
 
+  // 服务实体
+  protected Server server;
+  protected final RecordFactory recordFactory =  RecordFactoryProvider.getRecordFactory(null);
+
+  // 存储响应实体
   private final ConcurrentMap<ApplicationAttemptId, AllocateResponseLock> responseMap = new ConcurrentHashMap<ApplicationAttemptId, AllocateResponseLock>();
 
-  private final ConcurrentHashMap<ApplicationAttemptId, Boolean>
-      finishedAttemptCache = new ConcurrentHashMap<>();
+  // ApplicationAttemptId 状态
+  private final ConcurrentHashMap<ApplicationAttemptId, Boolean> finishedAttemptCache = new ConcurrentHashMap<>();
+
+  // RM信息
   protected final RMContext rmContext;
+  // 存放AM的处理Chain
   private final AMSProcessingChain amsProcessingChain;
+  // 是否启用timelineServiceV2 , 默认 false
   private boolean timelineServiceV2Enabled;
 
   public ApplicationMasterService(RMContext rmContext,
@@ -118,32 +127,49 @@ public class ApplicationMasterService extends AbstractService implements
 
   @Override
   protected void serviceInit(Configuration conf) throws Exception {
+
+    // 构建 rpc 服务
+    // 0.0.0.0/0.0.0.0:8030
     masterServiceAddress = conf.getSocketAddr(
         YarnConfiguration.RM_BIND_HOST,
         YarnConfiguration.RM_SCHEDULER_ADDRESS,
         YarnConfiguration.DEFAULT_RM_SCHEDULER_ADDRESS,
         YarnConfiguration.DEFAULT_RM_SCHEDULER_PORT);
+
+    // 初始化amsProcessingChain
     initializeProcessingChain(conf);
   }
 
   private void addPlacementConstraintHandler(Configuration conf) {
+
     String placementConstraintsHandler =
         conf.get(YarnConfiguration.RM_PLACEMENT_CONSTRAINTS_HANDLER,
             YarnConfiguration.DISABLED_RM_PLACEMENT_CONSTRAINTS_HANDLER);
+
+
+    //  yarn.resourcemanager.placement-constraints.handler :  disabled
     if (placementConstraintsHandler
         .equals(YarnConfiguration.DISABLED_RM_PLACEMENT_CONSTRAINTS_HANDLER)) {
       LOG.info(YarnConfiguration.DISABLED_RM_PLACEMENT_CONSTRAINTS_HANDLER
           + " placement handler will be used, all scheduling requests will "
           + "be rejected.");
+
       amsProcessingChain.addProcessor(new DisabledPlacementProcessor());
     } else if (placementConstraintsHandler
         .equals(YarnConfiguration.PROCESSOR_RM_PLACEMENT_CONSTRAINTS_HANDLER)) {
+
+      //  yarn.resourcemanager.placement-constraints.handler :  placement-processor
+
       LOG.info(YarnConfiguration.PROCESSOR_RM_PLACEMENT_CONSTRAINTS_HANDLER
           + " placement handler will be used. Scheduling requests will be "
           + "handled by the placement constraint processor");
       amsProcessingChain.addProcessor(new PlacementConstraintProcessor());
     } else if (placementConstraintsHandler
         .equals(YarnConfiguration.SCHEDULER_RM_PLACEMENT_CONSTRAINTS_HANDLER)) {
+
+      //  yarn.resourcemanager.placement-constraints.handler :  scheduler
+
+
       LOG.info(YarnConfiguration.SCHEDULER_RM_PLACEMENT_CONSTRAINTS_HANDLER
           + " placement handler will be used. Scheduling requests will be "
           + "handled by the main scheduler.");
@@ -152,9 +178,15 @@ public class ApplicationMasterService extends AbstractService implements
   }
 
   private void initializeProcessingChain(Configuration conf) {
+
+    // 执行root process 初始化操作
     amsProcessingChain.init(rmContext, null);
+
+    // 处理放置策略, 默认 拒绝
+    // yarn.resourcemanager.placement-constraints.handler : disabled
     addPlacementConstraintHandler(conf);
 
+    // 从配置文件中获取 ApplicationMasterServiceProcessor 添加到amsProcessingChain 中.
     List<ApplicationMasterServiceProcessor> processors = getProcessorList(conf);
     if (processors != null) {
       Collections.reverse(processors);
@@ -189,37 +221,43 @@ public class ApplicationMasterService extends AbstractService implements
     Configuration serverConf = conf;
     // If the auth is not-simple, enforce it to be token-based.
     serverConf = new Configuration(conf);
-    serverConf.set(
-        CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
-        SaslRpcServer.AuthMethod.TOKEN.toString());
-    this.server = getServer(rpc, serverConf, masterServiceAddress,
-        this.rmContext.getAMRMTokenSecretManager());
+
+    serverConf.set(  CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION, SaslRpcServer.AuthMethod.TOKEN.toString());
+
+    // ProtobufRpcEngin$Server   ==> 0.0.0.0: 8030
+    this.server = getServer(rpc, serverConf, masterServiceAddress, this.rmContext.getAMRMTokenSecretManager());
     // TODO more exceptions could be added later.
-    this.server.addTerseExceptions(
-        ApplicationMasterNotRegisteredException.class);
+
+    this.server.addTerseExceptions(ApplicationMasterNotRegisteredException.class);
 
     // Enable service authorization?
     if (conf.getBoolean(
         CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHORIZATION, 
         false)) {
+
+
       InputStream inputStream =
           this.rmContext.getConfigurationProvider()
               .getConfigurationInputStream(conf,
                   YarnConfiguration.HADOOP_POLICY_CONFIGURATION_FILE);
+
       if (inputStream != null) {
         conf.addResource(inputStream);
       }
       refreshServiceAcls(conf, RMPolicyProvider.getInstance());
     }
 
+
     this.server.start();
-    this.masterServiceAddress =
-        conf.updateConnectAddr(YarnConfiguration.RM_BIND_HOST,
+
+    // 刷新配置 BoYi-Pro.local/192.168.xx.xxx:8030
+    this.masterServiceAddress = conf.updateConnectAddr(YarnConfiguration.RM_BIND_HOST,
                                YarnConfiguration.RM_SCHEDULER_ADDRESS,
                                YarnConfiguration.DEFAULT_RM_SCHEDULER_ADDRESS,
                                server.getListenerAddress());
-    this.timelineServiceV2Enabled = YarnConfiguration.
-        timelineServiceV2Enabled(conf);
+
+    this.timelineServiceV2Enabled = YarnConfiguration.timelineServiceV2Enabled(conf);
+
     super.serviceStart();
   }
 
@@ -410,16 +448,17 @@ public class ApplicationMasterService extends AbstractService implements
   public AllocateResponse allocate(AllocateRequest request)
       throws YarnException, IOException {
 
-    AMRMTokenIdentifier amrmTokenIdentifier =
-        YarnServerSecurityUtils.authorizeRequest();
+    AMRMTokenIdentifier amrmTokenIdentifier = YarnServerSecurityUtils.authorizeRequest();
 
-    ApplicationAttemptId appAttemptId =
-        amrmTokenIdentifier.getApplicationAttemptId();
+    ApplicationAttemptId appAttemptId = amrmTokenIdentifier.getApplicationAttemptId();
 
     // 更新心跳时间
     this.amLivelinessMonitor.receivedPing(appAttemptId);
 
-    /* check if its in cache */
+    /*
+    如果缓存中没有数据,直接抛出异常.
+    check if its in cache
+    * */
     AllocateResponseLock lock = responseMap.get(appAttemptId);
     if (lock == null) {
       String message =
@@ -450,12 +489,11 @@ public class ApplicationMasterService extends AbstractService implements
                 lastResponse.getResponseId(), request.getResponseId()));
       }
 
-      AllocateResponse response =
-          recordFactory.newRecordInstance(AllocateResponse.class);
+      // 构建响应
+      AllocateResponse response =  recordFactory.newRecordInstance(AllocateResponse.class);
 
       // 关键点 ~~~~
-      this.amsProcessingChain.allocate(
-          amrmTokenIdentifier.getApplicationAttemptId(), request, response);
+      this.amsProcessingChain.allocate(  amrmTokenIdentifier.getApplicationAttemptId(), request, response);
 
       // update AMRMToken if the token is rolled-up
       MasterKeyData nextMasterKey =

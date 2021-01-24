@@ -61,17 +61,28 @@ public class DefaultPlacementAlgorithm implements ConstraintPlacementAlgorithm {
   // Number of times to re-attempt placing a single scheduling request.
   private static final int RE_ATTEMPT_COUNT = 2;
 
+  // 标签管理
   private LocalAllocationTagsManager tagsManager;
+
+  // 放置
   private PlacementConstraintManager constraintManager;
+
+  // node 选择器
   private NodeCandidateSelector nodeSelector;
+
+  // 资源计算器
   private ResourceCalculator resourceCalculator;
 
   @Override
   public void init(RMContext rmContext) {
+    // 初始化
     this.tagsManager = new LocalAllocationTagsManager(
         rmContext.getAllocationTagsManager());
+
     this.constraintManager = rmContext.getPlacementConstraintManager();
+
     this.resourceCalculator = rmContext.getScheduler().getResourceCalculator();
+
     this.nodeSelector =
         filter -> ((AbstractYarnScheduler) (rmContext).getScheduler())
             .getNodes(filter);
@@ -93,37 +104,58 @@ public class DefaultPlacementAlgorithm implements ConstraintPlacementAlgorithm {
 
 
   @Override
-  public void place(ConstraintPlacementAlgorithmInput input,
-      ConstraintPlacementAlgorithmOutputCollector collector) {
+  public void place(ConstraintPlacementAlgorithmInput input, ConstraintPlacementAlgorithmOutputCollector collector) {
     BatchedRequests requests = (BatchedRequests) input;
+    
+    // 请求次数
     int placementAttempt = requests.getPlacementAttempt();
-    ConstraintPlacementAlgorithmOutput resp =
-        new ConstraintPlacementAlgorithmOutput(requests.getApplicationId());
+    
+    
+    // 构建输出信息
+    ConstraintPlacementAlgorithmOutput resp =  new ConstraintPlacementAlgorithmOutput(requests.getApplicationId());
+   
+    // 获取SchedulerNode
     List<SchedulerNode> allNodes = nodeSelector.selectNodes(null);
 
+    // 构建拒绝请求
     List<SchedulingRequest> rejectedRequests = new ArrayList<>();
+    
+    // 可用资源清单
     Map<NodeId, Resource> availResources = new HashMap<>();
+    
+    // 重试次数: 2
     int rePlacementCount = RE_ATTEMPT_COUNT;
+    
     while (rePlacementCount > 0) {
+      // 执行分配.
       doPlacement(requests, resp, allNodes, rejectedRequests, availResources);
       // Double check if placement constraints are really satisfied
-      validatePlacement(requests.getApplicationId(), resp,
-          rejectedRequests, availResources);
+      // 双重检查 , 放置位置是否满意.
+      validatePlacement(requests.getApplicationId(), resp, rejectedRequests, availResources);
+
+      // 如果拒绝 1, 2 次 可以直接重试..
       if (rejectedRequests.size() == 0 || rePlacementCount == 1) {
         break;
       }
+
+      // 分配成功, 反馈请求.
       requests = new BatchedRequests(requests.getIteratorType(),
           requests.getApplicationId(), rejectedRequests,
           requests.getPlacementAttempt());
       rejectedRequests = new ArrayList<>();
+      
+      // 数量 -1 
       rePlacementCount--;
     }
 
+    // 处理拒绝请求.
     resp.getRejectedRequests().addAll(
         rejectedRequests.stream().map(
             x -> new SchedulingRequestWithPlacementAttempt(
                 placementAttempt, x)).collect(Collectors.toList()));
+    
     collector.collect(resp);
+    // 请求当前container tags
     // Clean current temp-container tags
     this.tagsManager.cleanTempContainers(requests.getApplicationId());
   }
@@ -133,46 +165,69 @@ public class DefaultPlacementAlgorithm implements ConstraintPlacementAlgorithm {
       List<SchedulerNode> allNodes,
       List<SchedulingRequest> rejectedRequests,
       Map<NodeId, Resource> availableResources) {
+
+    // 获取调度请求.
     Iterator<SchedulingRequest> requestIterator = requests.iterator();
+
+    // 获取所有的可用node
     Iterator<SchedulerNode> nIter = allNodes.iterator();
     SchedulerNode lastSatisfiedNode = null;
+
+    // 循环分配
     while (requestIterator.hasNext()) {
+
+      // 验证资源是否可用...
       if (allNodes.isEmpty()) {
         LOG.warn("No nodes available for placement at the moment !!");
         break;
       }
+      // 获取分配请求.
       SchedulingRequest schedulingRequest = requestIterator.next();
-      PlacedSchedulingRequest placedReq =
-          new PlacedSchedulingRequest(schedulingRequest);
+
+      // 构建放置请求...
+      PlacedSchedulingRequest placedReq =  new PlacedSchedulingRequest(schedulingRequest);
       placedReq.setPlacementAttempt(requests.getPlacementAttempt());
       resp.getPlacedRequests().add(placedReq);
-      CircularIterator<SchedulerNode> nodeIter =
-          new CircularIterator(lastSatisfiedNode, nIter, allNodes);
-      int numAllocs =
-          schedulingRequest.getResourceSizing().getNumAllocations();
+
+      // 迭代检查其..
+      CircularIterator<SchedulerNode> nodeIter = new CircularIterator(lastSatisfiedNode, nIter, allNodes);
+      // 获取分配数量
+      int numAllocs =  schedulingRequest.getResourceSizing().getNumAllocations();
+
+      // 循环node
       while (nodeIter.hasNext() && numAllocs > 0) {
         SchedulerNode node = nodeIter.next();
         try {
+          // 获取tag
           String tag = schedulingRequest.getAllocationTags() == null ? "" :
               schedulingRequest.getAllocationTags().iterator().next();
+
+          // 获取资源
           Resource unallocatedResource =
               availableResources.computeIfAbsent(node.getNodeID(),
                   x -> Resource.newInstance(node.getUnallocatedResource()));
+
+
           if (!requests.getBlacklist(tag).contains(node.getNodeID()) &&
               attemptPlacementOnNode(
                   requests.getApplicationId(), unallocatedResource,
                   schedulingRequest, node, false)) {
+
+            // 开始分配资源
             schedulingRequest.getResourceSizing()
                 .setNumAllocations(--numAllocs);
+
             Resources.addTo(unallocatedResource,
                 schedulingRequest.getResourceSizing().getResources());
             placedReq.getNodes().add(node);
             numAllocs =
                 schedulingRequest.getResourceSizing().getNumAllocations();
             // Add temp-container tags for current placement cycle
+            // 为当前的放置循环添加临时的 tag
             this.tagsManager.addTempTags(node.getNodeID(),
                 requests.getApplicationId(),
                 schedulingRequest.getAllocationTags());
+
             lastSatisfiedNode = node;
           }
         } catch (InvalidAllocationTagsQueryException e) {
@@ -180,6 +235,7 @@ public class DefaultPlacementAlgorithm implements ConstraintPlacementAlgorithm {
         }
       }
     }
+    // 将numAllocations仍大于0的所有请求添加到拒绝列表中。
     // Add all requests whose numAllocations still > 0 to rejected list.
     requests.getSchedulingRequests().stream()
         .filter(sReq -> sReq.getResourceSizing().getNumAllocations() > 0)

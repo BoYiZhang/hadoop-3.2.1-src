@@ -105,27 +105,34 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
 
   private static final Log LOG = LogFactory.getLog(DefaultAMSProcessor.class);
 
+  //  空的Container 集合
   private final static List<Container> EMPTY_CONTAINER_LIST =  new ArrayList<Container>();
-  protected static final Allocation EMPTY_ALLOCATION = new Allocation(
-      EMPTY_CONTAINER_LIST, Resources.createResource(0), null, null, null);
 
-  private final RecordFactory recordFactory =
-      RecordFactoryProvider.getRecordFactory(null);
+  // 构建一个 空的  Allocation  ??
+  protected static final Allocation EMPTY_ALLOCATION = new Allocation(  EMPTY_CONTAINER_LIST, Resources.createResource(0), null, null, null);
 
+  private final RecordFactory recordFactory = RecordFactoryProvider.getRecordFactory(null);
+
+  // RM 上下文信息
   private RMContext rmContext;
+
+  //  resource profiles
   private ResourceProfilesManager resourceProfilesManager;
+
+  // 是否启用timelineServiceV2
   private boolean timelineServiceV2Enabled;
+  // 是否启用node label
   private boolean nodelabelsEnabled;
 
   @Override
-  public void init(ApplicationMasterServiceContext amsContext,
-      ApplicationMasterServiceProcessor nextProcessor) {
+  public void init(ApplicationMasterServiceContext amsContext, ApplicationMasterServiceProcessor nextProcessor) {
+
     this.rmContext = (RMContext)amsContext;
+
     this.resourceProfilesManager = rmContext.getResourceProfilesManager();
-    this.timelineServiceV2Enabled = YarnConfiguration.
-        timelineServiceV2Enabled(rmContext.getYarnConfiguration());
-    this.nodelabelsEnabled = YarnConfiguration
-        .areNodeLabelsEnabled(rmContext.getYarnConfiguration());
+
+    this.timelineServiceV2Enabled = YarnConfiguration. timelineServiceV2Enabled(rmContext.getYarnConfiguration());
+    this.nodelabelsEnabled = YarnConfiguration .areNodeLabelsEnabled(rmContext.getYarnConfiguration());
   }
 
   @Override
@@ -136,8 +143,7 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
       throws IOException, YarnException {
 
     // 获取 application
-    RMApp app = getRmContext().getRMApps().get(
-        applicationAttemptId.getApplicationId());
+    RMApp app = getRmContext().getRMApps().get(  applicationAttemptId.getApplicationId());
 
     //向RMAppAttemptImpl发送一个RMAppAttemptEventType.registered事件
     LOG.info("AM registration " + applicationAttemptId);
@@ -171,12 +177,13 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
           .getMasterKey(applicationAttemptId).getEncoded()));
     }
 
-    // For work-preserving AM restart, retrieve previous attempts' containers
-    // and corresponding NM tokens.
-    if (app.getApplicationSubmissionContext()
-        .getKeepContainersAcrossApplicationAttempts()) {
-      List<Container> transferredContainers = getScheduler()
-          .getTransferredContainers(applicationAttemptId);
+
+    // For work-preserving AM restart, retrieve previous attempts' containers and corresponding NM tokens.
+    if (app.getApplicationSubmissionContext()  .getKeepContainersAcrossApplicationAttempts()) {
+
+      // 获取需要处理的Container
+      List<Container> transferredContainers = getScheduler().getTransferredContainers(applicationAttemptId);
+
       if (!transferredContainers.isEmpty()) {
         response.setContainersFromPreviousAttempts(transferredContainers);
         // Clear the node set remembered by the secret manager. Necessary
@@ -187,6 +194,7 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
         List<NMToken> nmTokens = new ArrayList<NMToken>();
         for (Container container : transferredContainers) {
           try {
+            // 更新token操作
             NMToken token = getRmContext().getNMTokenSecretManager()
                 .createAndGetNMToken(app.getUser(), applicationAttemptId,
                     container);
@@ -214,11 +222,16 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
     response.setSchedulerResourceTypes(getScheduler()
         .getSchedulingResourceTypes());
 
-    // 设置资源类型
+    // 设置资源类型 返回响应信息
     response.setResourceTypes(ResourceUtils.getResourcesTypeInfo());
+
+
+    // yarn.resourcemanager.resource-profiles.enabled : false
     if (getRmContext().getYarnConfiguration().getBoolean(
         YarnConfiguration.RM_RESOURCE_PROFILES_ENABLED,
         YarnConfiguration.DEFAULT_RM_RESOURCE_PROFILES_ENABLED)) {
+
+      // 如果启用了, 返回信息
       response.setResourceProfiles(
           resourceProfilesManager.getResourceProfiles());
     }
@@ -227,7 +240,7 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
   @Override
   public void allocate(ApplicationAttemptId appAttemptId,
       AllocateRequest request, AllocateResponse response) throws YarnException {
-    // 处理 请求
+    // 处理 请求/ 更新心跳
     handleProgress(appAttemptId, request);
 
     // 获取资源请求
@@ -263,8 +276,7 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
     }
 
     // 获取队列中的最大资源能力
-    Resource maximumCapacity =
-        getScheduler().getMaximumResourceCapability(app.getQueue());
+    Resource maximumCapacity = getScheduler().getMaximumResourceCapability(app.getQueue());
 
     // 健全性检查
     // sanity check

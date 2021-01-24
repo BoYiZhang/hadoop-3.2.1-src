@@ -36,21 +36,24 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
+ * 此类初始化约束放置算法。它向算法分配输入并从中收集输出。
  * This class initializes the Constraint Placement Algorithm. It dispatches
  * input to the algorithm and collects output from it.
  */
-class PlacementDispatcher implements
-    ConstraintPlacementAlgorithmOutputCollector {
+class PlacementDispatcher implements  ConstraintPlacementAlgorithmOutputCollector {
 
   private static final Logger LOG =
       LoggerFactory.getLogger(PlacementDispatcher.class);
+  // 分配算法
   private ConstraintPlacementAlgorithm algorithm;
+  // 线程池
   private ExecutorService algorithmThreadPool;
 
-  private Map<ApplicationId, List<PlacedSchedulingRequest>>
-      placedRequests = new ConcurrentHashMap<>();
-  private Map<ApplicationId, List<SchedulingRequestWithPlacementAttempt>>
-      rejectedRequests = new ConcurrentHashMap<>();
+  // 放置请求
+  private Map<ApplicationId, List<PlacedSchedulingRequest>>  placedRequests = new ConcurrentHashMap<>();
+
+  // 拒绝请求.
+  private Map<ApplicationId, List<SchedulingRequestWithPlacementAttempt>> rejectedRequests = new ConcurrentHashMap<>();
 
   public void init(RMContext rmContext,
       ConstraintPlacementAlgorithm placementAlgorithm, int poolSize) {
@@ -62,6 +65,8 @@ class PlacementDispatcher implements
 
   void dispatch(final BatchedRequests batchedRequests) {
     final ConstraintPlacementAlgorithmOutputCollector collector = this;
+
+    //构建任务 , 使用分配算法处理请求数据
     Runnable placingTask = () -> {
       LOG.debug("Got [{}] requests to place from application [{}].. " +
               "Attempt count [{}]",
@@ -70,13 +75,15 @@ class PlacementDispatcher implements
           batchedRequests.getPlacementAttempt());
       algorithm.place(batchedRequests, collector);
     };
+    // 交由线程池执行分配任务.
     this.algorithmThreadPool.submit(placingTask);
   }
 
+  // 根据获取请求applicationId获取调度请求. 将缓存中的数据clone , 然后清理掉.
   public List<PlacedSchedulingRequest> pullPlacedRequests(
       ApplicationId applicationId) {
-    List<PlacedSchedulingRequest> placedReqs =
-        this.placedRequests.get(applicationId);
+    List<PlacedSchedulingRequest> placedReqs = this.placedRequests.get(applicationId);
+
     if (placedReqs != null && !placedReqs.isEmpty()) {
       List<PlacedSchedulingRequest> retList = new ArrayList<>();
       synchronized (placedReqs) {
@@ -92,10 +99,13 @@ class PlacementDispatcher implements
 
   public List<SchedulingRequestWithPlacementAttempt> pullRejectedRequests(
       ApplicationId applicationId) {
+
+    // 获取拒绝的数据.
     List<SchedulingRequestWithPlacementAttempt> rejectedReqs =
         this.rejectedRequests.get(applicationId);
     if (rejectedReqs != null && !rejectedReqs.isEmpty()) {
       List<SchedulingRequestWithPlacementAttempt> retList = new ArrayList<>();
+      // 加锁,返回新的retList
       synchronized (rejectedReqs) {
         if (rejectedReqs.size() > 0) {
           retList.addAll(rejectedReqs);

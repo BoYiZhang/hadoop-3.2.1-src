@@ -39,6 +39,8 @@ public class SchedulerPlacementProcessor extends AbstractPlacementProcessor {
       AllocateRequest request, AllocateResponse response) throws YarnException {
     if (request.getSchedulingRequests() != null
         && !request.getSchedulingRequests().isEmpty()) {
+
+      // 仅仅容量调度器支持该策略
       if (!(scheduler instanceof CapacityScheduler)) {
         String message = "Found non empty SchedulingRequest of "
             + "AllocateRequest for application=" + appAttemptId.toString()
@@ -50,6 +52,7 @@ public class SchedulerPlacementProcessor extends AbstractPlacementProcessor {
         throw new YarnException(message);
       }
     }
+    //向下传递
     nextAMSProcessor.allocate(appAttemptId, request, response);
   }
 }

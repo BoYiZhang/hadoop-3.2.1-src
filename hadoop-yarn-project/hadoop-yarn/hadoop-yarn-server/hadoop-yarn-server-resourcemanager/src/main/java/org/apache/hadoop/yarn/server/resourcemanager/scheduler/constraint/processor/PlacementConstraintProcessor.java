@@ -57,7 +57,9 @@ import java.util.stream.Collectors;
 
 /**
  * An ApplicationMasterServiceProcessor that performs Constrained placement of
- * Scheduling Requests. It does the following:
+ * Scheduling Requests.
+ *
+ * It does the following:
  * 1. All initialization.
  * 2. Intercepts placement constraints from the register call and adds it to
  *    the placement constraint manager.
@@ -71,7 +73,10 @@ public class PlacementConstraintProcessor extends AbstractPlacementProcessor {
    */
   static final class Response extends SchedulingResponse {
 
+    // 放置次数
     private final int placementAttempt;
+
+    // 尝试的节点
     private final SchedulerNode attemptedNode;
 
     private Response(boolean isSuccess, ApplicationId applicationId,
@@ -86,30 +91,42 @@ public class PlacementConstraintProcessor extends AbstractPlacementProcessor {
   private static final Logger LOG =
       LoggerFactory.getLogger(PlacementConstraintProcessor.class);
 
+  // 调度线程池
   private ExecutorService schedulingThreadPool;
-  private int retryAttempts;
-  private Map<ApplicationId, List<BatchedRequests>> requestsToRetry =
-      new ConcurrentHashMap<>();
-  private Map<ApplicationId, List<SchedulingRequest>> requestsToReject =
-      new ConcurrentHashMap<>();
 
+  // 重试次数,默认 3
+  private int retryAttempts;
+
+  // 重试请求.
+  private Map<ApplicationId, List<BatchedRequests>> requestsToRetry = new ConcurrentHashMap<>();
+
+  // 拒绝请求.
+  private Map<ApplicationId, List<SchedulingRequest>> requestsToReject =   new ConcurrentHashMap<>();
+
+  // 类型 串行? or 热门标签 ??
   private BatchedRequests.IteratorType iteratorType;
+
+  // Dispatcher
   private PlacementDispatcher placementDispatcher;
 
 
   @Override
-  public void init(ApplicationMasterServiceContext amsContext,
-      ApplicationMasterServiceProcessor nextProcessor) {
+  public void init(ApplicationMasterServiceContext amsContext,   ApplicationMasterServiceProcessor nextProcessor) {
     LOG.info("Initializing Constraint Placement Processor:");
     super.init(amsContext, nextProcessor);
+    //考虑第一个类-即使提供了逗号分隔的列表。
+    // （这是为了简单起见，因为getInstances通过正确处理事情做了很多好事）
 
-    // Only the first class is considered - even if a comma separated
-    // list is provided. (This is for simplicity, since getInstances does a
-    // lot of good things by handling things correctly)
+    // Only the first class is considered - even if a comma separated list is provided.
+    // (This is for simplicity, since getInstances does a lot of good things by handling things correctly)
+
+    // 根据配置参数,获取 ConstraintPlacementAlgorithm
+    // yarn.resourcemanager.placement-constraints.algorithm.class
     List<ConstraintPlacementAlgorithm> instances =
         ((RMContextImpl) amsContext).getYarnConfiguration().getInstances(
             YarnConfiguration.RM_PLACEMENT_CONSTRAINTS_ALGORITHM_CLASS,
             ConstraintPlacementAlgorithm.class);
+
     ConstraintPlacementAlgorithm algorithm = null;
     if (instances != null && !instances.isEmpty()) {
       algorithm = instances.get(0);
@@ -118,33 +135,46 @@ public class PlacementConstraintProcessor extends AbstractPlacementProcessor {
     }
     LOG.info("Placement Algorithm [{}]", algorithm.getClass().getName());
 
+    // 获取 yarn.resourcemanager.placement-constraints.algorithm.iterator
     String iteratorName = ((RMContextImpl) amsContext).getYarnConfiguration()
         .get(YarnConfiguration.RM_PLACEMENT_CONSTRAINTS_ALGORITHM_ITERATOR,
             BatchedRequests.IteratorType.SERIAL.name());
     LOG.info("Placement Algorithm Iterator[{}]", iteratorName);
     try {
+      // 获取类型
       iteratorType = BatchedRequests.IteratorType.valueOf(iteratorName);
     } catch (IllegalArgumentException e) {
       throw new YarnRuntimeException(
           "Could not instantiate Placement Algorithm Iterator: ", e);
     }
 
+    // 算法池 大小 : 1
+    // yarn.resourcemanager.placement-constraints.algorithm.pool-size : 1
     int algoPSize = ((RMContextImpl) amsContext).getYarnConfiguration().getInt(
         YarnConfiguration.RM_PLACEMENT_CONSTRAINTS_ALGORITHM_POOL_SIZE,
         YarnConfiguration.DEFAULT_RM_PLACEMENT_CONSTRAINTS_ALGORITHM_POOL_SIZE);
+
+    // 构建Dispatcher
     this.placementDispatcher = new PlacementDispatcher();
+
+    // 初始化Dispatcher
     this.placementDispatcher.init(
         ((RMContextImpl)amsContext), algorithm, algoPSize);
     LOG.info("Planning Algorithm pool size [{}]", algoPSize);
 
+
+    // yarn.resourcemanager.placement-constraints.scheduler.pool-size : 1
     int schedPSize = ((RMContextImpl) amsContext).getYarnConfiguration().getInt(
         YarnConfiguration.RM_PLACEMENT_CONSTRAINTS_SCHEDULER_POOL_SIZE,
         YarnConfiguration.DEFAULT_RM_PLACEMENT_CONSTRAINTS_SCHEDULER_POOL_SIZE);
+
+    // 创建线程池
     this.schedulingThreadPool = Executors.newFixedThreadPool(schedPSize);
     LOG.info("Scheduler pool size [{}]", schedPSize);
 
-    // Number of times a request that is not satisfied by the scheduler
-    // can be retried.
+    // yarn.resourcemanager.设置重试次数
+    // placement-constraints.retry-attempts: 3
+    // Number of times a request that is not satisfied by the scheduler  can be retried.
     this.retryAttempts =
         ((RMContextImpl) amsContext).getYarnConfiguration().getInt(
             YarnConfiguration.RM_PLACEMENT_CONSTRAINTS_RETRY_ATTEMPTS,
@@ -155,51 +185,68 @@ public class PlacementConstraintProcessor extends AbstractPlacementProcessor {
   @Override
   public void allocate(ApplicationAttemptId appAttemptId,
       AllocateRequest request, AllocateResponse response) throws YarnException {
-    // Copy the scheduling request since we will clear it later after sending
-    // to dispatcher
-    List<SchedulingRequest> schedulingRequests =
-        new ArrayList<>(request.getSchedulingRequests());
+    // Copy the scheduling request since we will clear it later after sending to dispatcher
+    // 复制调度请求，因为我们稍后将其发送给调度程序后将其清除
+    List<SchedulingRequest> schedulingRequests = new ArrayList<>(request.getSchedulingRequests());
+
+    // 派送 放置请求.
     dispatchRequestsForPlacement(appAttemptId, schedulingRequests);
+
+    // 分配重试请求.
     reDispatchRetryableRequests(appAttemptId);
+
+    // 处理已经处理的请求.
     schedulePlacedRequests(appAttemptId);
 
-    // Remove SchedulingRequest from AllocateRequest to avoid SchedulingRequest
-    // added to scheduler.
+    // Remove SchedulingRequest from AllocateRequest to avoid SchedulingRequest added to scheduler.
+    // 移除调度请求.
     request.setSchedulingRequests(Collections.emptyList());
 
+    // 执行 下一请求.
     nextAMSProcessor.allocate(appAttemptId, request, response);
 
+    // 处理拒绝请求.
     handleRejectedRequests(appAttemptId, response);
   }
 
-  private void dispatchRequestsForPlacement(ApplicationAttemptId appAttemptId,
-      List<SchedulingRequest> schedulingRequests) {
+  private void dispatchRequestsForPlacement(ApplicationAttemptId appAttemptId,  List<SchedulingRequest> schedulingRequests) {
+
     if (schedulingRequests != null && !schedulingRequests.isEmpty()) {
-      SchedulerApplicationAttempt appAttempt =
-          scheduler.getApplicationAttempt(appAttemptId);
+
+      // 获取 调度请求.
+      SchedulerApplicationAttempt appAttempt =  scheduler.getApplicationAttempt(appAttemptId);
       String queueName = null;
+
       if(appAttempt != null) {
         queueName = appAttempt.getQueueName();
       }
-      Resource maxAllocation =
-          scheduler.getMaximumResourceCapability(queueName);
+
+      // 获取队列最大资源
+      Resource maxAllocation =  scheduler.getMaximumResourceCapability(queueName);
       // Normalize the Requests before dispatching
+
+      // 处理请求信息? 干啥这是???
       schedulingRequests.forEach(req -> {
+        // 获取请求的资源
         Resource reqResource = req.getResourceSizing().getResources();
+        // 重新设置资源
         req.getResourceSizing().setResources(
             this.scheduler.getNormalizedResource(reqResource, maxAllocation));
       });
+
+      // 处理分发请求.
       this.placementDispatcher.dispatch(new BatchedRequests(iteratorType,
           appAttemptId.getApplicationId(), schedulingRequests, 1));
     }
   }
 
   private void reDispatchRetryableRequests(ApplicationAttemptId appAttId) {
-    List<BatchedRequests> reqsToRetry =
-        this.requestsToRetry.get(appAttId.getApplicationId());
+    // 获取重试
+    List<BatchedRequests> reqsToRetry = this.requestsToRetry.get(appAttId.getApplicationId());
     if (reqsToRetry != null && !reqsToRetry.isEmpty()) {
       synchronized (reqsToRetry) {
         for (BatchedRequests bReq: reqsToRetry) {
+          // 重新分发
           this.placementDispatcher.dispatch(bReq);
         }
         reqsToRetry.clear();
@@ -208,12 +255,18 @@ public class PlacementConstraintProcessor extends AbstractPlacementProcessor {
   }
 
   private void schedulePlacedRequests(ApplicationAttemptId appAttemptId) {
+    // 获取applicationId
     ApplicationId applicationId = appAttemptId.getApplicationId();
-    List<PlacedSchedulingRequest> placedSchedulingRequests =
-        this.placementDispatcher.pullPlacedRequests(applicationId);
+    // 拉取请求
+    List<PlacedSchedulingRequest> placedSchedulingRequests = this.placementDispatcher.pullPlacedRequests(applicationId);
+
     for (PlacedSchedulingRequest placedReq : placedSchedulingRequests) {
+      // 获取请求信息
       SchedulingRequest sReq = placedReq.getSchedulingRequest();
+      // 获取请求的节点
       for (SchedulerNode node : placedReq.getNodes()) {
+
+        // 获取调度请求
         final SchedulingRequest sReqClone =
             SchedulingRequest.newInstance(sReq.getAllocationRequestId(),
                 sReq.getPriority(), sReq.getExecutionType(),
@@ -221,20 +274,25 @@ public class PlacementConstraintProcessor extends AbstractPlacementProcessor {
                 ResourceSizing.newInstance(
                     sReq.getResourceSizing().getResources()),
                 sReq.getPlacementConstraint());
+
+        // 获取SchedulerApplicationAttempt
         SchedulerApplicationAttempt applicationAttempt =
             this.scheduler.getApplicationAttempt(appAttemptId);
+
         Runnable task = () -> {
+          // 尝试分配
           boolean success =
-              scheduler.attemptAllocationOnNode(
-                  applicationAttempt, sReqClone, node);
+              scheduler.attemptAllocationOnNode(applicationAttempt, sReqClone, node);
           if (!success) {
             LOG.warn("Unsuccessful allocation attempt [{}] for [{}]",
                 placedReq.getPlacementAttempt(), sReqClone);
           }
+          // 处理响应
           handleSchedulingResponse(
               new Response(success, applicationId, sReqClone,
               placedReq.getPlacementAttempt(), node));
         };
+        // 提交任务...交由线程池执行...
         this.schedulingThreadPool.submit(task);
       }
     }
@@ -242,9 +300,10 @@ public class PlacementConstraintProcessor extends AbstractPlacementProcessor {
 
   private void handleRejectedRequests(ApplicationAttemptId appAttemptId,
       AllocateResponse response) {
-    List<SchedulingRequestWithPlacementAttempt> rejectedAlgoRequests =
-        this.placementDispatcher.pullRejectedRequests(
-            appAttemptId.getApplicationId());
+
+    // 获取拒绝的请求.
+    List<SchedulingRequestWithPlacementAttempt> rejectedAlgoRequests =  this.placementDispatcher.pullRejectedRequests(  appAttemptId.getApplicationId());
+
     if (rejectedAlgoRequests != null && !rejectedAlgoRequests.isEmpty()) {
       LOG.warn("Following requests of [{}] were rejected by" +
               " the PlacementAlgorithmOutput Algorithm: {}",
@@ -255,6 +314,7 @@ public class PlacementConstraintProcessor extends AbstractPlacementProcessor {
               new Response(false, appAttemptId.getApplicationId(),
                   req.getSchedulingRequest(), req.getPlacementAttempt(),
                   null)));
+
       ApplicationMasterServiceUtils.addToRejectedSchedulingRequests(response,
           rejectedAlgoRequests.stream()
               .filter(req -> req.getPlacementAttempt() >= retryAttempts)
@@ -263,8 +323,9 @@ public class PlacementConstraintProcessor extends AbstractPlacementProcessor {
                   sr.getSchedulingRequest()))
               .collect(Collectors.toList()));
     }
-    List<SchedulingRequest> rejectedRequests =
-        this.requestsToReject.get(appAttemptId.getApplicationId());
+
+    // 获取决绝请求..
+    List<SchedulingRequest> rejectedRequests =  this.requestsToReject.get(appAttemptId.getApplicationId());
     if (rejectedRequests != null && !rejectedRequests.isEmpty()) {
       synchronized (rejectedRequests) {
         LOG.warn("Following requests of [{}] exhausted all retry attempts " +
@@ -284,9 +345,13 @@ public class PlacementConstraintProcessor extends AbstractPlacementProcessor {
   public void finishApplicationMaster(ApplicationAttemptId appAttemptId,
       FinishApplicationMasterRequest request,
       FinishApplicationMasterResponse response) {
+
+    // 清理各种遗留信息
     placementDispatcher.clearApplicationState(appAttemptId.getApplicationId());
     requestsToReject.remove(appAttemptId.getApplicationId());
     requestsToRetry.remove(appAttemptId.getApplicationId());
+
+    // 调用父类的请求.
     super.finishApplicationMaster(appAttemptId, request, response);
   }
 

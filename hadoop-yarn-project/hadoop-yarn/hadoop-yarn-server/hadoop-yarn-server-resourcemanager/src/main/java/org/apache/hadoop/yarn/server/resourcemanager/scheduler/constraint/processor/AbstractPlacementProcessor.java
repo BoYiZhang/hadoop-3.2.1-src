@@ -46,8 +46,12 @@ public abstract class AbstractPlacementProcessor implements
   private static final Logger LOG =
       LoggerFactory.getLogger(AbstractPlacementProcessor.class);
 
+  // 下一节点.
   protected ApplicationMasterServiceProcessor nextAMSProcessor;
+  // yarn 调度器
   protected AbstractYarnScheduler scheduler;
+
+  // 用于存储和检索放置约束的管理器 ??
   private PlacementConstraintManager constraintManager;
 
   @Override
@@ -70,6 +74,7 @@ public abstract class AbstractPlacementProcessor implements
         request.getPlacementConstraints();
     processPlacementConstraints(applicationAttemptId.getApplicationId(),
         appPlacementConstraints);
+    //重要 调用next的registerApplicationMaster 方法
     nextAMSProcessor.registerApplicationMaster(applicationAttemptId, request,
         response);
   }
