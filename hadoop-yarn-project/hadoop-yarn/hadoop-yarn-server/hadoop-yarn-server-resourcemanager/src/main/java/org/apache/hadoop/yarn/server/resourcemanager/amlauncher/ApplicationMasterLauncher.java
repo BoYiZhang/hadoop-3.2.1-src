@@ -42,7 +42,8 @@ public class ApplicationMasterLauncher extends AbstractService implements
   // ApplicationMasterLauncher 线程池
   private ThreadPoolExecutor launcherPool;
 
-  // [ 主 ]工作线程, 用于监控masterEvents队列, 并将任务下发给launcherPool执行.
+  // [ 主 ] 工作线程, 单线程执行, 用于监控masterEvents队列,
+  //                并将任务下发给launcherPool执行.
   private LauncherThread launcherHandlingThread;
 
   // 阻塞式队列
@@ -54,6 +55,7 @@ public class ApplicationMasterLauncher extends AbstractService implements
   public ApplicationMasterLauncher(RMContext context) {
     super(ApplicationMasterLauncher.class.getName());
     this.context = context;
+    // 构建工作线程
     this.launcherHandlingThread = new LauncherThread();
   }
   
@@ -94,14 +96,15 @@ public class ApplicationMasterLauncher extends AbstractService implements
   
   protected Runnable createRunnableLauncher(RMAppAttempt application, 
       AMLauncherEventType event) {
-    Runnable launcher =
-        new AMLauncher(context, application, event, getConfig());
+    Runnable launcher =  new AMLauncher(context, application, event, getConfig());
     return launcher;
   }
   
   private void launch(RMAppAttempt application) {
-    Runnable launcher = createRunnableLauncher(application, 
-        AMLauncherEventType.LAUNCH);
+    // 构建启动类型的任务
+    Runnable launcher = createRunnableLauncher(application,  AMLauncherEventType.LAUNCH);
+
+    // 添加任务队列
     masterEvents.add(launcher);
   }
   
@@ -151,9 +154,11 @@ public class ApplicationMasterLauncher extends AbstractService implements
     RMAppAttempt application = appEvent.getAppAttempt();
     switch (event) {
     case LAUNCH:
+      // 处理启动类型事件
       launch(application);
       break;
     case CLEANUP:
+      // 处理清理操作
       cleanup(application);
       break;
     default:
