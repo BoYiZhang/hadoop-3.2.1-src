@@ -559,8 +559,7 @@ public class ResourceManager extends CompositeService
     return new AllocationTagsManager(this.rmContext);
   }
 
-  protected PlacementConstraintManagerService
-      createPlacementConstraintManager() {
+  protected PlacementConstraintManagerService createPlacementConstraintManager() {
     // Use the in memory Placement Constraint Manager.
     return new MemoryPlacementConstraintManager();
   }

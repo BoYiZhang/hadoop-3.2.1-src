@@ -88,6 +88,7 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,Recoverable
   // application内存最大存储数量
   // yarn.resourcemanager.max-completed-applications : 1000
   private int maxCompletedAppsInMemory;
+
   // 最大存储容量
   // yarn.resourcemanager.state-store.max-completed-applications : maxCompletedAppsInMemory [1000]
   private int maxCompletedAppsInStateStore;
@@ -103,11 +104,14 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,Recoverable
 
   // 负责与ApplicationMaster通讯
   private final ApplicationMasterService masterService;
+
   // 调度器
   private final YarnScheduler scheduler;
+
   // 访问控制清单
   private final ApplicationACLsManager applicationACLsManager;
-  //配置
+
+  //配置信息
   private Configuration conf;
   // 权限相关
   private YarnAuthorizationProvider authorizer;
@@ -119,16 +123,22 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,Recoverable
   public RMAppManager(RMContext context,
       YarnScheduler scheduler, ApplicationMasterService masterService,
       ApplicationACLsManager applicationACLsManager, Configuration conf) {
+
     this.rmContext = context;
+
     this.scheduler = scheduler;
+
     this.masterService = masterService;
+
     this.applicationACLsManager = applicationACLsManager;
+
     this.conf = conf;
 
     // yarn.resourcemanager.max-completed-applications : 1000
     this.maxCompletedAppsInMemory = conf.getInt(
         YarnConfiguration.RM_MAX_COMPLETED_APPLICATIONS,
         YarnConfiguration.DEFAULT_RM_MAX_COMPLETED_APPLICATIONS);
+
     // yarn.resourcemanager.state-store.max-completed-applications : maxCompletedAppsInMemory [1000]
     this.maxCompletedAppsInStateStore =
         conf.getInt(
@@ -396,7 +406,6 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,Recoverable
     // 获取applicationId
     ApplicationId applicationId = submissionContext.getApplicationId();
 
-
     // 构建 RMAppImpl
     // 设置startTime为-1,在构造方法中会初始化
     // Passing start time as -1. It will be eventually set in RMAppImpl constructor.
@@ -455,6 +464,7 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,Recoverable
       RMAppState recoveredFinalState) throws YarnException {
 
     ApplicationPlacementContext placementContext = null;
+
     if (recoveredFinalState == null) {
       placementContext = placeApplication(rmContext.getQueuePlacementManager(),
           submissionContext, user, isRecovery);
@@ -462,19 +472,20 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,Recoverable
 
     // We only replace the queue when it's a new application
     if (!isRecovery) {
+
       replaceQueueFromPlacementContext(placementContext, submissionContext);
 
       // fail the submission if configured application timeout value is invalid
-      RMServerUtils.validateApplicationTimeouts(
-          submissionContext.getApplicationTimeouts());
+      RMServerUtils.validateApplicationTimeouts( submissionContext.getApplicationTimeouts());
+
     }
 
     ApplicationId applicationId = submissionContext.getApplicationId();
-    List<ResourceRequest> amReqs = validateAndCreateResourceRequest(
-        submissionContext, isRecovery);
 
-    // Verify and get the update application priority and set back to
-    // submissionContext
+    List<ResourceRequest> amReqs = validateAndCreateResourceRequest( submissionContext, isRecovery);
+
+
+    // Verify and get the update application priority and set back to submissionContext
     UserGroupInformation userUgi = UserGroupInformation.createRemoteUser(user);
 
     // Application priority needed to be validated only while submitting. During
@@ -661,15 +672,22 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,Recoverable
 
   @Override
   public void handle(RMAppManagerEvent event) {
+
+    // 获取 applicationId
     ApplicationId applicationId = event.getApplicationId();
-    LOG.debug("RMAppManager processing event for " 
-        + applicationId + " of type " + event.getType());
+    LOG.debug("RMAppManager processing event for "  + applicationId + " of type " + event.getType());
+
     switch (event.getType()) {
+
+      // APP 完成
     case APP_COMPLETED :
+      // 执行完成Application操作.
       finishApplication(applicationId);
+      // 打印日志
       logApplicationSummary(applicationId);
-      checkAppNumCompletedLimit();
+      // 检查app 数量限制. 并处理
       break;
+      // APP 移动
     case APP_MOVE :
       // moveAllApps from scheduler will fire this event for each of
       // those applications which needed to be moved to a new queue.

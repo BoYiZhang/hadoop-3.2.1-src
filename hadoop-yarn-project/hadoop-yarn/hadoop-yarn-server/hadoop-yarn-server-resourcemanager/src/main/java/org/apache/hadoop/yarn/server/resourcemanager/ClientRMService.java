@@ -261,16 +261,27 @@ public class ClientRMService extends AbstractService implements
       RMAppManager rmAppManager, ApplicationACLsManager applicationACLsManager,
       QueueACLsManager queueACLsManager,
       RMDelegationTokenSecretManager rmDTSecretManager, Clock clock) {
+
     super(ClientRMService.class.getName());
+
     this.scheduler = scheduler;
+
     this.rmContext = rmContext;
+
     this.rmAppManager = rmAppManager;
+
     this.applicationsACLsManager = applicationACLsManager;
+
     this.queueACLsManager = queueACLsManager;
+
     this.rmDTSecretManager = rmDTSecretManager;
+
     this.reservationSystem = rmContext.getReservationSystem();
+
     this.clock = clock;
+
     this.rValidator = new ReservationInputValidator(clock);
+
     resourceProfilesManager = rmContext.getResourceProfilesManager();
   }
 
