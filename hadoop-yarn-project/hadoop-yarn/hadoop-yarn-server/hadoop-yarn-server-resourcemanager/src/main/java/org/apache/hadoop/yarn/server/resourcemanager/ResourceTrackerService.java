@@ -95,37 +95,59 @@ import org.apache.hadoop.yarn.util.YarnVersionInfo;
 
 import com.google.common.annotations.VisibleForTesting;
 
-public class ResourceTrackerService extends AbstractService implements
-    ResourceTracker {
+public class ResourceTrackerService extends AbstractService implements  ResourceTracker {
 
   private static final Log LOG = LogFactory.getLog(ResourceTrackerService.class);
 
-  private static final RecordFactory recordFactory = 
-    RecordFactoryProvider.getRecordFactory(null);
+  private static final RecordFactory recordFactory =   RecordFactoryProvider.getRecordFactory(null);
 
+  // RM 上下文信息
   private final RMContext rmContext;
+
+  // NodeManager list 管理
   private final NodesListManager nodesListManager;
+
+  // NodeManager 监控
   private final NMLivelinessMonitor nmLivelinessMonitor;
+  
+  // 安全相关
   private final RMContainerTokenSecretManager containerTokenSecretManager;
   private final NMTokenSecretManagerInRM nmTokenSecretManager;
 
+  // 读锁
   private final ReadLock readLock;
+  // 写锁
   private final WriteLock writeLock;
 
+  // 下次心跳间隔.
   private long nextHeartBeatInterval;
+  
+  // rpc服务
+  // 0.0.0.0 : 8031
   private Server server;
+  
+  // 绑定的地址
   private InetSocketAddress resourceTrackerAddress;
+  
+  
+  // 最小NodeManager版本 : NONE
   private String minimumNodeManagerVersion;
 
+  // 最小分配内存
   private int minAllocMb;
+
+  // 最小分配core
   private int minAllocVcores;
 
+  // 退役相关
   private DecommissioningNodesWatcher decommissioningWatcher;
+
 
   private boolean isDistributedNodeLabelsConf;
   private boolean isDelegatedCentralizedNodeLabelsConf;
   private DynamicResourceConfiguration drConf;
 
+  // timelineService 相关
   private final AtomicLong timelineCollectorVersion = new AtomicLong(0);
   private boolean timelineServiceV2Enabled;
 
@@ -134,57 +156,104 @@ public class ResourceTrackerService extends AbstractService implements
       NMLivelinessMonitor nmLivelinessMonitor,
       RMContainerTokenSecretManager containerTokenSecretManager,
       NMTokenSecretManagerInRM nmTokenSecretManager) {
+
     super(ResourceTrackerService.class.getName());
+
+    // RMContextImpl
     this.rmContext = rmContext;
+    // Service org.apache.hadoop.yarn.server.resourcemanager.
+    // NodesListManager in state org.apache.hadoop.yarn.server.resourcemanager.NodesListManager: NOTINITED
     this.nodesListManager = nodesListManager;
+
+    // Service NMLivelinessMonitor in state NMLivelinessMonitor: NOTINITED
     this.nmLivelinessMonitor = nmLivelinessMonitor;
+
+
     this.containerTokenSecretManager = containerTokenSecretManager;
+
+
     this.nmTokenSecretManager = nmTokenSecretManager;
+
+
     ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     this.readLock = lock.readLock();
     this.writeLock = lock.writeLock();
+
+
     this.decommissioningWatcher = new DecommissioningNodesWatcher(rmContext);
   }
 
   @Override
   protected void serviceInit(Configuration conf) throws Exception {
+
+    // yarn.resourcemanager.bind-host
+    // yarn.resourcemanager.resource-tracker.address
+
+    //  0.0.0.0 : 8031
     resourceTrackerAddress = conf.getSocketAddr(
         YarnConfiguration.RM_BIND_HOST,
         YarnConfiguration.RM_RESOURCE_TRACKER_ADDRESS,
         YarnConfiguration.DEFAULT_RM_RESOURCE_TRACKER_ADDRESS,
         YarnConfiguration.DEFAULT_RM_RESOURCE_TRACKER_PORT);
 
+    // 执行初始化操作
     RackResolver.init(conf);
+
+    // yarn.resourcemanager.nodemanagers.heartbeat-interval-ms : 1000
     nextHeartBeatInterval =
         conf.getLong(YarnConfiguration.RM_NM_HEARTBEAT_INTERVAL_MS,
             YarnConfiguration.DEFAULT_RM_NM_HEARTBEAT_INTERVAL_MS);
+
+
     if (nextHeartBeatInterval <= 0) {
       throw new YarnRuntimeException("Invalid Configuration. "
           + YarnConfiguration.RM_NM_HEARTBEAT_INTERVAL_MS
           + " should be larger than 0.");
     }
 
+    // 最小分配  内存
+    // yarn.scheduler.minimum-allocation-mb : 1024
     minAllocMb = conf.getInt(
         YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB,
         YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_MB);
+
+    // 最小分配cpu
+    // yarn.scheduler.minimum-allocation-vcores : 1
     minAllocVcores = conf.getInt(
         YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES,
         YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES);
 
+    // 最小NodeManager版本号
+    // yarn.resourcemanager.nodemanager.minimum.version : NONE
     minimumNodeManagerVersion = conf.get(
         YarnConfiguration.RM_NODEMANAGER_MINIMUM_VERSION,
         YarnConfiguration.DEFAULT_RM_NODEMANAGER_MINIMUM_VERSION);
+
+    // 是否启用timelineServiceV2
     timelineServiceV2Enabled =  YarnConfiguration.
         timelineServiceV2Enabled(conf);
 
+    // yarn.node-labels.enabled false
     if (YarnConfiguration.areNodeLabelsEnabled(conf)) {
+
+      // yarn.node-labels.configuration-type
       isDistributedNodeLabelsConf =
           YarnConfiguration.isDistributedNodeLabelConfiguration(conf);
+
+      LOG.info("isDistributedNodeLabelsConf: "+ isDistributedNodeLabelsConf);
+
+      // 否委托集中节点标签
       isDelegatedCentralizedNodeLabelsConf =
           YarnConfiguration.isDelegatedCentralizedNodeLabelConfiguration(conf);
+
+      LOG.info("isDelegatedCentralizedNodeLabelsConf: {}"+isDelegatedCentralizedNodeLabelsConf);
+
     }
 
+    // 加载动态资源配置
     loadDynamicResourceConfiguration(conf);
+
+    //退役观察者初始化
     decommissioningWatcher.init(conf);
     super.serviceInit(conf);
   }
@@ -231,10 +300,17 @@ public class ResourceTrackerService extends AbstractService implements
   @Override
   protected void serviceStart() throws Exception {
     super.serviceStart();
-    // ResourceTrackerServer authenticates NodeManager via Kerberos if
-    // security is enabled, so no secretManager.
+
+
+    // 如果启用了安全性，ResourceTrackerServer将通过Kerberos对NodeManager进行身份验证，因此没有secretManager。
+    // ResourceTrackerServer authenticates NodeManager via Kerberos if security is enabled, so no secretManager.
     Configuration conf = getConfig();
     YarnRPC rpc = YarnRPC.create(conf);
+
+
+    // yarn.resourcemanager.resource-tracker.client.thread-count :  50
+    // 0.0.0.0 : 8031
+    // 启动RPC服务
     this.server = rpc.getServer(
         ResourceTracker.class, this, resourceTrackerAddress, conf, null,
         conf.getInt(YarnConfiguration.RM_RESOURCE_TRACKER_CLIENT_THREAD_COUNT,
@@ -255,6 +331,8 @@ public class ResourceTrackerService extends AbstractService implements
     }
 
     this.server.start();
+
+    // 更新连接信息
     conf.updateConnectAddr(YarnConfiguration.RM_BIND_HOST,
         YarnConfiguration.RM_RESOURCE_TRACKER_ADDRESS,
         YarnConfiguration.DEFAULT_RM_RESOURCE_TRACKER_ADDRESS,
@@ -391,7 +469,7 @@ public class ResourceTrackerService extends AbstractService implements
       // sync back with new resource.
       response.setResource(capability);
     }
-    // 检测该node是否有最小资源限制
+    // 检测该node是否有最小资源限制 , 发送SHUTDOWN 指令
     // Check if this node has minimum allocations
     if (capability.getMemorySize() < minAllocMb
         || capability.getVirtualCores() < minAllocVcores) {
@@ -857,9 +935,12 @@ public class ResourceTrackerService extends AbstractService implements
       UnRegisterNodeManagerRequest request) throws YarnException, IOException {
     UnRegisterNodeManagerResponse response = recordFactory
         .newRecordInstance(UnRegisterNodeManagerResponse.class);
+    
+    // 根据请求, 获取RMNode 信息
     NodeId nodeId = request.getNodeId();
     RMNode rmNode = this.rmContext.getRMNodes().get(nodeId);
     if (rmNode == null) {
+      // rmNode 未发现忽略
       LOG.info("Node not found, ignoring the unregister from node id : "
           + nodeId);
       return response;
@@ -867,6 +948,8 @@ public class ResourceTrackerService extends AbstractService implements
     LOG.info("Node with node id : " + nodeId
         + " has shutdown, hence unregistering the node.");
     this.nmLivelinessMonitor.unregister(nodeId);
+
+    // 执行关闭操作.
     this.rmContext.getDispatcher().getEventHandler()
         .handle(new RMNodeEvent(nodeId, RMNodeEventType.SHUTDOWN));
     return response;

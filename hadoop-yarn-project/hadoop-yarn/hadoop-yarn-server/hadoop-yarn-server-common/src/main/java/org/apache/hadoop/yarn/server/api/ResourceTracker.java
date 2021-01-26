@@ -30,8 +30,7 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.UnRegisterNodeManagerRe
 import org.apache.hadoop.yarn.server.api.protocolrecords.UnRegisterNodeManagerResponse;
 
 /**
- * This is used by the Node Manager to register/nodeHeartbeat/unregister with
- * the ResourceManager.
+ * This is used by the Node Manager to register/nodeHeartbeat/unregister with the ResourceManager.
  */
 public interface ResourceTracker {
   
