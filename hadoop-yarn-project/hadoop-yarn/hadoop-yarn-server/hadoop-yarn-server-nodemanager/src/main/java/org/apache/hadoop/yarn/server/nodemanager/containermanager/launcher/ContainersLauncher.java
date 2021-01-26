@@ -62,31 +62,44 @@ public class ContainersLauncher extends AbstractService
   private static final Logger LOG =
        LoggerFactory.getLogger(ContainersLauncher.class);
 
+  // 上下文内容
   private Context context;
+
+  // ContainerExecutor : 一种是DefaultContainerExecutor， 另一种是LinuxContainerExecutor
   private ContainerExecutor exec;
+
+  //
   private Dispatcher dispatcher;
+
+
   private ContainerManagerImpl containerManager;
 
+
   private LocalDirsHandlerService dirsHandler;
+
+  // 启动 container的线程池
   @VisibleForTesting
   public ExecutorService containerLauncher =
       HadoopExecutors.newCachedThreadPool(
         new ThreadFactoryBuilder()
           .setNameFormat("ContainersLauncher #%d")
           .build());
+  // 记录Container 的集合
   @VisibleForTesting
-  public final Map<ContainerId, ContainerLaunch> running =
-    Collections.synchronizedMap(new HashMap<ContainerId, ContainerLaunch>());
+  public final Map<ContainerId, ContainerLaunch> running =  Collections.synchronizedMap(new HashMap<ContainerId, ContainerLaunch>());
 
   public ContainersLauncher() {
     super("containers-launcher");
   }
+
 
   @VisibleForTesting
   public ContainersLauncher(Context context, Dispatcher dispatcher,
       ContainerExecutor exec, LocalDirsHandlerService dirsHandler,
       ContainerManagerImpl containerManager) {
     this();
+
+    // 执行初始化操作...
     init(context, dispatcher, exec, dirsHandler, containerManager);
   }
 
@@ -104,6 +117,8 @@ public class ContainersLauncher extends AbstractService
   @Override
   protected void serviceInit(Configuration conf) throws Exception {
     try {
+      // 这个是干啥啊的 ???
+
       //TODO Is this required?
       FileContext.getLocalFSFileContext(conf);
     } catch (UnsupportedFileSystemException e) {
@@ -121,21 +136,30 @@ public class ContainersLauncher extends AbstractService
   @Override
   public void handle(ContainersLauncherEvent event) {
     // TODO: ContainersLauncher launches containers one by one!!
+
+    // 一个一个的启动Container
     Container container = event.getContainer();
+
+    // 获取ContainerId
     ContainerId containerId = container.getContainerId();
+
     switch (event.getType()) {
+      // 启动Container
       case LAUNCH_CONTAINER:
         Application app =
           context.getApplications().get(
               containerId.getApplicationAttemptId().getApplicationId());
 
+        // 构建ContainerLaunch 对象, 交由线程池执行.
         ContainerLaunch launch =
             new ContainerLaunch(context, getConfig(), dispatcher, exec, app,
               event.getContainer(), dirsHandler, containerManager);
         containerLauncher.submit(launch);
         running.put(containerId, launch);
         break;
+
       case RELAUNCH_CONTAINER:
+        // 重新启动Container
         app = context.getApplications().get(
                 containerId.getApplicationAttemptId().getApplicationId());
 
@@ -145,7 +169,9 @@ public class ContainersLauncher extends AbstractService
         containerLauncher.submit(relaunch);
         running.put(containerId, relaunch);
         break;
+
       case RECOVER_CONTAINER:
+        // 异常恢复Container/ 重新提交.
         app = context.getApplications().get(
             containerId.getApplicationAttemptId().getApplicationId());
         launch = new RecoveredContainerLaunch(context, getConfig(), dispatcher,
@@ -154,6 +180,7 @@ public class ContainersLauncher extends AbstractService
         running.put(containerId, launch);
         break;
       case RECOVER_PAUSED_CONTAINER:
+        // 恢复暂停的容器
         app = context.getApplications().get(
             containerId.getApplicationAttemptId().getApplicationId());
         launch = new RecoverPausedContainerLaunch(context, getConfig(),
@@ -162,12 +189,15 @@ public class ContainersLauncher extends AbstractService
         containerLauncher.submit(launch);
         break;
       case CLEANUP_CONTAINER:
+        // 清理容器
         cleanup(event, containerId, true);
         break;
       case CLEANUP_CONTAINER_FOR_REINIT:
+       // 清理容器,重新进行初始化
         cleanup(event, containerId, false);
         break;
       case SIGNAL_CONTAINER:
+        // 向Container发送指令
         SignalContainersLauncherEvent signalEvent =
             (SignalContainersLauncherEvent) event;
         ContainerLaunch runningContainer = running.get(containerId);
@@ -185,6 +215,7 @@ public class ContainersLauncher extends AbstractService
         }
         break;
       case PAUSE_CONTAINER:
+        // 暂停Container
         ContainerLaunch launchedContainer = running.get(containerId);
         if (launchedContainer == null) {
           // Container not launched. So nothing needs to be done.
@@ -200,6 +231,7 @@ public class ContainersLauncher extends AbstractService
         }
         break;
       case RESUME_CONTAINER:
+        // 恢复Container
         ContainerLaunch launchCont = running.get(containerId);
         if (launchCont == null) {
           // Container not launched. So nothing needs to be done.
