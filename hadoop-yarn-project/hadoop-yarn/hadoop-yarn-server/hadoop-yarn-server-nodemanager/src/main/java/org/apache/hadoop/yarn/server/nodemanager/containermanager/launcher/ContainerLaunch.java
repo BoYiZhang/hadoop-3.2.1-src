@@ -100,15 +100,13 @@ import org.slf4j.LoggerFactory;
 
 public class ContainerLaunch implements Callable<Integer> {
 
-  private static final Logger LOG =
-       LoggerFactory.getLogger(ContainerLaunch.class);
+  private static final Logger LOG =  LoggerFactory.getLogger(ContainerLaunch.class);
 
   private static final String CONTAINER_PRE_LAUNCH_PREFIX = "prelaunch";
   public static final String CONTAINER_PRE_LAUNCH_STDOUT = CONTAINER_PRE_LAUNCH_PREFIX + ".out";
   public static final String CONTAINER_PRE_LAUNCH_STDERR = CONTAINER_PRE_LAUNCH_PREFIX + ".err";
 
-  public static final String CONTAINER_SCRIPT =
-    Shell.appendScriptExtension("launch_container");
+  public static final String CONTAINER_SCRIPT =  Shell.appendScriptExtension("launch_container");
 
   public static final String FINAL_CONTAINER_TOKENS_FILE = "container_tokens";
   public static final String SYSFS_DIR = "sysfs";
