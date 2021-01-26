@@ -32,4 +32,8 @@
     </property>
 
 
+    <property>
+        <name>yarn.nodemanager.log-dirs</name>
+        <value>/opt/tools/hadoop-3.2.1/logs/userlogs</value>
+    </property>
 </configuration>

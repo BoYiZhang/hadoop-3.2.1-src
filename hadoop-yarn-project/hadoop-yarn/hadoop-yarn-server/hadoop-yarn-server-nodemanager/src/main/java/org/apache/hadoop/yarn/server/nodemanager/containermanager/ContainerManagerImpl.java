@@ -1181,10 +1181,10 @@ public class ContainerManagerImpl extends CompositeService implements
     // Container 启动时间
     long containerStartTime = SystemClock.getInstance().getTime();
 
-    // 构建 ContainerImpl
+    // 构建 ContainerImpl  container_1611649876067_0001_01_000001
     Container container = new ContainerImpl(getConfig(), this.dispatcher,launchContext, credentials, metrics, containerTokenIdentifier,context, containerStartTime);
 
-    //获取ApplicationId
+    //获取ApplicationId : application_1611649876067_0001
     ApplicationId applicationID =  containerId.getApplicationAttemptId().getApplicationId();
     if (context.getContainers().putIfAbsent(containerId, container) != null) {
       NMAuditLogger.logFailure(user, AuditConstants.START_CONTAINER,
