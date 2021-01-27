@@ -36,4 +36,17 @@
         <name>yarn.nodemanager.log-dirs</name>
         <value>/opt/tools/hadoop-3.2.1/logs/userlogs</value>
     </property>
+
+    <property>
+        <name> yarn.nodemanager.local-dirs</name>
+        <value>/opt/tools/hadoop-3.2.1/local-dirs</value>
+    </property>
+
+
+    <property>
+        <name>yarn.nodemanager.log-container-debug-info.enabled</name>
+        <value>true</value>
+    </property>
+
+
 </configuration>

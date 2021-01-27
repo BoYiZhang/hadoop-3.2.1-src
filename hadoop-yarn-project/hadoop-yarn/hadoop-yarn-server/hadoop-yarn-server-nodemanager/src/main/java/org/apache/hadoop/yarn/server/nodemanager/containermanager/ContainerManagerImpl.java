@@ -972,6 +972,100 @@ public class ContainerManagerImpl extends CompositeService implements
     }
   }
 
+
+  //
+  //  start_container_request {
+  //    container_launch_context {
+  //      localResources {
+  //        key: "__spark_conf__"
+  //        value {
+  //          resource {
+  //            scheme: "hdfs"
+  //            host: "localhost"
+  //            port: 8020
+  //            file: "/user/henghe/.sparkStaging/application_1611649876067_0001/__spark_conf__.zip"
+  //          }
+  //          size: 250024
+  //          timestamp: 1611650748335
+  //          type: ARCHIVE
+  //          visibility: PRIVATE
+  //        }
+  //      }
+  //      localResources {
+  //        key: "__app__.jar"
+  //        value {
+  //          resource {
+  //            scheme: "hdfs"
+  //            host: "localhost"
+  //            port: 8020
+  //            file: "/user/henghe/.sparkStaging/application_1611649876067_0001/spark-examples_2.11-2.4.5.jar"
+  //          }
+  //          size: 1475072
+  //          timestamp: 1611650747880
+  //          type: FILE
+  //          visibility: PRIVATE
+  //        }
+  //      }
+  //      tokens: "HDTS\000\001\000\032\n\r\n\t\b\001\020\343\200\306\356\363.\020\001\020\211\261\343\254\370\377\377\377\377\001\024\367\0369&\223=\221M`\\\245\0018\374z\360\266\275+@\020YARN_AM_RM_TOKEN\000\000"
+  //      environment {
+  //        key: "SPARK_YARN_STAGING_DIR"
+  //        value: "hdfs://localhost:8020/user/henghe/.sparkStaging/application_1611649876067_0001"
+  //      }
+  //      environment {
+  //        key: "APPLICATION_WEB_PROXY_BASE"
+  //        value: "/proxy/application_1611649876067_0001"
+  //      }
+  //      environment {
+  //        key: "SPARK_USER"
+  //        value: "henghe"
+  //      }
+  //      environment {
+  //        key: "CLASSPATH"
+  //        value: "{{PWD}}<CPS>{{PWD}}/__spark_conf__<CPS>{{PWD}}/__spark_libs__/*<CPS>$HADOOP_CONF_DIR<CPS>$HADOOP_COMMON_HOME/share/hadoop/common/*<CPS>$HADOOP_COMMON_HOME/share/hadoop/common/lib/*<CPS>$HADOOP_HDFS_HOME/share/hadoop/hdfs/*<CPS>$HADOOP_HDFS_HOME/share/hadoop/hdfs/lib/*<CPS>$HADOOP_YARN_HOME/share/hadoop/yarn/*<CPS>$HADOOP_YARN_HOME/share/hadoop/yarn/lib/*<CPS>$HADOOP_MAPRED_HOME/share/hadoop/mapreduce/*<CPS>$HADOOP_MAPRED_HOME/share/hadoop/mapreduce/lib/*<CPS>{{PWD}}/__spark_conf__/__hadoop_conf__"
+  //      }
+  //      environment {
+  //        key: "PYTHONHASHSEED"
+  //        value: "0"
+  //      }
+  //      environment {
+  //        key: "APP_SUBMIT_TIME_ENV"
+  //        value: "1611650782082"
+  //      }
+  //      command: "{{JAVA_HOME}}/bin/java"
+  //      command: "-server"
+  //      command: "-Xmx1024m"
+  //      command: "-Djava.io.tmpdir={{PWD}}/tmp"
+  //      command: "-Dspark.yarn.app.container.log.dir=<LOG_DIR>"
+  //      command: "org.apache.spark.deploy.yarn.ApplicationMaster"
+  //      command: "--class"
+  //      command: "\'org.apache.spark.examples.SparkPi\'"
+  //      command: "--jar"
+  //      command: "file:/opt/tools/spark-2.4.5/examples/jars/spark-examples_2.11-2.4.5.jar"
+  //      command: "--arg"
+  //      command: "\'10\'"
+  //      command: "--properties-file"
+  //      command: "{{PWD}}/__spark_conf__/__spark_conf__.properties"
+  //      command: "1>"
+  //      command: "<LOG_DIR>/stdout"
+  //      command: "2>"
+  //      command: "<LOG_DIR>/stderr"
+  //      application_ACLs {
+  //        accessType: APPACCESS_VIEW_APP
+  //        acl: "sysadmin,henghe "
+  //      }
+  //      application_ACLs {
+  //        accessType: APPACCESS_MODIFY_APP
+  //        acl: "sysadmin,henghe "
+  //      }
+  //    }
+  //    container_token {
+  //      identifier: "\n\021\022\r\n\t\b\001\020\343\200\306\356\363.\020\001\030\001\022\023192.168.8.188:59693\032\006henghe\"+\b\200\020\020\001\032\024\n\tmemory-mb\020\200\020\032\002Mi \000\032\016\n\006vcores\020\001\032\000 \000(\354\251\242\357\363.0\347\232\217\336\0068\343\200\306\356\363.B\002\b\000H\231\332\375\356\363.Z\000`\001h\001p\000x\377\377\377\377\377\377\377\377\377\001"
+  //      password: "O\203up\251\241_)\016ml[\335\035\317\225\252,\021\204"
+  //      kind: "ContainerToken"
+  //      service: "192.168.8.188:59693"
+  //    }
+  //  }
+
   /**
    * Start a list of containers on this NodeManager.
    */

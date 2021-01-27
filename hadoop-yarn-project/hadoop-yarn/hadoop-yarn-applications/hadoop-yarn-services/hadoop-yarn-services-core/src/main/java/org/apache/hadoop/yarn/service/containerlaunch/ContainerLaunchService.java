@@ -45,6 +45,9 @@ public class ContainerLaunchService extends AbstractService{
   private ExecutorService executorService;
   private SliderFileSystem fs;
   private ServiceContext context;
+
+
+
   public ContainerLaunchService(ServiceContext context) {
     super(ContainerLaunchService.class.getName());
     this.fs = context.fs;
@@ -68,10 +71,11 @@ public class ContainerLaunchService extends AbstractService{
   public void launchCompInstance(Service service,
       ComponentInstance instance, Container container,
       ComponentLaunchContext componentLaunchContext) {
-    ContainerLauncher launcher =
-        new ContainerLauncher(service, instance, container,
-            componentLaunchContext, false);
+
+
+    ContainerLauncher launcher = new ContainerLauncher(service, instance, container,  componentLaunchContext, false);
     executorService.execute(launcher);
+
   }
 
   public void reInitCompInstance(Service service,
@@ -99,19 +103,31 @@ public class ContainerLaunchService extends AbstractService{
       this.reInit = reInit;
     }
 
-    @Override public void run() {
+    @Override
+
+    public void run() {
       ProviderService provider = ProviderFactory.getProviderService(
           componentLaunchContext.getArtifact());
+
+
       AbstractLauncher launcher = new AbstractLauncher(context);
       try {
-        provider.buildContainerLaunchContext(launcher, service,
-            instance, fs, getConfig(), container, componentLaunchContext);
+
+
+        provider.buildContainerLaunchContext(launcher, service, instance, fs, getConfig(), container, componentLaunchContext);
+
+
         if (!reInit) {
+
+
+
           LOG.info("launching container {}", container.getId());
           instance.getComponent().getScheduler().getNmClient()
               .startContainerAsync(container,
                   launcher.completeContainerLaunch());
         } else {
+
+
           LOG.info("reInitializing container {} with version {}",
               container.getId(), componentLaunchContext.getServiceVersion());
           instance.getComponent().getScheduler().getNmClient()
@@ -119,6 +135,7 @@ public class ContainerLaunchService extends AbstractService{
                   launcher.completeContainerLaunch(), true);
         }
       } catch (Exception e) {
+
         LOG.error("{}: Failed to launch container.",
             instance.getCompInstanceId(), e);
         ComponentEvent event = new ComponentEvent(instance.getCompName(),
@@ -133,11 +150,12 @@ public class ContainerLaunchService extends AbstractService{
    * Launch context of a component.
    */
   public static class ComponentLaunchContext {
+
+
     private final String name;
     private final String serviceVersion;
     private Artifact artifact;
-    private org.apache.hadoop.yarn.service.api.records.Configuration
-        configuration;
+    private org.apache.hadoop.yarn.service.api.records.Configuration  configuration;
     private String launchCommand;
     private boolean runPrivilegedContainer;
 

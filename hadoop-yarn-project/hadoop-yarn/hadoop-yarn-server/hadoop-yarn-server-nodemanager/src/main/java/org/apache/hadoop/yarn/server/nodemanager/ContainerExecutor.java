@@ -340,13 +340,16 @@ public abstract class ContainerExecutor implements Configurable {
   public void writeLaunchEnv(OutputStream out, Map<String, String> environment,
       Map<Path, List<String>> resources, List<String> command, Path logDir,
       String user, LinkedHashSet<String> nmVars) throws IOException {
-    this.writeLaunchEnv(out, environment, resources, command, logDir, user,
-        ContainerLaunch.CONTAINER_SCRIPT, nmVars);
+
+
+
+
+    this.writeLaunchEnv(out, environment, resources, command, logDir, user,  ContainerLaunch.CONTAINER_SCRIPT, nmVars);
   }
 
   /**
-   * This method writes out the launch environment of a container to a specified
-   * path.
+   * 此方法将容器的启动环境写出到指定的路径。
+   * This method writes out the launch environment of a container to a specified path.
    *
    * @param out the output stream to which the environment is written (usually
    * a script file which will be executed by the Launcher)
@@ -367,66 +370,195 @@ public abstract class ContainerExecutor implements Configurable {
       String user, String outFilename, LinkedHashSet<String> nmVars)
       throws IOException {
 
-    ContainerLaunch.ShellScriptBuilder sb =
-        ContainerLaunch.ShellScriptBuilder.create();
+
+    ContainerLaunch.ShellScriptBuilder sb =  ContainerLaunch.ShellScriptBuilder.create();
+//    # 输出脚本的头信息
+//    #!/bin/bash
 
     // Add "set -o pipefail -e" to validate launch_container script.
     sb.setExitOnFailure();
+//    #快速失败并检查退出状态(exit codes).
+//    set -o pipefail -e
 
     //Redirect stdout and stderr for launch_container script
     sb.stdout(logDir, CONTAINER_PRE_LAUNCH_STDOUT);
+//    #输出运行日志
+//    export PRELAUNCH_OUT="/opt/tools/hadoop-3.2.1/logs/userlogs/application_1611681788558_0001/container_1611681788558_0001_01_000001/prelaunch.out"
+//    exec >"${PRELAUNCH_OUT}"
+
     sb.stderr(logDir, CONTAINER_PRE_LAUNCH_STDERR);
+//    #输出异常日志
+//    export PRELAUNCH_ERR="/opt/tools/hadoop-3.2.1/logs/userlogs/application_1611681788558_0001/container_1611681788558_0001_01_000001/prelaunch.err"
+//    exec 2>"${PRELAUNCH_ERR}"
 
 
     if (environment != null) {
+
       sb.echo("Setting up env variables");
+//      # 设置环境变量
+//      echo "Setting up env variables"
+
+
+      // 白名单环境变量被特别处理。
+      // 仅当环境中尚未定义它们时才添加它们。
+      // 使用特殊的语法添加它们，以防止它们掩盖可能在容器映像（例如docker映像）中显式设置的变量。
+      // 将这些放在其他之前，以确保使用正确的使用。
+
       // Whitelist environment variables are treated specially.
       // Only add them if they are not already defined in the environment.
-      // Add them using special syntax to prevent them from eclipsing
-      // variables that may be set explicitly in the container image (e.g,
-      // in a docker image).  Put these before the others to ensure the
-      // correct expansion is used.
+      // Add them using special syntax to prevent them from eclipsing variables that may be set explicitly in the container image (e.g, in a docker image).
+      // Put these before the others to ensure the correct expansion is used.
+
+
+      sb.echo("Setting up env variables#whitelistVars");
       for(String var : whitelistVars) {
         if (!environment.containsKey(var)) {
+
           String val = getNMEnvVar(var);
+
           if (val != null) {
+
+
             sb.whitelistedEnv(var, val);
           }
         }
       }
-      // Now write vars that were set explicitly by nodemanager, preserving
-      // the order they were written in.
+//      # 设置环境变量#白名单变量
+//      echo "Setting up env variables#whitelistVars"
+//      export JAVA_HOME=${JAVA_HOME:-"/Library/java/JavaVirtualMachines/jdk1.8.0_271.jdk/Contents/Home"}
+//      export HADOOP_COMMON_HOME=${HADOOP_COMMON_HOME:-"/opt/workspace/apache/hadoop-3.2.1-src/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/../../../../hadoop-common-project/hadoop-common/target"}
+//      export HADOOP_CONF_DIR=${HADOOP_CONF_DIR:-"/opt/tools/hadoop-3.2.1/etc/hadoop"}
+//      export HADOOP_HOME=${HADOOP_HOME:-"/opt/workspace/apache/hadoop-3.2.1-src/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/../../../../hadoop-common-project/hadoop-common/target"}
+//      export PATH=${PATH:-"/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/tools/apache-maven-3.6.3/bin:/opt/tools/scala-2.12.10/bin:/usr/local/mysql-5.7.28-macos10.14-x86_64/bin:/Library/java/JavaVirtualMachines/jdk1.8.0_271.jdk/Contents/Home/bin:/opt/tools/hadoop-3.2.1/bin:/opt/tools/hadoop-3.2.1/etc/hadoop:henghe:/opt/tools/ozone-1.0.0/bin:/opt/tools/spark-2.4.5/bin:/opt/tools/spark-2.4.5/conf:/opt/tools/redis-5.0.7/src:/opt/tools/datax/bin:/opt/tools/apache-ant-1.9.6/bin:/opt/tools/hbase-2.0.2/bin"}
+
+
+
+      sb.echo("Setting up env variables#env");
+
+      // 现在编写由nodemanager显式设置的变量，保留它们的写入顺序。
+      // Now write vars that were set explicitly by nodemanager, preserving the order they were written in.
       for (String nmEnvVar : nmVars) {
         sb.env(nmEnvVar, environment.get(nmEnvVar));
       }
+//      # 设置环境变量#环境变量
+//      echo "Setting up env variables#env"
+//      export HADOOP_TOKEN_FILE_LOCATION="/opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/appcache/application_1611681788558_0001/container_1611681788558_0001_01_000001/container_tokens"
+//      export CONTAINER_ID="container_1611681788558_0001_01_000001"
+//      export NM_PORT="62016"
+//      export NM_HOST="boyi-pro.lan"
+//      export NM_HTTP_PORT="8042"
+//      export LOCAL_DIRS="/opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/appcache/application_1611681788558_0001"
+//      export LOCAL_USER_DIRS="/opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/"
+//      export LOG_DIRS="/opt/tools/hadoop-3.2.1/logs/userlogs/application_1611681788558_0001/container_1611681788558_0001_01_000001"
+//      export USER="henghe"
+//      export LOGNAME="henghe"
+//      export HOME="/home/"
+//      export PWD="/opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/appcache/application_1611681788558_0001/container_1611681788558_0001_01_000001"
+//      export JVM_PID="$$"
+//      export MALLOC_ARENA_MAX="4"
+
+
+      sb.echo("Setting up env variables#remaining");
+      // 现在写入剩余的环境变量
       // Now write the remaining environment variables.
-      for (Map.Entry<String, String> env :
-           sb.orderEnvByDependencies(environment).entrySet()) {
+
+      for (Map.Entry<String, String> env :  sb.orderEnvByDependencies(environment).entrySet()) {
         if (!nmVars.contains(env.getKey())) {
           sb.env(env.getKey(), env.getValue());
         }
       }
+//      # 设置环境变量#剩余环境变量
+//      echo "Setting up env variables#remaining"
+//      export SPARK_YARN_STAGING_DIR="hdfs://localhost:8020/user/henghe/.sparkStaging/application_1611681788558_0001"
+//      export APPLICATION_WEB_PROXY_BASE="/proxy/application_1611681788558_0001"
+//      export CLASSPATH="$PWD:$PWD/__spark_conf__:$PWD/__spark_libs__/*:$HADOOP_CONF_DIR:$HADOOP_COMMON_HOME/share/hadoop/common/*:$HADOOP_COMMON_HOME/share/hadoop/common/lib/*:$HADOOP_HDFS_HOME/share/hadoop/hdfs/*:$HADOOP_HDFS_HOME/share/hadoop/hdfs/lib/*:$HADOOP_YARN_HOME/share/hadoop/yarn/*:$HADOOP_YARN_HOME/share/hadoop/yarn/lib/*:$HADOOP_MAPRED_HOME/share/hadoop/mapreduce/*:$HADOOP_MAPRED_HOME/share/hadoop/mapreduce/lib/*:$PWD/__spark_conf__/__hadoop_conf__"
+//      export APP_SUBMIT_TIME_ENV="1611681915166"
+//      export SPARK_USER="henghe"
+//      export PYTHONHASHSEED="0"
+
     }
+
+
 
     if (resources != null) {
+
       sb.echo("Setting up job resources");
+
+
       Map<Path, Path> symLinks = resolveSymLinks(resources, user);
       for (Map.Entry<Path, Path> symLink : symLinks.entrySet()) {
+        // 链接环境变量
         sb.symlink(symLink.getKey(), symLink.getValue());
       }
+//      # 设置资源文件[通过ln -sf 构建所需jar文件/配置文件的软连接. ]
+//      echo "Setting up job resources"
+//      mkdir -p __spark_libs__
+//      ln -sf -- "/opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/filecache/35/spark-examples_2.11-2.4.5.jar" "__app__.jar"
+//      mkdir -p __spark_libs__
+//      ln -sf -- "/opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/filecache/180/__spark_conf__.zip" "__spark_conf__"
+//      # 此处省略N多
+//      # mkdir -p __spark_libs__
+//      # ln -sf --"xxxxx"  "__spark_libs__/xxxxx.jar"
     }
 
+
+    // dump 调试信息（如果已配置）
     // dump debugging information if configured
-    if (getConf() != null &&
-        getConf().getBoolean(YarnConfiguration.NM_LOG_CONTAINER_DEBUG_INFO,
-        YarnConfiguration.DEFAULT_NM_LOG_CONTAINER_DEBUG_INFO)) {
+
+
+    if (getConf() != null && getConf().getBoolean(YarnConfiguration.NM_LOG_CONTAINER_DEBUG_INFO,  YarnConfiguration.DEFAULT_NM_LOG_CONTAINER_DEBUG_INFO)) {
+
+//    # 设置debug 信息
       sb.echo("Copying debugging information");
-      sb.copyDebugInformation(new Path(outFilename),
-          new Path(logDir, outFilename));
+
+      sb.copyDebugInformation(new Path(outFilename),  new Path(logDir, outFilename));
       sb.listDebugInformation(new Path(logDir, DIRECTORY_CONTENTS));
+
+//      # 设置debug 信息
+//      echo "Copying debugging information"
+
+//      # Creating copy of launch script
+//      cp "launch_container.sh" "/opt/tools/hadoop-3.2.1/logs/userlogs/application_1611681788558_0001/container_1611681788558_0001_01_000001/launch_container.sh"
+//      chmod 640 "/opt/tools/hadoop-3.2.1/logs/userlogs/application_1611681788558_0001/container_1611681788558_0001_01_000001/launch_container.sh"
+
+//      # 确定目录内容
+//      # Determining directory contents
+//      echo "ls -l:" 1>"/opt/tools/hadoop-3.2.1/logs/userlogs/application_1611681788558_0001/container_1611681788558_0001_01_000001/directory.info"
+//      ls -l 1>>"/opt/tools/hadoop-3.2.1/logs/userlogs/application_1611681788558_0001/container_1611681788558_0001_01_000001/directory.info"
+//      echo "find -L . -maxdepth 5 -ls:" 1>>"/opt/tools/hadoop-3.2.1/logs/userlogs/application_1611681788558_0001/container_1611681788558_0001_01_000001/directory.info"
+//      find -L . -maxdepth 5 -ls 1>>"/opt/tools/hadoop-3.2.1/logs/userlogs/application_1611681788558_0001/container_1611681788558_0001_01_000001/directory.info"
+//      echo "broken symlinks(find -L . -maxdepth 5 -type l -ls):" 1>>"/opt/tools/hadoop-3.2.1/logs/userlogs/application_1611681788558_0001/container_1611681788558_0001_01_000001/directory.info"
+//      find -L . -maxdepth 5 -type l -ls 1>>"/opt/tools/hadoop-3.2.1/logs/userlogs/application_1611681788558_0001/container_1611681788558_0001_01_000001/directory.info"
+
+
     }
+
+
     sb.echo("Launching container");
+//    echo "Launching container"
+
+
+    // 启动container
     sb.command(command);
+//    #输出启动脚本
+//    exec /bin/bash -c "
+//      $JAVA_HOME/bin/java
+//      -server
+//      -Xmx1024m
+//      -Djava.io.tmpdir=$PWD/tmp
+//      -Dspark.yarn.app.container.log.dir=/opt/tools/hadoop-3.2.1/logs/userlogs/application_1611681788558_0001/container_1611681788558_0001_01_000001
+//      org.apache.spark.deploy.yarn.ApplicationMaster
+//        --class 'org.apache.spark.examples.SparkPi'
+//        --jar file:/opt/tools/spark-2.4.5/examples/jars/spark-examples_2.11-2.4.5.jar
+//        --arg '10'
+//        --properties-file $PWD/__spark_conf__/__spark_conf__.properties
+//      1> /opt/tools/hadoop-3.2.1/logs/userlogs/application_1611681788558_0001/container_1611681788558_0001_01_000001/stdout
+//      2> /opt/tools/hadoop-3.2.1/logs/userlogs/application_1611681788558_0001/container_1611681788558_0001_01_000001/stderr"
+
+
+
+    //最终输入内容
+    LOG.warn("ContainerExecutor#writeLaunchEnv : " + sb.toString());
 
     PrintStream pout = null;
     try {

@@ -150,11 +150,17 @@ public class ContainersLauncher extends AbstractService
           context.getApplications().get(
               containerId.getApplicationAttemptId().getApplicationId());
 
-        // 构建ContainerLaunch 对象, 交由线程池执行.
+        // 构建ContainerLaunch 对象,交由线程池执行.
         ContainerLaunch launch =
             new ContainerLaunch(context, getConfig(), dispatcher, exec, app,
               event.getContainer(), dirsHandler, containerManager);
+
+
+        // 提交任务
         containerLauncher.submit(launch);
+
+
+        // 加入缓存 [ 通过launch对象可以获取返回值 ]
         running.put(containerId, launch);
         break;
 
