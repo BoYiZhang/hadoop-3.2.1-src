@@ -1184,8 +1184,7 @@ public class YarnConfiguration extends Configuration {
   /**  
    * Adjustment to make to the container os scheduling priority.
    * The valid values for this could vary depending on the platform.
-   * On Linux, higher values mean run the containers at a less 
-   * favorable priority than the NM. 
+   * On Linux, higher values mean run the containers at a less favorable priority than the NM.
    * The value specified is an int.
    */
   public static final String NM_CONTAINER_EXECUTOR_SCHED_PRIORITY = 

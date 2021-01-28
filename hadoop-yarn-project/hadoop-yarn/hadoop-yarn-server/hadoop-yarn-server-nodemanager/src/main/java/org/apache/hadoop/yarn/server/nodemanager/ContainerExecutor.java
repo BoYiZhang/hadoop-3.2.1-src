@@ -72,39 +72,59 @@ import static org.apache.hadoop.yarn.server.nodemanager.containermanager.launche
 import static org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.ContainerLaunch.CONTAINER_PRE_LAUNCH_STDOUT;
 
 /**
- * This class is abstraction of the mechanism used to launch a container on the
- * underlying OS.  All executor implementations must extend ContainerExecutor.
+ * 用于在底层操作系统上启动container的机制的抽象类。
+ * 所有的executor 必须继承ContainerExecutor
+ *
+ * This class is abstraction of the mechanism used to launch a container on the underlying OS.
+ * All executor implementations must extend ContainerExecutor.
  */
 public abstract class ContainerExecutor implements Configurable {
-  private static final Logger LOG =
-       LoggerFactory.getLogger(ContainerExecutor.class);
+
+  private static final Logger LOG =  LoggerFactory.getLogger(ContainerExecutor.class);
+
+  // 通配符
   protected static final String WILDCARD = "*";
 
   /**
+   * 创建启动脚本时要使用的权限。 : 700
    * The permissions to use when creating the launch script.
    */
-  public static final FsPermission TASK_LAUNCH_SCRIPT_PERMISSION =
-      FsPermission.createImmutable((short)0700);
+  public static final FsPermission TASK_LAUNCH_SCRIPT_PERMISSION = FsPermission.createImmutable((short)0700);
 
   /**
+   *
+   * 调试信息将写入的相对路径。
+   *
    * The relative path to which debug information will be written.
    *
    * @see ShellScriptBuilder#listDebugInformation
    */
   public static final String DIRECTORY_CONTENTS = "directory.info";
 
+  // 配置信息
   private Configuration conf;
-  private final ConcurrentMap<ContainerId, Path> pidFiles =
-      new ConcurrentHashMap<>();
+
+
+  // ContainerId 对应的 pid 存储文件路径
+  private final ConcurrentMap<ContainerId, Path> pidFiles =  new ConcurrentHashMap<>();
+
+  // 可重入读写锁
   private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
   private final ReadLock readLock = lock.readLock();
   private final WriteLock writeLock = lock.writeLock();
+
+  // 白名单 变量 : 用户可以自定义设置的环境变量, 当用户指定的时候, 不再使用NodeManager环境的默认值.
   private String[] whitelistVars;
 
   @Override
   public void setConf(Configuration conf) {
     this.conf = conf;
     if (conf != null) {
+      // Environment variables that containers may override rather than use NodeManager's default
+      //
+      // 用户可以自定义设置的环境变量, 当用户指定的时候, 不再使用NodeManager环境的默认值.
+      // yarn.nodemanager.env-whitelist
+      // JAVA_HOME , HADOOP_COMMON_HOME , HADOOP_HDFS_HOME , HADOOP_CONF_DIR ,  CLASSPATH_PREPEND_DISTCACHE , HADOOP_YARN_HOME
       whitelistVars = conf.get(YarnConfiguration.NM_ENV_WHITELIST,
           YarnConfiguration.DEFAULT_NM_ENV_WHITELIST).split(",");
     }
@@ -126,12 +146,9 @@ public abstract class ContainerExecutor implements Configurable {
 
   /**
    * This function localizes the JAR file on-demand.
-   * On Windows the ContainerLaunch creates a temporary special JAR manifest of
-   * other JARs to workaround the CLASSPATH length. In a secure cluster this
-   * JAR must be localized so that the container has access to it.
-   * The default implementation returns the classpath passed to it, which
-   * is expected to have been created in the node manager's <i>fprivate</i>
-   * folder, which will not work with secure Windows clusters.
+   * On Windows the ContainerLaunch creates a temporary special JAR manifest of other JARs to workaround the CLASSPATH length.
+   * In a secure cluster this JAR must be localized so that the container has access to it.
+   * The default implementation returns the classpath passed to it, which is expected to have been created in the node manager's <i>fprivate</i> folder, which will not work with secure Windows clusters.
    *
    * @param jarPath the path to the JAR to localize
    * @param target the directory where the JAR file should be localized
@@ -259,9 +276,17 @@ public abstract class ContainerExecutor implements Configurable {
    */
   public int reacquireContainer(ContainerReacquisitionContext ctx)
       throws IOException, InterruptedException {
+
+    // 获取容器
     Container container = ctx.getContainer();
+
+    // 获取用户
     String user = ctx.getUser();
+
+    // 获取ContainerId
     ContainerId containerId = ctx.getContainerId();
+
+    // 获取pid 路径
     Path pidPath = getPidFilePath(containerId);
 
     if (pidPath == null) {
@@ -270,6 +295,7 @@ public abstract class ContainerExecutor implements Configurable {
       return ExitCode.TERMINATED.getExitCode();
     }
 
+    // 获取pid
     String pid = ProcessIdFileReader.getProcessId(pidPath);
 
     if (pid == null) {
@@ -278,6 +304,7 @@ public abstract class ContainerExecutor implements Configurable {
 
     LOG.info("Reacquiring " + containerId + " with pid " + pid);
 
+    // 构建ContainerLivenessContext
     ContainerLivenessContext livenessContext = new ContainerLivenessContext
         .Builder()
         .setContainer(container)
@@ -289,9 +316,13 @@ public abstract class ContainerExecutor implements Configurable {
       Thread.sleep(1000);
     }
 
+    // 等待退出代码文件出现
     // wait for exit code file to appear
     final int sleepMsec = 100;
+
+    // 最大等待2s
     int msecLeft = 2000;
+    // 获取pid进程文件路径
     String exitCodeFile = ContainerLaunch.getExitCodeFile(pidPath.toString());
     File file = new File(exitCodeFile);
 
@@ -308,19 +339,19 @@ public abstract class ContainerExecutor implements Configurable {
     }
 
     if (msecLeft < 0) {
-      throw new IOException("Timeout while waiting for exit code from "
-          + containerId);
+      throw new IOException("Timeout while waiting for exit code from "  + containerId);
     }
 
     try {
-      return Integer.parseInt(
-          FileUtils.readFileToString(file, Charset.defaultCharset()).trim());
+      return Integer.parseInt( FileUtils.readFileToString(file, Charset.defaultCharset()).trim());
     } catch (NumberFormatException e) {
       throw new IOException("Error parsing exit code from pid " + pid, e);
     }
   }
 
   /**
+   * 向container启动脚本写入环境信息.
+   *
    * This method writes out the launch environment of a container to the
    * default container launch script. For the default container script path see
    * {@link ContainerLaunch#CONTAINER_SCRIPT}.
@@ -340,9 +371,6 @@ public abstract class ContainerExecutor implements Configurable {
   public void writeLaunchEnv(OutputStream out, Map<String, String> environment,
       Map<Path, List<String>> resources, List<String> command, Path logDir,
       String user, LinkedHashSet<String> nmVars) throws IOException {
-
-
-
 
     this.writeLaunchEnv(out, environment, resources, command, logDir, user,  ContainerLaunch.CONTAINER_SCRIPT, nmVars);
   }
@@ -779,6 +807,9 @@ public abstract class ContainerExecutor implements Configurable {
   }
 
   /**
+   *
+   * 返回命令行以在OS shell中执行给定的命令。
+   *
    * Return a command line to execute the given command in the OS shell.
    *
    * @param command the command to execute
@@ -789,11 +820,17 @@ public abstract class ContainerExecutor implements Configurable {
       Configuration config) {
     List<String> retCommand = new ArrayList<>();
     boolean containerSchedPriorityIsSet = false;
-    int containerSchedPriorityAdjustment =
-        YarnConfiguration.DEFAULT_NM_CONTAINER_EXECUTOR_SCHED_PRIORITY;
 
-    if (config.get(YarnConfiguration.NM_CONTAINER_EXECUTOR_SCHED_PRIORITY) !=
-        null) {
+    // 0
+    int containerSchedPriorityAdjustment = YarnConfiguration.DEFAULT_NM_CONTAINER_EXECUTOR_SCHED_PRIORITY;
+
+    // 对容器操作系统调度优先级进行调整。
+    // 有效值可能因平台而异。
+    // 在Linux上，较高的值意味着运行容器的优先级低于NM。
+    // 指定的值是一个整数
+
+    // yarn.nodemanager.container-executor.os.sched.priority.adjustment : 0
+    if (config.get(YarnConfiguration.NM_CONTAINER_EXECUTOR_SCHED_PRIORITY) !=  null) {
       containerSchedPriorityIsSet = true;
       containerSchedPriorityAdjustment = config
           .getInt(YarnConfiguration.NM_CONTAINER_EXECUTOR_SCHED_PRIORITY,
@@ -801,13 +838,19 @@ public abstract class ContainerExecutor implements Configurable {
     }
 
     if (containerSchedPriorityIsSet) {
-      retCommand.addAll(Arrays.asList("nice", "-n",
-          Integer.toString(containerSchedPriorityAdjustment)));
+      // 设置优先级
+      retCommand.addAll(Arrays.asList("nice", "-n", Integer.toString(containerSchedPriorityAdjustment)));
     }
 
     retCommand.addAll(Arrays.asList("bash", command));
 
-    return retCommand.toArray(new String[retCommand.size()]);
+//    0 = "nice"
+//    1 = "-n"
+//    2 = "6"
+//    3 = "bash"
+//    4 = "/opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/appcache/application_1611769550924_0001/container_1611769550924_0001_01_000001/default_container_executor.sh"
+    String[] commands =  retCommand.toArray(new String[retCommand.size()]);
+    return commands ;
   }
 
   /**
@@ -869,8 +912,7 @@ public abstract class ContainerExecutor implements Configurable {
   }
 
   /**
-   * Mark the container as inactive. For inactive containers this
-   * method has no effect.
+   * Mark the container as inactive. For inactive containers this method has no effect.
    *
    * @param containerId the container ID
    */
@@ -911,14 +953,16 @@ public abstract class ContainerExecutor implements Configurable {
    */
   public void cleanupBeforeRelaunch(Container container)
       throws IOException, InterruptedException {
+
     if (container.getLocalizedResources() != null) {
 
-      Map<Path, Path> symLinks = resolveSymLinks(
-          container.getLocalizedResources(), container.getUser());
+      // 获取资源软链
+      Map<Path, Path> symLinks = resolveSymLinks( container.getLocalizedResources(), container.getUser());
 
       for (Map.Entry<Path, Path> symLink : symLinks.entrySet()) {
-        LOG.debug("{} deleting {}", container.getContainerId(),
-            symLink.getValue());
+        LOG.debug("{} deleting {}", container.getContainerId(),  symLink.getValue());
+
+        // 删除资源
         deleteAsUser(new DeletionAsUserContext.Builder()
             .setUser(container.getUser())
             .setSubDir(symLink.getValue())
@@ -936,11 +980,13 @@ public abstract class ContainerExecutor implements Configurable {
    */
   public String getProcessId(ContainerId containerID) {
     String pid = null;
+    // 获取pid 文件路径
     Path pidFile = pidFiles.get(containerID);
 
     // If PID is null, this container hasn't launched yet.
     if (pidFile != null) {
       try {
+        //读取pid
         pid = ProcessIdFileReader.getProcessId(pidFile);
       } catch (IOException e) {
         LOG.error("Got exception reading pid from pid-file " + pidFile, e);
@@ -951,15 +997,22 @@ public abstract class ContainerExecutor implements Configurable {
   }
 
   /**
+   * 此类将在指定的延迟后向目标容器发送信号。
    * This class will signal a target container after a specified delay.
    * @see #signalContainer
    */
   public static class DelayedProcessKiller extends Thread {
+    // 容器
     private final Container container;
+    // 用户
     private final String user;
+    // 进程ID
     private final String pid;
+    // 延迟时长
     private final long delay;
+    // 信号
     private final Signal signal;
+    // 容器的 Executor
     private final ContainerExecutor containerExecutor;
 
     /**
@@ -988,7 +1041,10 @@ public abstract class ContainerExecutor implements Configurable {
     @Override
     public void run() {
       try {
+        // 休眠指定时长 : 单位 毫秒
         Thread.sleep(delay);
+
+        // 发送信号
         containerExecutor.signalContainer(new ContainerSignalContext.Builder()
             .setContainer(container)
             .setUser(user)
@@ -1001,30 +1057,31 @@ public abstract class ContainerExecutor implements Configurable {
         String message = "Exception when user " + user + " killing task " + pid
             + " in DelayedProcessKiller: " + StringUtils.stringifyException(e);
         LOG.warn(message);
+        // 处理容器状态的变更
         container.handle(new ContainerDiagnosticsUpdateEvent(
             container.getContainerId(), message));
       }
     }
   }
 
-  private Map<Path, Path> resolveSymLinks(Map<Path,
-      List<String>> resources, String user) {
+  private Map<Path, Path> resolveSymLinks(Map<Path,  List<String>> resources, String user) {
     Map<Path, Path> symLinks = new HashMap<>();
-    for (Map.Entry<Path, List<String>> resourceEntry :
-        resources.entrySet()) {
+
+    for (Map.Entry<Path, List<String>> resourceEntry : resources.entrySet()) {
+
       for (String linkName : resourceEntry.getValue()) {
         if (new Path(linkName).getName().equals(WILDCARD)) {
-          // If this is a wildcarded path, link to everything in the
-          // directory from the working directory
+          // If this is a wildcarded path, link to everything in the  directory from the working directory
+          // 如果这是一个通配符路径，请从工作目录链接到目录中的所有内容
           for (File wildLink : readDirAsUser(user, resourceEntry.getKey())) {
-            symLinks.put(new Path(wildLink.toString()),
-                new Path(wildLink.getName()));
+            symLinks.put(new Path(wildLink.toString()), new Path(wildLink.getName()));
           }
         } else {
           symLinks.put(resourceEntry.getKey(), new Path(linkName));
         }
       }
     }
+
     return symLinks;
   }
 }

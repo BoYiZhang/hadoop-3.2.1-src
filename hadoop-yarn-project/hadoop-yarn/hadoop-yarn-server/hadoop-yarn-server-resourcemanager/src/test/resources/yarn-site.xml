@@ -48,5 +48,11 @@
         <value>true</value>
     </property>
 
+    <property>
+        <name>yarn.nodemanager.container-executor.os.sched.priority.adjustment</name>
+        <value>6</value>
+    </property>
+
+
 
 </configuration>

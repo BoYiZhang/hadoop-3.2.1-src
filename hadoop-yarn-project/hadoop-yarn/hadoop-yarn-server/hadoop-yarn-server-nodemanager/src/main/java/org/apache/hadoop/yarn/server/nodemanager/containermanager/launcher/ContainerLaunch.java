@@ -443,7 +443,7 @@ public class ContainerLaunch implements Callable<Integer> {
 
 
 
-
+        // 准备环境
         prepareContainer(localResources, containerLocalDirs);
 
 
