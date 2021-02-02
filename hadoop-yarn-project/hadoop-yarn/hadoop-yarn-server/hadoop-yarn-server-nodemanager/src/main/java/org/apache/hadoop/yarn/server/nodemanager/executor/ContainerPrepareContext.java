@@ -35,10 +35,18 @@ import java.util.Map;
 @InterfaceAudience.Private
 @InterfaceStability.Unstable
 public final class ContainerPrepareContext {
+
+  // 容器信息
   private final Container container;
+
+  // 资源文件路径
   private final Map<Path, List<String>> localizedResources;
+
+  // 用户
   private final String user;
+  // 容器工作目录
   private final List<String> containerLocalDirs;
+  // 执行命令
   private final List<String> commands;
 
   /**

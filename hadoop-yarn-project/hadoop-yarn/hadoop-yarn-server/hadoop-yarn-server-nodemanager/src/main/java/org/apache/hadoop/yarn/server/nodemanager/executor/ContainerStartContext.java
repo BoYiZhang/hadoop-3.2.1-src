@@ -36,20 +36,44 @@ import java.util.Map;
 @InterfaceAudience.Private
 @InterfaceStability.Unstable
 public final class ContainerStartContext {
+
+  // 容器container  container_1612228249380_0002_01_000001
   private final Container container;
+
+  // 本地资源文件  数据结构:  Map<Path, List<String>>
+  // 以一条数据举例 :  {Path@9415} "${yarn.nodemanager.local-dirs}/usercache/henghe/filecache/141/commons-lang-2.6.jar" -> {ArrayList@9416}  size = 1
+  // key   :  ${yarn.nodemanager.local-dirs}/usercache/henghe/filecache/141/commons-lang-2.6.jar
+  // value :  ArrayList :  0 ->  ${yarn.nodemanager.local-dirs}/usercache/henghe/filecache/141/commons-lang-2.6.jar
   private final Map<Path, List<String>> localizedResources;
+
+  // 启动脚本位置nmPrivateContainerScriptPath
+  // ${yarn.nodemanager.local-dirs}/nmPrivate/application_1612228249380_0002/container_1612228249380_0002_01_000001/launch_container.sh
   private final Path nmPrivateContainerScriptPath;
+  // token文件位置
+  // ${yarn.nodemanager.local-dirs}/nmPrivate/application_1612228249380_0002/container_1612228249380_0002_01_000001/container_1612228249380_0002_01_000001.tokens
   private final Path nmPrivateTokensPath;
+  // 用户  : henghe
   private final String user;
+  // application ID : application_1612228249380_0002
   private final String appId;
+  // 当前容器工作目录  : ${yarn.nodemanager.local-dirs}/usercache/henghe/appcache/application_1612228249380_0002/container_1612228249380_0002_01_000001
   private final Path containerWorkDir;
+  // 本地工作目录[是一个集合存在多个]   :  ${yarn.nodemanager.local-dirs}
   private final List<String> localDirs;
+  // 日志目录[是一个集合存在多个]   : /opt/tools/hadoop-3.2.1/logs/userlogs
   private final List<String> logDirs;
+  // 公共缓存目录
   private final List<String> filecacheDirs;
+
+  // 用户本地目录[是一个集合存在多个]   :  ${yarn.nodemanager.local-dirs}/filecache
   private final List<String> userLocalDirs;
+  // 容器本地目录[是一个集合存在多个]   : ${yarn.nodemanager.local-dirs}/usercache/henghe/appcache/application_1612228249380_0002/
   private final List<String> containerLocalDirs;
+  // 容器日志目录[是一个集合存在多个] : /opt/tools/hadoop-3.2.1/logs/userlogs/application_1612228249380_0002/container_1612228249380_0002_01_000001
   private final List<String> containerLogDirs;
+  // 用户文件缓存目录 : ${yarn.nodemanager.local-dirs}/usercache/henghe/filecache
   private final List<String> userFilecacheDirs;
+  // application本地目录 : ${yarn.nodemanager.local-dirs}/usercache/henghe/appcache/application_1612228249380_0002
   private final List<String> applicationLocalDirs;
 
   public static final class Builder {

@@ -956,6 +956,8 @@ public abstract class Shell {
                 process.getInputStream(), Charset.defaultCharset()));
     final StringBuffer errMsg = new StringBuffer();
 
+
+    // 读取异常流日志信息
     // read error and input streams as this would free up the buffers
     // free the error stream buffer
     Thread errThread = new Thread() {
@@ -990,6 +992,9 @@ public abstract class Shell {
           + " 'ulimit -u <largerNum>' and try again.");
       throw oe;
     }
+
+
+    // 读取正常流日志信息
     try {
       parseExecResult(inReader); // parse the output
       // clear the input stream buffer

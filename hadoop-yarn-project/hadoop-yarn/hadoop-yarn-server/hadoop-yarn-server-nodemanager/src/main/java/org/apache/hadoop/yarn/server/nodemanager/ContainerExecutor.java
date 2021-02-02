@@ -182,7 +182,7 @@ public abstract class ContainerExecutor implements Configurable {
   public abstract void startLocalizer(LocalizerStartContext ctx)
     throws IOException, InterruptedException;
 
-  /**
+  /** 准备Container操作, DefaultContainerExecutor 没有实现该方法.
    * Prepare the container prior to the launch environment being written.
    * @param ctx Encapsulates information necessary for launching containers.
    * @throws IOException if errors occur during container preparation
@@ -192,6 +192,7 @@ public abstract class ContainerExecutor implements Configurable {
   }
 
   /**
+   * 在节点上启动container , 在container退出之前处于阻塞状态.
    * Launch the container on the node. This is a blocking call and returns only
    * when the container exits.
    * @param ctx Encapsulates information necessary for launching containers.
@@ -470,18 +471,18 @@ public abstract class ContainerExecutor implements Configurable {
       }
 //      # 设置环境变量#环境变量
 //      echo "Setting up env variables#env"
-//      export HADOOP_TOKEN_FILE_LOCATION="/opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/appcache/application_1611681788558_0001/container_1611681788558_0001_01_000001/container_tokens"
+//      export HADOOP_TOKEN_FILE_LOCATION="${yarn.nodemanager.local-dirs}/usercache/henghe/appcache/application_1611681788558_0001/container_1611681788558_0001_01_000001/container_tokens"
 //      export CONTAINER_ID="container_1611681788558_0001_01_000001"
 //      export NM_PORT="62016"
 //      export NM_HOST="boyi-pro.lan"
 //      export NM_HTTP_PORT="8042"
-//      export LOCAL_DIRS="/opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/appcache/application_1611681788558_0001"
-//      export LOCAL_USER_DIRS="/opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/"
+//      export LOCAL_DIRS="${yarn.nodemanager.local-dirs}/usercache/henghe/appcache/application_1611681788558_0001"
+//      export LOCAL_USER_DIRS="${yarn.nodemanager.local-dirs}/usercache/henghe/"
 //      export LOG_DIRS="/opt/tools/hadoop-3.2.1/logs/userlogs/application_1611681788558_0001/container_1611681788558_0001_01_000001"
 //      export USER="henghe"
 //      export LOGNAME="henghe"
 //      export HOME="/home/"
-//      export PWD="/opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/appcache/application_1611681788558_0001/container_1611681788558_0001_01_000001"
+//      export PWD="${yarn.nodemanager.local-dirs}/usercache/henghe/appcache/application_1611681788558_0001/container_1611681788558_0001_01_000001"
 //      export JVM_PID="$$"
 //      export MALLOC_ARENA_MAX="4"
 
@@ -521,9 +522,9 @@ public abstract class ContainerExecutor implements Configurable {
 //      # 设置资源文件[通过ln -sf 构建所需jar文件/配置文件的软连接. ]
 //      echo "Setting up job resources"
 //      mkdir -p __spark_libs__
-//      ln -sf -- "/opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/filecache/35/spark-examples_2.11-2.4.5.jar" "__app__.jar"
+//      ln -sf -- "${yarn.nodemanager.local-dirs}/usercache/henghe/filecache/35/spark-examples_2.11-2.4.5.jar" "__app__.jar"
 //      mkdir -p __spark_libs__
-//      ln -sf -- "/opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/filecache/180/__spark_conf__.zip" "__spark_conf__"
+//      ln -sf -- "${yarn.nodemanager.local-dirs}/usercache/henghe/filecache/180/__spark_conf__.zip" "__spark_conf__"
 //      # 此处省略N多
 //      # mkdir -p __spark_libs__
 //      # ln -sf --"xxxxx"  "__spark_libs__/xxxxx.jar"
@@ -848,7 +849,7 @@ public abstract class ContainerExecutor implements Configurable {
 //    1 = "-n"
 //    2 = "6"
 //    3 = "bash"
-//    4 = "/opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/appcache/application_1611769550924_0001/container_1611769550924_0001_01_000001/default_container_executor.sh"
+//    4 = "${yarn.nodemanager.local-dirs}/usercache/henghe/appcache/application_1611769550924_0001/container_1611769550924_0001_01_000001/default_container_executor.sh"
     String[] commands =  retCommand.toArray(new String[retCommand.size()]);
     return commands ;
   }

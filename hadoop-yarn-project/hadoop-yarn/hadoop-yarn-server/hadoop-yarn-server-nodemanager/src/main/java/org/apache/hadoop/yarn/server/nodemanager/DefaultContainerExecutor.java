@@ -66,22 +66,36 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
 
 /**
- * The {@code DefaultContainerExecuter} class offers generic container
- * execution services. Process execution is handled in a platform-independent
- * way via {@link ProcessBuilder}.
+ * DefaultContainerExecuter 类提供通用的container 执行服务.
+ * 流程执行是以独立于平台的方式通过 .
+ *
+ * 其实主要是执行launch_container.sh 脚本.
+ * 主要注意的是两个地方:
+
+ * 1. 其实就是执行launch_container.sh 脚本. 在脚本里有需要执行的任务.
+ * 2. launch_container.sh 脚本用exprot输出了很多环境变量,
+ *     但是因为执行的时候使用 setsid 指令. 单独打开了一个新会话. 所以里面的环境变量不会影响到外部程序.
+ *
+ * The {@code DefaultContainerExecuter} class offers generic container execution services.
+ *
+ * Process execution is handled in a platform-independent way via {@link ProcessBuilder}.
  */
+
 public class DefaultContainerExecutor extends ContainerExecutor {
 
-  private static final Logger LOG =
-       LoggerFactory.getLogger(DefaultContainerExecutor.class);
+  private static final Logger LOG =  LoggerFactory.getLogger(DefaultContainerExecutor.class);
 
+
+  // window操作系统 路径最大长度限制
   private static final int WIN_MAX_PATH = 260;
 
   /**
+   * 本地文件系统
    * A {@link FileContext} for the local file system.
    */
   protected final FileContext lfs;
 
+  // 日志目录权限
   private String logDirPermissions = null;
 
   /**
@@ -211,52 +225,84 @@ public class DefaultContainerExecutor extends ContainerExecutor {
   @Override
   public int launchContainer(ContainerStartContext ctx)
       throws IOException, ConfigurationException {
+
+    // container_1612228249380_0002_01_000001
     Container container = ctx.getContainer();
+    //   ${yarn.nodemanager.local-dirs}/nmPrivate/application_1612228249380_0002/container_1612228249380_0002_01_000001/launch_container.sh
     Path nmPrivateContainerScriptPath = ctx.getNmPrivateContainerScriptPath();
+    //   ${yarn.nodemanager.local-dirs}/nmPrivate/application_1612228249380_0002/container_1612228249380_0002_01_000001/container_1612228249380_0002_01_000001.tokens
     Path nmPrivateTokensPath = ctx.getNmPrivateTokensPath();
+
+    // henghe
     String user = ctx.getUser();
+    // ${yarn.nodemanager.local-dirs}/usercache/henghe/appcache/application_1612228249380_0002/container_1612228249380_0002_01_000001
     Path containerWorkDir = ctx.getContainerWorkDir();
+    // 0 : ${yarn.nodemanager.local-dirs}
     List<String> localDirs = ctx.getLocalDirs();
+    // 0 : /opt/tools/hadoop-3.2.1/logs/userlogs
     List<String> logDirs = ctx.getLogDirs();
-
+    // rwx--x---
     FsPermission dirPerm = new FsPermission(APPDIR_PERM);
+    // container_1612228249380_0002_01_000001
     ContainerId containerId = container.getContainerId();
-
-    // create container dirs on all disks
+    //
+    // create container dirs on all disks : container_1612228249380_0002_01_000001
     String containerIdStr = containerId.toString();
+    // application_1612228249380_0002
     String appIdStr =
             containerId.getApplicationAttemptId().
                 getApplicationId().toString();
+
+    // 在每个localDirs都创建 一个目录
     for (String sLocalDir : localDirs) {
+
       Path usersdir = new Path(sLocalDir, ContainerLocalizer.USERCACHE);
       Path userdir = new Path(usersdir, user);
       Path appCacheDir = new Path(userdir, ContainerLocalizer.APPCACHE);
       Path appDir = new Path(appCacheDir, appIdStr);
       Path containerDir = new Path(appDir, containerIdStr);
+
+      
+      
+      
+      
+      
+      
+      // 构建目录
       createDir(containerDir, dirPerm, true, user);
+
     }
 
+
+    // create $log.dir/$appid/$containerid
     // Create the container log-dirs on all disks
     createContainerLogDirs(appIdStr, containerIdStr, logDirs, user);
 
+
+    // 这是临时工作目录
+    // ${yarn.nodemanager.local-dirs}/usercache/henghe/appcache/application_1612228249380_0002/container_1612228249380_0002_01_000001/tmp
     Path tmpDir = new Path(containerWorkDir,
         YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR);
     createDir(tmpDir, dirPerm, false, user);
 
-
+    // 复制container tokens 到工作目录 : ${yarn.nodemanager.local-dirs}/usercache/henghe/appcache/application_1612228249380_0002/container_1612228249380_0002_01_000001/container_tokens
     // copy container tokens to work dir
     Path tokenDst =
       new Path(containerWorkDir, ContainerLaunch.FINAL_CONTAINER_TOKENS_FILE);
     copyFile(nmPrivateTokensPath, tokenDst, user);
 
+    // 复制启动脚本到工作目录 : ${yarn.nodemanager.local-dirs}/usercache/henghe/appcache/application_1612228249380_0002/container_1612228249380_0002_01_000001/launch_container.sh
     // copy launch script to work dir
     Path launchDst =
         new Path(containerWorkDir, ContainerLaunch.CONTAINER_SCRIPT);
     copyFile(nmPrivateContainerScriptPath, launchDst, user);
 
+    // 构建默认的启动脚本 [  default_container_executor_session.sh  ]
+    // 负责执行 default_container_executor_session.sh
     // Create new local launch wrapper script
     LocalWrapperScriptBuilder sb = getLocalWrapperScriptBuilder(
         containerIdStr, containerWorkDir); 
+
 
     // Fail fast if attempting to launch the wrapper script would fail due to
     // Windows path length limitation.
@@ -270,6 +316,8 @@ public class DefaultContainerExecutor extends ContainerExecutor {
     }
 
     Path pidFile = getPidFilePath(containerId);
+
+
     if (pidFile != null) {
       sb.writeLocalWrapperScript(launchDst, pidFile);
     } else {
@@ -277,26 +325,45 @@ public class DefaultContainerExecutor extends ContainerExecutor {
           + " pid file not set. Returning terminated error");
       return ExitCode.TERMINATED.getExitCode();
     }
-    
+
+
     // create log dir under app
     // fork script
     Shell.CommandExecutor shExec = null;
     try {
+
+      // 设置启动脚本的执行权限
+      // default_container_executor_session.sh : 700
       setScriptExecutable(launchDst, user);
+
+      // default_container_executor_session.sh : 700
       setScriptExecutable(sb.getWrapperScriptPath(), user);
+
 
       shExec = buildCommandExecutor(sb.getWrapperScriptPath().toString(),
           containerIdStr, user, pidFile, container.getResource(),
           new File(containerWorkDir.toUri().getPath()),
           container.getLaunchContext().getEnvironment());
+
+
+
+
+
+
       
       if (isContainerActive(containerId)) {
+
+        // 开始执行
         shExec.execute();
+
+
       } else {
         LOG.info("Container " + containerIdStr +
             " was marked as inactive. Returning terminated error");
         return ExitCode.TERMINATED.getExitCode();
       }
+
+
     } catch (IOException e) {
       if (null == shExec) {
         return -1;
@@ -334,7 +401,7 @@ public class DefaultContainerExecutor extends ContainerExecutor {
       }
       return exitCode;
     } finally {
-      if (shExec != null) shExec.close();
+      if(shExec != null){ shExec.close();}
     }
     return 0;
   }
@@ -363,11 +430,27 @@ public class DefaultContainerExecutor extends ContainerExecutor {
   protected CommandExecutor buildCommandExecutor(String wrapperScriptPath, 
       String containerIdStr, String user, Path pidFile, Resource resource,
       File workDir, Map<String, String> environment) {
-    
-    String[] command = getRunCommand(wrapperScriptPath,
-        containerIdStr, user, pidFile, this.getConf(), resource);
+
+
+
+
+
+
+    String[] command = getRunCommand(wrapperScriptPath,  containerIdStr, user, pidFile, this.getConf(), resource);
+
+
+
+
+
+
 
       LOG.info("launchContainer: " + Arrays.toString(command));
+
+
+
+
+
+
       return new ShellCommandExecutor(
           command,
           workDir,
@@ -657,52 +740,63 @@ public class DefaultContainerExecutor extends ContainerExecutor {
   }
 
   /**
+   * 用户目录权限  rwx r-x ---
    * Permissions for user dir.
    * $local.dir/usercache/$user
    */
   static final short USER_PERM = (short)0750;
   /**
+   * 用户 appcache 目录权限  rwx --x ---
    * Permissions for user appcache dir.
    * $local.dir/usercache/$user/appcache
    */
   static final short APPCACHE_PERM = (short)0710;
   /**
+   * 用户 filecache 目录权限   rwx --x ---
    * Permissions for user filecache dir.
    * $local.dir/usercache/$user/filecache
    */
   static final short FILECACHE_PERM = (short)0710;
   /**
+   *  用户 app 目录权限   rwx --x ---
    * Permissions for user app dir.
    * $local.dir/usercache/$user/appcache/$appId
    */
   static final short APPDIR_PERM = (short)0710;
 
+  // 获取磁盘剩余空间
   private long getDiskFreeSpace(Path base) throws IOException {
     return lfs.getFsStatus(base).getRemaining();
   }
 
+  // 获取Application目录
   private Path getApplicationDir(Path base, String user, String appId) {
     return new Path(getAppcacheDir(base, user), appId);
   }
 
+  // 获取用户缓存目录
   private Path getUserCacheDir(Path base, String user) {
     return new Path(new Path(base, ContainerLocalizer.USERCACHE), user);
   }
 
+  // 获取App缓存目录
   private Path getAppcacheDir(Path base, String user) {
-    return new Path(getUserCacheDir(base, user),
-        ContainerLocalizer.APPCACHE);
+    return new Path(getUserCacheDir(base, user),  ContainerLocalizer.APPCACHE);
   }
 
+  // 获取文件缓存目录
   private Path getFileCacheDir(Path base, String user) {
     return new Path(getUserCacheDir(base, user),
         ContainerLocalizer.FILECACHE);
   }
 
   /**
-   * Return a randomly chosen application directory from a list of local storage
-   * directories. The probability of selecting a directory is proportional to
-   * its size.
+   *
+   * 从本地存储目录列表中返回随机选择的application程序目录。
+   * 选择目录的概率与其大小成正比
+   *
+   * Return a randomly chosen application directory from a list of local storage directories.
+   * The probability of selecting a directory is proportional to its size.
    *
    * @param localDirs the target directories from which to select
    * @param user the user who owns the application
@@ -711,14 +805,15 @@ public class DefaultContainerExecutor extends ContainerExecutor {
    * @throws IOException if no application directories for the user can be
    * found
    */
-  protected Path getWorkingDir(List<String> localDirs, String user,
-      String appId) throws IOException {
+  protected Path getWorkingDir(List<String> localDirs, String user, String appId) throws IOException {
     long totalAvailable = 0L;
     long[] availableOnDisk = new long[localDirs.size()];
     int i = 0;
-    // randomly choose the app directory
-    // the chance of picking a directory is proportional to
-    // the available space on the directory.
+    // 随机选择应用程序目录选择目录的机会与目录上的可用空间成正比。
+    // randomly choose the app directory the chance of picking a directory is proportional to the available space on the directory.
+
+
+    // 首先计算这些目录上所有可用空间的总和
     // firstly calculate the sum of all available space on these directories
     for (String localDir : localDirs) {
       Path curBase = getApplicationDir(new Path(localDir), user, appId);
@@ -731,28 +826,34 @@ public class DefaultContainerExecutor extends ContainerExecutor {
       availableOnDisk[i++] = space;
       totalAvailable += space;
     }
-
+    // 空间不足 抛出异常...
     // throw an IOException if totalAvailable is 0.
     if (totalAvailable <= 0L) {
       throw new IOException("Not able to find a working directory for " + user);
     }
 
-    // make probability to pick a directory proportional to
-    // the available space on the directory.
+    // 使选择目录的概率与目录上的可用空间成比例
+    // make probability to pick a directory proportional to the available space on the directory.
     long randomPosition = RandomUtils.nextLong() % totalAvailable;
+    // 选取目录
     int dir = pickDirectory(randomPosition, availableOnDisk);
 
     return getApplicationDir(new Path(localDirs.get(dir)), user, appId);
   }
 
   /**
-   * Picks a directory based on the input random number and
-   * available size at each dir.
+   * 根据输入的随机数和每个目录的可用大小选择一个目录。
+   *
+   * Picks a directory based on the input random number and available size at each dir.
    */
   @Private
   @VisibleForTesting
   int pickDirectory(long randomPosition, final long[] availableOnDisk) {
     int dir = 0;
+    // 跳过零可用空间目录，
+    // 因为totalAvailable大于0，而randomPosition小于totalAvailable
+    // 我们可以找到可用空间非零的有效目录。
+
     // skip zero available space directory,
     // because totalAvailable is greater than 0 and randomPosition
     // is less than totalAvailable, we can find a valid directory
@@ -767,6 +868,8 @@ public class DefaultContainerExecutor extends ContainerExecutor {
   }
 
   /**
+   *
+   * 创建目录
    * Use the {@link #lfs} {@link FileContext} to create the target directory.
    *
    * @param dirPath the target directory
@@ -786,6 +889,7 @@ public class DefaultContainerExecutor extends ContainerExecutor {
   }
 
   /**
+   * 创建用户本地存储
    * Initialize the local directories for a particular user.
    * <ul>.mkdir
    * <li>$local.dir/usercache/$user</li>

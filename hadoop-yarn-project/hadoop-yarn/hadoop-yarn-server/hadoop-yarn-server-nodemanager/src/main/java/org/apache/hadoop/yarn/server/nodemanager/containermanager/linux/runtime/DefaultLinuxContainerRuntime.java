@@ -54,6 +54,8 @@ import static org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.r
 public class DefaultLinuxContainerRuntime implements LinuxContainerRuntime {
   private static final Logger LOG =
       LoggerFactory.getLogger(DefaultLinuxContainerRuntime.class);
+
+
   private final PrivilegedOperationExecutor privilegedOperationExecutor;
   private Configuration conf;
 
@@ -96,6 +98,8 @@ public class DefaultLinuxContainerRuntime implements LinuxContainerRuntime {
     PrivilegedOperation launchOp = new PrivilegedOperation(
         PrivilegedOperation.OperationType.LAUNCH_CONTAINER);
 
+
+
     //All of these arguments are expected to be available in the runtime context
     launchOp.appendArgs(ctx.getExecutionAttribute(RUN_AS_USER),
         ctx.getExecutionAttribute(USER),
@@ -116,6 +120,7 @@ public class DefaultLinuxContainerRuntime implements LinuxContainerRuntime {
 
     String tcCommandFile = ctx.getExecutionAttribute(TC_COMMAND_FILE);
 
+
     if (tcCommandFile != null) {
       launchOp.appendArgs(tcCommandFile);
     }
@@ -130,8 +135,16 @@ public class DefaultLinuxContainerRuntime implements LinuxContainerRuntime {
         CONTAINER_LAUNCH_PREFIX_COMMANDS);
 
     try {
-      privilegedOperationExecutor.executePrivilegedOperation(prefixCommands,
-            launchOp, null, null, false, false);
+
+
+
+
+
+
+
+      privilegedOperationExecutor.executePrivilegedOperation(prefixCommands,  launchOp, null, null, false, false);
+
+
     } catch (PrivilegedOperationException e) {
       throw new ContainerExecutionException("Launch container failed", e
           .getExitCode(), e.getOutput(), e.getErrorOutput());

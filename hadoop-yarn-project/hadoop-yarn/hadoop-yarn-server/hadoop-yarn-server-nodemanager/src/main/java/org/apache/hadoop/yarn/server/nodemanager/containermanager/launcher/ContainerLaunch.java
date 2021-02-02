@@ -258,7 +258,7 @@ public class ContainerLaunch implements Callable<Integer> {
 
     Path containerLogDir;
     try {
-      // 获取本地资源文件 : {Path@9096} "/opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/usercache/henghe/filecache/62/logging-interceptor-3.12.0.jar" -> {ArrayList@9097}  size = 1
+      // 获取本地资源文件 : {Path@9096} "${yarn.nodemanager.local-dirs}/usercache/henghe/usercache/henghe/filecache/62/logging-interceptor-3.12.0.jar" -> {ArrayList@9097}  size = 1
       Map<Path, List<String>> localResources = getLocalizedResources();
 
       // 获取用户 henghe
@@ -317,22 +317,22 @@ public class ContainerLaunch implements Callable<Integer> {
 
 
       // 获取私有Container 启动脚本路径 [ nmPrivateContainerScriptPath ]
-      // /opt/tools/hadoop-3.2.1/local-dirs/nmPrivate/application_1611681788558_0001/container_1611681788558_0001_01_000001/launch_container.sh
+      // ${yarn.nodemanager.local-dirs}/nmPrivate/application_1611681788558_0001/container_1611681788558_0001_01_000001/launch_container.sh
       Path nmPrivateContainerScriptPath = dirsHandler.getLocalPathForWrite( getContainerPrivateDir(appIdStr, containerIdStr) + Path.SEPARATOR  + CONTAINER_SCRIPT);
 
 
       // 获取私有 Tokens 脚本路径 [ nmPrivateTokensPath ]
-      // /opt/tools/hadoop-3.2.1/local-dirs/nmPrivate/application_1611681788558_0001/container_1611681788558_0001_01_000001/container_1611681788558_0001_01_000001.tokens
+      // ${yarn.nodemanager.local-dirs}/nmPrivate/application_1611681788558_0001/container_1611681788558_0001_01_000001/container_1611681788558_0001_01_000001.tokens
       Path nmPrivateTokensPath = dirsHandler.getLocalPathForWrite( getContainerPrivateDir(appIdStr, containerIdStr) + Path.SEPARATOR   + String.format(ContainerLocalizer.TOKEN_FILE_NAME_FMT,  containerIdStr));
 
 
       // class jar 路径 [ nmPrivateClasspathJarDir ]
-      // /opt/tools/hadoop-3.2.1/local-dirs/nmPrivate/application_1611681788558_0001/container_1611681788558_0001_01_000001
+      // ${yarn.nodemanager.local-dirs}/nmPrivate/application_1611681788558_0001/container_1611681788558_0001_01_000001
       Path nmPrivateClasspathJarDir = dirsHandler.getLocalPathForWrite( getContainerPrivateDir(appIdStr, containerIdStr));
 
       // Select the working directory for the container
       // 获取container的工作空间路径 [ containerWorkDir ]
-      // /opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/appcache/application_1611681788558_0001/container_1611681788558_0001_01_000001
+      // ${yarn.nodemanager.local-dirs}/usercache/henghe/appcache/application_1611681788558_0001/container_1611681788558_0001_01_000001
       Path containerWorkDir = deriveContainerWorkDir();
 
 
@@ -345,15 +345,15 @@ public class ContainerLaunch implements Callable<Integer> {
 
       // pid文件绝对路径 [pidFilePath]
       // pid文件应该在nm private dir中，这样用户就不能访问它
-      // /opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/nmPrivate/application_1611680479488_0001/container_1611680479488_0001_01_000001/container_1611680479488_0001_01_000001.pid
+      // ${yarn.nodemanager.local-dirs}/usercache/henghe/nmPrivate/application_1611680479488_0001/container_1611680479488_0001_01_000001/container_1611680479488_0001_01_000001.pid
       // pid file should be in nm private dir so that it is not accessible by users
       pidFilePath = dirsHandler.getLocalPathForWrite(pidFileSubpath);
 
       // 本地目录 [localDirs]
-      //  /opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe
+      //  ${yarn.nodemanager.local-dirs}/usercache/henghe
       List<String> localDirs = dirsHandler.getLocalDirs();
 
-      // /opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe
+      // ${yarn.nodemanager.local-dirs}/usercache/henghe
       List<String> localDirsForRead = dirsHandler.getLocalDirsForRead();
 
       // 日志目录
@@ -361,15 +361,15 @@ public class ContainerLaunch implements Callable<Integer> {
       List<String> logDirs = dirsHandler.getLogDirs();
 
       // 文件缓存目录
-      // /opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/filecache
+      // ${yarn.nodemanager.local-dirs}/usercache/henghe/filecache
       List<String> filecacheDirs = getNMFilecacheDirs(localDirsForRead);
 
       // 用户本地目录
-      // /opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/
+      // ${yarn.nodemanager.local-dirs}/usercache/henghe/
       List<String> userLocalDirs = getUserLocalDirs(localDirs);
 
       // containerLocalDirs 容器目录
-      // /opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/appcache/application_1611681788558_0001/
+      // ${yarn.nodemanager.local-dirs}/usercache/henghe/appcache/application_1611681788558_0001/
       List<String> containerLocalDirs = getContainerLocalDirs(localDirs);
 
       // 容器日志目录
@@ -377,11 +377,11 @@ public class ContainerLaunch implements Callable<Integer> {
       List<String> containerLogDirs = getContainerLogDirs(logDirs);
 
       // 用户文件缓存目录
-      // /opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/filecache
+      // ${yarn.nodemanager.local-dirs}/usercache/henghe/filecache
       List<String> userFilecacheDirs = getUserFilecacheDirs(localDirsForRead);
 
       // application 本地目录
-      // /opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/appcache/application_1611681788558_0001
+      // ${yarn.nodemanager.local-dirs}/usercache/henghe/appcache/application_1611681788558_0001
       List<String> applicationLocalDirs = getApplicationLocalDirs(localDirs, appIdStr);
 
 
@@ -400,14 +400,14 @@ public class ContainerLaunch implements Callable<Integer> {
 
       for (String localDir : localDirs) {
 
-        // usercache : /opt/tools/hadoop-3.2.1/local-dirs/usercache
+        // usercache : ${yarn.nodemanager.local-dirs}/usercache
         Path usersdir = new Path(localDir, ContainerLocalizer.USERCACHE);
 
 
-        // 用户工作空间 : /opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe
+        // 用户工作空间 : ${yarn.nodemanager.local-dirs}/usercache/henghe
         Path userdir = new Path(usersdir, user);
 
-        // appcache : /opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/appcache
+        // appcache : ${yarn.nodemanager.local-dirs}/usercache/henghe/appcache
         Path appsdir = new Path(userdir, ContainerLocalizer.APPCACHE);
         appDirs.add(new Path(appsdir, appIdStr));
       }
@@ -417,7 +417,7 @@ public class ContainerLaunch implements Callable<Integer> {
 
 
       // 设置token位置..
-      // HADOOP_TOKEN_FILE_LOCATION -> /opt/tools/hadoop-3.2.1/local-dirs/usercache/henghe/appcache/application_1611681788558_0001/container_1611681788558_0001_01_000001/container_tokens
+      // HADOOP_TOKEN_FILE_LOCATION -> ${yarn.nodemanager.local-dirs}/usercache/henghe/appcache/application_1611681788558_0001/container_1611681788558_0001_01_000001/container_tokens
 
       addToEnvMap(environment, nmEnvVars,  ApplicationConstants.CONTAINER_TOKEN_FILE_ENV_NAME, new Path(containerWorkDir, FINAL_CONTAINER_TOKENS_FILE).toUri().getPath());
 
@@ -449,7 +449,7 @@ public class ContainerLaunch implements Callable<Integer> {
 
 
 
-        // 输出环境变量.
+        // 输出环境变量/脚本.
         // Write out the environment
         exec.writeLaunchEnv(containerScriptOutStream, environment,
             localResources, launchContext.getCommands(),

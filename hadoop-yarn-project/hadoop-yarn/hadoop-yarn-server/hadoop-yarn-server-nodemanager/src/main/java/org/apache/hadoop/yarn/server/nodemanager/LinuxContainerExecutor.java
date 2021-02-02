@@ -477,8 +477,10 @@ public class LinuxContainerExecutor extends ContainerExecutor {
   @Override
   public int launchContainer(ContainerStartContext ctx)
       throws IOException, ConfigurationException {
+
     return handleLaunchForLaunchType(ctx,
         ApplicationConstants.ContainerLaunchType.LAUNCH);
+
   }
 
   @Override
@@ -491,6 +493,8 @@ public class LinuxContainerExecutor extends ContainerExecutor {
   private int handleLaunchForLaunchType(ContainerStartContext ctx,
       ApplicationConstants.ContainerLaunchType type) throws IOException,
       ConfigurationException {
+
+
     Container container = ctx.getContainer();
     String user = ctx.getUser();
 
@@ -500,6 +504,8 @@ public class LinuxContainerExecutor extends ContainerExecutor {
 
     resourcesHandler.preExecute(containerId,
             container.getResource());
+
+
     String resourcesOptions = resourcesHandler.getResourcesOption(containerId);
     String tcCommandFile = null;
     List<String> numaArgs = null;
