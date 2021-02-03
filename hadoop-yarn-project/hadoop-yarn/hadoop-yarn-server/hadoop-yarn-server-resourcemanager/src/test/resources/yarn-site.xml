@@ -58,35 +58,35 @@
 
 
 
-    <!--    设置使用LinuxContainerExecutor-->
-    <property>
-        <name>yarn.nodemanager.container-executor.class</name>
-        <value>org.apache.hadoop.yarn.server.nodemanager.LinuxContainerExecutor</value>
-    </property>
+<!--    &lt;!&ndash;    设置使用LinuxContainerExecutor&ndash;&gt;-->
+<!--    <property>-->
+<!--        <name>yarn.nodemanager.container-executor.class</name>-->
+<!--        <value>org.apache.hadoop.yarn.server.nodemanager.LinuxContainerExecutor</value>-->
+<!--    </property>-->
 
-    <!--    设置container-executor 所处的位置-->
-    <property>
-        <name>yarn.nodemanager.linux-container-executor.path</name>
-        <value>/opt/tools/hadoop-3.2.1/bin/container-executor</value>
-    </property>
+<!--    &lt;!&ndash;    设置container-executor 所处的位置&ndash;&gt;-->
+<!--    <property>-->
+<!--        <name>yarn.nodemanager.linux-container-executor.path</name>-->
+<!--        <value>/opt/tools/hadoop-3.2.1/bin/container-executor</value>-->
+<!--    </property>-->
 
-    <!-- NM 的 Unix 用户组，需要跟 container-executor.cfg 里面的配置一致，主要用来验证是否有安全访问 container-executor 二进制的权限 -->
-    <property>
-        <name>yarn.nodemanager.linux-container-executor.group</name>
-        <value>hadoop</value>
-    </property>
+<!--    &lt;!&ndash; NM 的 Unix 用户组，需要跟 container-executor.cfg 里面的配置一致，主要用来验证是否有安全访问 container-executor 二进制的权限 &ndash;&gt;-->
+<!--    <property>-->
+<!--        <name>yarn.nodemanager.linux-container-executor.group</name>-->
+<!--        <value>hadoop</value>-->
+<!--    </property>-->
 
-    <!-- 集群在 nonsecure 模式时，是否限制 container 的启动用户，true：container 使用统一的用户启动 false: container 使用任务用户启动 -->
-    <property>
-        <name>yarn.nodemanager.linux-container-executor.nonsecure-mode.limit-users</name>
-        <value>true</value>
-    </property>
+<!--    &lt;!&ndash; 集群在 nonsecure 模式时，是否限制 container 的启动用户，true：container 使用统一的用户启动 false: container 使用任务用户启动 &ndash;&gt;-->
+<!--    <property>-->
+<!--        <name>yarn.nodemanager.linux-container-executor.nonsecure-mode.limit-users</name>-->
+<!--        <value>true</value>-->
+<!--    </property>-->
 
-    <!-- 集群在 nonsecure 模式时，且开启 container 启动用户限制时，统一使用的用户，如果不设置，默认为 nobody -->
-    <property>
-        <name>yarn.nodemanager.linux-container-executor.nonsecure-mode.local-user</name>
-        <value>yarn,henghe,root</value>
-    </property>
+<!--    &lt;!&ndash; 集群在 nonsecure 模式时，且开启 container 启动用户限制时，统一使用的用户，如果不设置，默认为 nobody &ndash;&gt;-->
+<!--    <property>-->
+<!--        <name>yarn.nodemanager.linux-container-executor.nonsecure-mode.local-user</name>-->
+<!--        <value>yarn,henghe,root</value>-->
+<!--    </property>-->
 
 
 

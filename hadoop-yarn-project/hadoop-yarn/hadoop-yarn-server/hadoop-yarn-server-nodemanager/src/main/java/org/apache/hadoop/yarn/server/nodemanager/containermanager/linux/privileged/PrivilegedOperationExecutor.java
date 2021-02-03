@@ -143,10 +143,13 @@ public class PrivilegedOperationExecutor {
       PrivilegedOperation operation, File workingDir,
       Map<String, String> env, boolean grabOutput, boolean inheritParentEnv)
       throws PrivilegedOperationException {
-    String[] fullCommandArray = getPrivilegedOperationExecutionCommand
-        (prefixCommands, operation);
-    ShellCommandExecutor exec = new ShellCommandExecutor(fullCommandArray,
-        workingDir, env, 0L, inheritParentEnv);
+
+
+
+    String[] fullCommandArray = getPrivilegedOperationExecutionCommand(prefixCommands, operation);
+
+
+    ShellCommandExecutor exec = new ShellCommandExecutor(fullCommandArray,workingDir, env, 0L, inheritParentEnv);
 
     try {
       exec.execute();

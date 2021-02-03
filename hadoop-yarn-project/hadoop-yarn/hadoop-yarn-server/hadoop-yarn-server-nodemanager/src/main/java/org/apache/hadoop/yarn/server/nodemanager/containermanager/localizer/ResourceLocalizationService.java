@@ -1270,15 +1270,18 @@ public class ResourceLocalizationService extends CompositeService
         writeCredentials(nmPrivateCTokensPath);
         // 2) exec initApplication and wait
         if (dirsHandler.areDisksHealthy()) {
+
           exec.startLocalizer(new LocalizerStartContext.Builder()
-              .setNmPrivateContainerTokens(nmPrivateCTokensPath)
-              .setNmAddr(localizationServerAddress)
-              .setUser(context.getUser())
-              .setAppId(context.getContainerId()
-                  .getApplicationAttemptId().getApplicationId().toString())
-              .setLocId(localizerId)
-              .setDirsHandler(dirsHandler)
-              .build());
+                  .setNmPrivateContainerTokens(nmPrivateCTokensPath)
+                  .setNmAddr(localizationServerAddress)
+                  .setUser(context.getUser())
+                  .setAppId(context.getContainerId()
+                          .getApplicationAttemptId().getApplicationId().toString())
+                  .setLocId(localizerId)
+                  .setDirsHandler(dirsHandler)
+                  .build());
+
+
         } else {
           throw new IOException("All disks failed. "
               + dirsHandler.getDisksHealthReport(false));

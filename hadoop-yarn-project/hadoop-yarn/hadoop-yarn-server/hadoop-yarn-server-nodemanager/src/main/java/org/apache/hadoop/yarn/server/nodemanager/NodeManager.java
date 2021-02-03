@@ -419,7 +419,7 @@ public class NodeManager extends CompositeService
   protected ResourcePluginManager createResourcePluginManager() {
     return new ResourcePluginManager();
   }
-
+  // 根据  yarn.nodemanager.container-executor.class : org.apache.hadoop.yarn.server.nodemanager.LinuxContainerExecutor
   @VisibleForTesting
   protected ContainerExecutor createContainerExecutor(Configuration conf) {
     return ReflectionUtils.newInstance(

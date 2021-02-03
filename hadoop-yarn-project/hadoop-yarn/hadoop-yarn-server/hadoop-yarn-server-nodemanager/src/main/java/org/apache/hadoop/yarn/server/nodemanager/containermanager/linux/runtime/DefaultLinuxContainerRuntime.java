@@ -100,7 +100,9 @@ public class DefaultLinuxContainerRuntime implements LinuxContainerRuntime {
 
 
 
+    // 所有这些参数都应该在运行时上下文中可用
     //All of these arguments are expected to be available in the runtime context
+
     launchOp.appendArgs(ctx.getExecutionAttribute(RUN_AS_USER),
         ctx.getExecutionAttribute(USER),
         Integer.toString(PrivilegedOperation.
@@ -131,8 +133,7 @@ public class DefaultLinuxContainerRuntime implements LinuxContainerRuntime {
     //List<String> -> stored as List -> fetched/converted to List<String>
     //we can't do better here thanks to type-erasure
     @SuppressWarnings("unchecked")
-    List<String> prefixCommands = (List<String>) ctx.getExecutionAttribute(
-        CONTAINER_LAUNCH_PREFIX_COMMANDS);
+    List<String> prefixCommands = (List<String>) ctx.getExecutionAttribute(CONTAINER_LAUNCH_PREFIX_COMMANDS);
 
     try {
 

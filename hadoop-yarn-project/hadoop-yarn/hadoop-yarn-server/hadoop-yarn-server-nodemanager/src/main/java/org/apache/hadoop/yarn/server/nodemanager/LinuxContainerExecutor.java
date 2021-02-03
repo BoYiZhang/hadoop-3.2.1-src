@@ -106,13 +106,21 @@ public class LinuxContainerExecutor extends ContainerExecutor {
        LoggerFactory.getLogger(LinuxContainerExecutor.class);
 
   private String nonsecureLocalUser;
+
   private Pattern nonsecureLocalUserPattern;
+
   private LCEResourcesHandler resourcesHandler;
+
   private boolean containerSchedPriorityIsSet = false;
+
   private int containerSchedPriorityAdjustment = 0;
+
   private boolean containerLimitUsers;
+
   private ResourceHandler resourceHandlerChain;
+
   private LinuxContainerRuntime linuxContainerRuntime;
+
   private Context nmContext;
 
   /**
@@ -399,9 +407,39 @@ public class LinuxContainerExecutor extends ContainerExecutor {
       Configuration conf = super.getConf();
       PrivilegedOperationExecutor privilegedOperationExecutor =
           getPrivilegedOperationExecutor();
+      //
+      //        0 = "nice"
+      //        1 = "-n"
+      //        2 = "6"
+      //        3 = "/opt/tools/hadoop-3.2.1/bin/container-executor"
+      //        4 = "yarn,henghe,root"
+      //        5 = "henghe"
+      //        6 = "0"
+      //        7 = "application_1612332857205_0004"
+      //        8 = "container_1612332857205_0004_01_000001"
+      //        9 = "/opt/tools/hadoop-3.2.1/local-dirs/nmPrivate/container_1612332857205_0004_01_000001.tokens"
+      //        10 = "/opt/tools/hadoop-3.2.1/local-dirs"
+      //        11 = "/opt/tools/hadoop-3.2.1/logs/userlogs"
+      //        12 = "/Library/Java/JavaVirtualMachines/jdk1.8.0_271.jdk/Contents/Home/jre/bin/java"
+      //        13 = "-classpath"
+      //        14 = "/Applications/IntelliJ IDEA.app/Contents/lib/idea_rt.jar:/Applications/IntelliJ IDEA.app/Contents/plugins/junit/lib/junit5-rt.jar:/Applications/IntelliJ IDEA.app/Contents/plugins/junit/lib/junit-rt.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_271.jdk/Contents/Home/jre/lib/charsets.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_271.jdk/Contents/Home/jre/lib/deploy.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_271.jdk/Contents/Home/jre/lib/ext/cldrdata.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_271.jdk/Contents/Home/jre/lib/ext/dnsns.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_271.jdk/Contents/Home/jre/lib/ext/jaccess.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_271.jdk/Contents/Home/jre/lib/ext/jfxrt.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_271.jdk/Contents/Home/jre/lib/ext/localedata.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_271.jdk/Contents/Home/jre/lib/ext/nashorn.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_271.jdk/Contents/Home/jre/lib/ext/sunec.jar:/Librar"
+      //        15 = "-Djava.library.path=/Users/sysadmin/Library/Java/Extensions:/Library/Java/Extensions:/Network/Library/Java/Extensions:/System/Library/Java/Extensions:/usr/lib/java:."
+      //        16 = "-Xmx256m"
+      //        17 = "-Dlog4j.configuration=container-log4j.properties"
+      //        18 = "-Dyarn.app.container.log.dir=/opt/tools/hadoop-3.2.1/logs/userlogs/application_1612332857205_0004/container_1612332857205_0004_01_000001"
+      //        19 = "-Dyarn.app.container.log.filesize=0"
+      //        20 = "-Dhadoop.root.logger=INFO,CLA"
+      //        21 = "-Dhadoop.root.logfile=container-localizer-syslog"
+      //        22 = "org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ContainerLocalizer"
+      //        23 = "henghe"
+      //        24 = "application_1612332857205_0004"
+      //        25 = "container_1612332857205_0004_01_000001"
+      //        26 = "BoYi-Pro.local"
+      //        27 = "8040"
+      //        28 = "/opt/tools/hadoop-3.2.1/local-dirs"
 
-      privilegedOperationExecutor.executePrivilegedOperation(prefixCommands,
-          initializeContainerOp, null, null, false, true);
+        privilegedOperationExecutor.executePrivilegedOperation(prefixCommands,  initializeContainerOp, null, null, false, true);
+
 
     } catch (PrivilegedOperationException e) {
       int exitCode = e.getExitCode();
@@ -455,9 +493,22 @@ public class LinuxContainerExecutor extends ContainerExecutor {
   @Override
   public void prepareContainer(ContainerPrepareContext ctx) throws IOException {
 
+    // 构建 ContainerRuntimeContext
     ContainerRuntimeContext.Builder builder =
         new ContainerRuntimeContext.Builder(ctx.getContainer());
 
+
+
+
+
+
+
+
+
+
+
+
+    // 设置资源文件/用户/路径/执行命令/ContainerId 等信息
     builder.setExecutionAttribute(LOCALIZED_RESOURCES,
             ctx.getLocalizedResources())
         .setExecutionAttribute(USER, ctx.getUser())
@@ -478,6 +529,7 @@ public class LinuxContainerExecutor extends ContainerExecutor {
   public int launchContainer(ContainerStartContext ctx)
       throws IOException, ConfigurationException {
 
+    // 处理启动
     return handleLaunchForLaunchType(ctx,
         ApplicationConstants.ContainerLaunchType.LAUNCH);
 
@@ -494,16 +546,19 @@ public class LinuxContainerExecutor extends ContainerExecutor {
       ApplicationConstants.ContainerLaunchType type) throws IOException,
       ConfigurationException {
 
-
+    //获取容器
     Container container = ctx.getContainer();
+    // 获取用户
     String user = ctx.getUser();
 
+    // 验证用户名权限, 是否可以执行任务.
     verifyUsernamePattern(user);
 
+    // 获取ContainerId
     ContainerId containerId = container.getContainerId();
 
-    resourcesHandler.preExecute(containerId,
-            container.getResource());
+    // 处理资源引用
+    resourcesHandler.preExecute(containerId,  container.getResource());
 
 
     String resourcesOptions = resourcesHandler.getResourcesOption(containerId);
@@ -511,9 +566,9 @@ public class LinuxContainerExecutor extends ContainerExecutor {
     List<String> numaArgs = null;
 
     try {
+      // 处理资源文件
       if (resourceHandlerChain != null) {
-        List<PrivilegedOperation> ops = resourceHandlerChain
-            .preStart(container);
+        List<PrivilegedOperation> ops = resourceHandlerChain.preStart(container);
 
         if (ops != null) {
           List<PrivilegedOperation> resourceOps = new ArrayList<>();
@@ -559,6 +614,8 @@ public class LinuxContainerExecutor extends ContainerExecutor {
     }
 
     try {
+
+      // 处理pidFilePath
       Path pidFilePath = getPidFilePath(containerId);
       if (pidFilePath != null) {
 
@@ -568,6 +625,7 @@ public class LinuxContainerExecutor extends ContainerExecutor {
         if (type.equals(ApplicationConstants.ContainerLaunchType.RELAUNCH)) {
           linuxContainerRuntime.relaunchContainer(runtimeContext);
         } else {
+          // 交由具体的执行
           linuxContainerRuntime.launchContainer(runtimeContext);
         }
 
