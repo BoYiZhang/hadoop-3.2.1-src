@@ -285,6 +285,8 @@ public class FsPermission implements Writable, Serializable,
 
   public static final String UMASK_LABEL = 
                   CommonConfigurationKeys.FS_PERMISSIONS_UMASK_KEY;
+
+  // Umask 为022表示默bai认创建新文du件权限为755
   public static final int DEFAULT_UMASK = 
                   CommonConfigurationKeys.FS_PERMISSIONS_UMASK_DEFAULT;
 

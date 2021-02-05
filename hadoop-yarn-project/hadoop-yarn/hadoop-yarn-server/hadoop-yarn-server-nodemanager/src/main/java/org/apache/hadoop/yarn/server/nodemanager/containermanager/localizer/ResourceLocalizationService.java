@@ -155,37 +155,49 @@ public class ResourceLocalizationService extends CompositeService
   // 私有目录
   public static final String NM_PRIVATE_DIR = "nmPrivate";
 
-  // 私有目录权限
+  // 私有目录权限 700
   public static final FsPermission NM_PRIVATE_PERM = new FsPermission((short) 0700);
 
-  // 共有目录权限
+  // 共有目录权限 755
   private static final FsPermission PUBLIC_FILECACHE_FOLDER_PERMS = new FsPermission((short) 0755);
 
+  //  0.0.0.0 : 8040
   private Server server;
+  // BoYi-Pro.local/192.168.8.188:8040
   private InetSocketAddress localizationServerAddress;
+
   @VisibleForTesting
+  // 缓存大小 :  10G
   long cacheTargetSize;
+  // 缓存清理周期 10min
   private long cacheCleanupPeriod;
-
+  // DefaultContainerExecutor  or  LinuxContainerExecutor
   private final ContainerExecutor exec;
-
+  // AsyncDispatcher
   protected final Dispatcher dispatcher;
-
+  // org.apache.hadoop.yarn.server.nodemanager.DeletionService
   private final DeletionService delService;
 
+
+  // Service org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ResourceLocalizationService$LocalizerTracker
   private LocalizerTracker localizerTracker;
 
   private RecordFactory recordFactory;
 
+  // org.apache.hadoop.util.concurrent.HadoopScheduledThreadPoolExecutor@24c4ddae[Running, pool size = 1, active threads = 0, queued tasks = 1, completed tasks = 0]
   private final ScheduledExecutorService cacheCleanup;
-
+  // 权限相关
   private LocalizerTokenSecretManager secretManager;
-
+  // 持久化存储
   private NMStateStoreService stateStore;
+
+
   @VisibleForTesting
+  // 度量数据
   final NodeManagerMetrics metrics;
 
   @VisibleForTesting
+  // LocalResourcesTrackerImpl
   LocalResourcesTracker publicRsrc;
 
   private LocalDirsHandlerService dirsHandler;
@@ -194,22 +206,67 @@ public class ResourceLocalizationService extends CompositeService
 
   private DirsChangeListener logDirsChangeListener;
 
+
+  //  NodeManager#NMContext 信息
+  //
+  //  nodeId = {NodeIdPBImpl@3904} "192.168.8.188:57344"
+  //  conf = {YarnConfiguration@3079} "Configuration: core-default.xml, core-site.xml, yarn-default.xml, yarn-site.xml, resource-types.xml"
+  //  metrics = {NodeManagerMetrics@2120}
+  //  applications = {ConcurrentHashMap@3905}  size = 0
+  //  systemCredentials = {HashMap@3906}  size = 0
+  //  containers = {ConcurrentSkipListMap@3907}  size = 0
+  //  registeringCollectors = null
+  //  knownCollectors = null
+  //  increasedContainers = {ConcurrentHashMap@3908}  size = 0
+  //  containerTokenSecretManager = {NMContainerTokenSecretManager@3909}
+  //  nmTokenSecretManager = {NMTokenSecretManagerInNM@3910}
+  //  containerManager = {ContainerManagerImpl@2592} "Service org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManagerImpl in state org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManagerImpl: STARTED"
+  //  nodeResourceMonitor = {NodeResourceMonitorImpl@3911} "Service org.apache.hadoop.yarn.server.nodemanager.NodeResourceMonitorImpl in state org.apache.hadoop.yarn.server.nodemanager.NodeResourceMonitorImpl: STARTED"
+  //  dirsHandler = {LocalDirsHandlerService@2118} "Service org.apache.hadoop.yarn.server.nodemanager.LocalDirsHandlerService in state org.apache.hadoop.yarn.server.nodemanager.LocalDirsHandlerService: STARTED"
+  //  aclsManager = {ApplicationACLsManager@3912}
+  //  webServer = {WebServer@3913} "Service org.apache.hadoop.yarn.server.nodemanager.webapp.WebServer in state org.apache.hadoop.yarn.server.nodemanager.webapp.WebServer: INITED"
+  //  nodeHealthStatus = {NodeHealthStatusPBImpl@3914} "is_node_healthy: true health_report: "Healthy" last_health_report_time: 1612342130099"
+  //  stateStore = {NMNullStateStoreService@2122} "Service org.apache.hadoop.yarn.server.nodemanager.recovery.NMNullStateStoreService in state org.apache.hadoop.yarn.server.nodemanager.recovery.NMNullStateStoreService: STARTED"
+  //  isDecommissioned = false
+  //  logAggregationReportForApps = {ConcurrentLinkedQueue@3915}  size = 0
+  //  nodeStatusUpdater = {NodeStatusUpdaterImpl@3832} "Service org.apache.hadoop.yarn.server.nodemanager.NodeStatusUpdaterImpl in state org.apache.hadoop.yarn.server.nodemanager.NodeStatusUpdaterImpl: INITED"
+  //  isDistSchedulingEnabled = false
+  //  deletionService = {DeletionService@2117} "Service org.apache.hadoop.yarn.server.nodemanager.DeletionService in state org.apache.hadoop.yarn.server.nodemanager.DeletionService: STARTED"
+  //  containerAllocator = {OpportunisticContainerAllocator@3916}
+  //  executor = {DefaultContainerExecutor@2115}
+  //  nmTimelinePublisher = null
+  //  containerStateTransitionListener = {NodeManager$DefaultContainerStateListener@3917}
+  //  resourcePluginManager = {ResourcePluginManager@3918}
+  //  nmLogAggregationStatusTracker = {NMLogAggregationStatusTracker@3919} "Service org.apache.hadoop.yarn.server.nodemanager.logaggregation.tracker.NMLogAggregationStatusTracker in state org.apache.hadoop.yarn.server.nodemanager.logaggregation.tracker.NMLogAggregationStatusTracker: INITED"
   private Context nmContext;
+
+  // BasicDiskValidator
   private DiskValidator diskValidator;
 
   /**
-   * Map of LocalResourceTrackers keyed by username, for private
-   * resources.
+   * 每个用户一个 LocalResourcesTracker ??????
+   * 用户名 -> LocalResourcesTracker
+   * Map of LocalResourceTrackers keyed by username, for private resources.
    */
   @VisibleForTesting
   final ConcurrentMap<String, LocalResourcesTracker> privateRsrc =  new ConcurrentHashMap<String,LocalResourcesTracker>();
 
   /**
-   * Map of LocalResourceTrackers keyed by appid, for application
-   * resources.
+   * appid -> LocalResourcesTracker ??????
+   * Map of LocalResourceTrackers keyed by appid, for application resources.
    */
   private final ConcurrentMap<String,LocalResourcesTracker> appRsrc = new ConcurrentHashMap<String,LocalResourcesTracker>();
-  
+
+  //  FileContext 中的信息
+  //
+  //  defaultFS = {LocalFs@3928}
+  //  workingDir = {Path@3929} "file:/opt/workspace/apache/hadoop-3.2.1-src/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager"
+  //  umask = {FsPermission@3930} "----w--w-"
+  //  conf = {YarnConfiguration@3079} "Configuration: core-default.xml, core-site.xml, yarn-default.xml, yarn-site.xml, resource-types.xml"
+  //  ugi = {UserGroupInformation@3931} "henghe (auth:SIMPLE)"
+  //  resolveSymlinks = true
+  //  tracer = {Tracer@3932} "Tracer(FSClient/192.168.8.188)"
+  //  util = {FileContext$Util@3933}
   FileContext lfs;
 
   public ResourceLocalizationService(Dispatcher dispatcher,
@@ -218,17 +275,57 @@ public class ResourceLocalizationService extends CompositeService
       NodeManagerMetrics metrics) {
 
     super(ResourceLocalizationService.class.getName());
+    // DefaultContainerExecutor  or  LinuxContainerExecutor
     this.exec = exec;
+    // AsyncDispatcher
     this.dispatcher = dispatcher;
+    // org.apache.hadoop.yarn.server.nodemanager.DeletionService
     this.delService = delService;
     this.dirsHandler = dirsHandler;
 
+    // org.apache.hadoop.util.concurrent.HadoopScheduledThreadPoolExecutor@24c4ddae[Running, pool size = 1, active threads = 0, queued tasks = 1, completed tasks = 0]
     this.cacheCleanup = new HadoopScheduledThreadPoolExecutor(1,
         new ThreadFactoryBuilder()
           .setNameFormat("ResourceLocalizationService Cache Cleanup")
           .build());
+
     this.stateStore = context.getNMStateStore();
+
+
+    //  NodeManager#NMContext 信息
+    //
+    //  nodeId = {NodeIdPBImpl@3904} "192.168.8.188:57344"
+    //  conf = {YarnConfiguration@3079} "Configuration: core-default.xml, core-site.xml, yarn-default.xml, yarn-site.xml, resource-types.xml"
+    //  metrics = {NodeManagerMetrics@2120}
+    //  applications = {ConcurrentHashMap@3905}  size = 0
+    //  systemCredentials = {HashMap@3906}  size = 0
+    //  containers = {ConcurrentSkipListMap@3907}  size = 0
+    //  registeringCollectors = null
+    //  knownCollectors = null
+    //  increasedContainers = {ConcurrentHashMap@3908}  size = 0
+    //  containerTokenSecretManager = {NMContainerTokenSecretManager@3909}
+    //  nmTokenSecretManager = {NMTokenSecretManagerInNM@3910}
+    //  containerManager = {ContainerManagerImpl@2592} "Service org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManagerImpl in state org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManagerImpl: STARTED"
+    //  nodeResourceMonitor = {NodeResourceMonitorImpl@3911} "Service org.apache.hadoop.yarn.server.nodemanager.NodeResourceMonitorImpl in state org.apache.hadoop.yarn.server.nodemanager.NodeResourceMonitorImpl: STARTED"
+    //  dirsHandler = {LocalDirsHandlerService@2118} "Service org.apache.hadoop.yarn.server.nodemanager.LocalDirsHandlerService in state org.apache.hadoop.yarn.server.nodemanager.LocalDirsHandlerService: STARTED"
+    //  aclsManager = {ApplicationACLsManager@3912}
+    //  webServer = {WebServer@3913} "Service org.apache.hadoop.yarn.server.nodemanager.webapp.WebServer in state org.apache.hadoop.yarn.server.nodemanager.webapp.WebServer: INITED"
+    //  nodeHealthStatus = {NodeHealthStatusPBImpl@3914} "is_node_healthy: true health_report: "Healthy" last_health_report_time: 1612342130099"
+    //  stateStore = {NMNullStateStoreService@2122} "Service org.apache.hadoop.yarn.server.nodemanager.recovery.NMNullStateStoreService in state org.apache.hadoop.yarn.server.nodemanager.recovery.NMNullStateStoreService: STARTED"
+    //  isDecommissioned = false
+    //  logAggregationReportForApps = {ConcurrentLinkedQueue@3915}  size = 0
+    //  nodeStatusUpdater = {NodeStatusUpdaterImpl@3832} "Service org.apache.hadoop.yarn.server.nodemanager.NodeStatusUpdaterImpl in state org.apache.hadoop.yarn.server.nodemanager.NodeStatusUpdaterImpl: INITED"
+    //  isDistSchedulingEnabled = false
+    //  deletionService = {DeletionService@2117} "Service org.apache.hadoop.yarn.server.nodemanager.DeletionService in state org.apache.hadoop.yarn.server.nodemanager.DeletionService: STARTED"
+    //  containerAllocator = {OpportunisticContainerAllocator@3916}
+    //  executor = {DefaultContainerExecutor@2115}
+    //  nmTimelinePublisher = null
+    //  containerStateTransitionListener = {NodeManager$DefaultContainerStateListener@3917}
+    //  resourcePluginManager = {ResourcePluginManager@3918}
+    //  nmLogAggregationStatusTracker = {NMLogAggregationStatusTracker@3919} "Service org.apache.hadoop.yarn.server.nodemanager.logaggregation.tracker.NMLogAggregationStatusTracker in state org.apache.hadoop.yarn.server.nodemanager.logaggregation.tracker.NMLogAggregationStatusTracker: INITED"
     this.nmContext = context;
+
+    // 度量数据
     this.metrics = metrics;
   }
 
@@ -264,15 +361,19 @@ public class ResourceLocalizationService extends CompositeService
     this.recordFactory = RecordFactoryProvider.getRecordFactory(conf);
 
     try {
-
+      // 构建本地文件系统
       lfs = getLocalFileContext(conf);
-
+      // 设置权限  : 755
+      // Umask 为022表示默bai认创建新文du件权限为755
       lfs.setUMask(new FsPermission((short) FsPermission.DEFAULT_UMASK));
 
       if (!stateStore.canRecover()|| stateStore.isNewlyCreated()) {
         cleanUpLocalDirs(lfs, delService);
         cleanupLogDirs(lfs, delService);
+
+        // ${yarn.nodemanager.local-dirs} : /opt/tools/hadoop-3.2.1/local-dirs
         initializeLocalDirs(lfs);
+        //  ${yarn.nodemanager.log-dirs} : /opt/tools/hadoop-3.2.1/logs/userlogs
         initializeLogDirs(lfs);
       }
     } catch (Exception e) {
@@ -282,10 +383,10 @@ public class ResourceLocalizationService extends CompositeService
 
     diskValidator = DiskValidatorFactory.getInstance(YarnConfiguration.DEFAULT_DISK_VALIDATOR);
 
-    //
+    // 缓存大小 :  10G
     cacheTargetSize = conf.getLong(YarnConfiguration.NM_LOCALIZER_CACHE_TARGET_SIZE_MB, YarnConfiguration.DEFAULT_NM_LOCALIZER_CACHE_TARGET_SIZE_MB) << 20;
 
-    //
+    // 清理周期 10min
     cacheCleanupPeriod =  conf.getLong(YarnConfiguration.NM_LOCALIZER_CACHE_CLEANUP_INTERVAL_MS, YarnConfiguration.DEFAULT_NM_LOCALIZER_CACHE_CLEANUP_INTERVAL_MS);
 
     // yarn.nodemanager.bind-host
@@ -296,6 +397,7 @@ public class ResourceLocalizationService extends CompositeService
         YarnConfiguration.DEFAULT_NM_LOCALIZER_ADDRESS,
         YarnConfiguration.DEFAULT_NM_LOCALIZER_PORT);
 
+    // ResourceLocalizationService$LocalizerTracker
     localizerTracker = createLocalizerTracker(conf);
 
 
@@ -407,18 +509,31 @@ public class ResourceLocalizationService extends CompositeService
 
   @Override
   public void serviceStart() throws Exception {
-    cacheCleanup.scheduleWithFixedDelay(new CacheCleanup(dispatcher),
-        cacheCleanupPeriod, cacheCleanupPeriod, TimeUnit.MILLISECONDS);
+
+    // 开启定时清理 : 每10min执行一次...
+    cacheCleanup.scheduleWithFixedDelay(new CacheCleanup(dispatcher), cacheCleanupPeriod, cacheCleanupPeriod, TimeUnit.MILLISECONDS);
+
+    // 构建RPC 服务
     server = createServer();
+    // 启动RPC服务.
     server.start();
+
+    // 更新localizationServer地址...
+    // BoYi-Pro.local/192.168.8.188:8040
     localizationServerAddress =
         getConfig().updateConnectAddr(YarnConfiguration.NM_BIND_HOST,
                                       YarnConfiguration.NM_LOCALIZER_ADDRESS,
                                       YarnConfiguration.DEFAULT_NM_LOCALIZER_ADDRESS,
                                       server.getListenerAddress());
     LOG.info("Localizer started on port " + server.getPort());
+
+
     super.serviceStart();
+
+    // 注册监听程序
     dirsHandler.registerLocalDirsChangeListener(localDirsChangeListener);
+
+    // 注册监听程序
     dirsHandler.registerLogDirsChangeListener(logDirsChangeListener);
   }
 
@@ -563,13 +678,20 @@ public class ResourceLocalizationService extends CompositeService
 
   @VisibleForTesting
   LocalCacheCleanerStats handleCacheCleanup() {
-    LocalCacheCleaner cleaner =
-        new LocalCacheCleaner(delService, cacheTargetSize);
+
+
+    LocalCacheCleaner cleaner = new LocalCacheCleaner(delService, cacheTargetSize);
     cleaner.addResources(publicRsrc);
+
+
     for (LocalResourcesTracker t : privateRsrc.values()) {
       cleaner.addResources(t);
     }
+
+
     LocalCacheCleaner.LocalCacheCleanerStats stats = cleaner.cleanCache();
+
+
     if (LOG.isDebugEnabled()) {
       LOG.debug(stats.toStringDetailed());
     } else if (LOG.isInfoEnabled()) {
@@ -1430,6 +1552,8 @@ public class ResourceLocalizationService extends CompositeService
   private void initializeLocalDirs(FileContext lfs) {
     List<String> localDirs = dirsHandler.getLocalDirs();
     for (String localDir : localDirs) {
+      // 循环初始化
+      LOG.info("ResourceLocalizationService#initializeLogDirs : "+localDir);
       initializeLocalDir(lfs, localDir);
     }
   }
@@ -1479,6 +1603,7 @@ public class ResourceLocalizationService extends CompositeService
     List<String> logDirs = dirsHandler.getLogDirs();
     for (String logDir : logDirs) {
       // 循环初始化
+      LOG.info("ResourceLocalizationService#initializeLogDirs : "+logDir);
       initializeLogDir(lfs, logDir);
     }
   }

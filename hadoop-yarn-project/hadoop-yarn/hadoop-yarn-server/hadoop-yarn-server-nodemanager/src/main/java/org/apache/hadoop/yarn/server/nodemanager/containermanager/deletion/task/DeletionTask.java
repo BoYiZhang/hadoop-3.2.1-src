@@ -39,15 +39,23 @@ public abstract class DeletionTask implements Runnable {
 
   public static final int INVALID_TASK_ID = -1;
 
+  //任务id
   private int taskId;
+
   private String user;
+
   private DeletionTaskType deletionTaskType;
+
   private DeletionService deletionService;
+
   private final AtomicInteger numberOfPendingPredecessorTasks;
+
   private final Set<DeletionTask> successorTaskSet;
+
   // By default all tasks will start as success=true; however if any of
   // the dependent task fails then it will be marked as false in
   // deletionTaskFinished().
+
   private boolean success;
 
   /**

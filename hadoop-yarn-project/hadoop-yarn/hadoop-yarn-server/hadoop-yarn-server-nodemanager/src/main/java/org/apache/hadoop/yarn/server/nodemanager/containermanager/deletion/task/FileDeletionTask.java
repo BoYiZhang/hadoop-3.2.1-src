@@ -95,7 +95,10 @@ public class FileDeletionTask extends DeletionTask implements Runnable {
    */
   @Override
   public void run() {
+
+
     if (LOG.isDebugEnabled()) {
+      // 打印log日志....
       String msg = String.format("Running DeletionTask : %s", toString());
       LOG.debug(msg);
     }
@@ -106,6 +109,7 @@ public class FileDeletionTask extends DeletionTask implements Runnable {
           LOG.debug("NM deleting absolute path : " + subDir);
         }
         try {
+          // 递归删除文件
           lfs.delete(subDir, true);
         } catch (IOException e) {
           error = true;
@@ -118,6 +122,7 @@ public class FileDeletionTask extends DeletionTask implements Runnable {
             LOG.debug("NM deleting path : " + del);
           }
           try {
+            // 递归删除文件
             lfs.delete(del, true);
           } catch (IOException e) {
             error = true;
