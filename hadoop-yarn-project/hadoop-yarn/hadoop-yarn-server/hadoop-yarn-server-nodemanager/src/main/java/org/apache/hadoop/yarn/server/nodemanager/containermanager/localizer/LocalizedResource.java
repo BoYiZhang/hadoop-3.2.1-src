@@ -47,24 +47,37 @@ import org.apache.hadoop.yarn.state.StateMachine;
 import org.apache.hadoop.yarn.state.StateMachineFactory;
 
 /**
- * Datum representing a localized resource. Holds the statemachine of a
- * resource. State of the resource is one of {@link ResourceState}.
+ *
+ * 表示本地化资源的数据。保存资源的状态机。
+ * Datum representing a localized resource. Holds the statemachine of a resource.
+ *
+ * State of the resource is one of {@link ResourceState}.
  * 
  */
 public class LocalizedResource implements EventHandler<ResourceEvent> {
 
-  private static final Logger LOG =
-       LoggerFactory.getLogger(LocalizedResource.class);
+  private static final Logger LOG =  LoggerFactory.getLogger(LocalizedResource.class);
 
+  // 本地路径
   volatile Path localPath;
+
+  // 大小
   volatile long size = -1;
+
+  // 请求...
   final LocalResourceRequest rsrc;
+
   final Dispatcher dispatcher;
-  final StateMachine<ResourceState,ResourceEventType,ResourceEvent>
-    stateMachine;
+
+  final StateMachine<ResourceState,ResourceEventType,ResourceEvent>  stateMachine;
+
+
   final Semaphore sem = new Semaphore(1);
-  final Queue<ContainerId> ref; // Queue of containers using this localized
-                                // resource
+
+  // 队列..
+  // 使用此本地化资源的容器队列
+  final Queue<ContainerId> ref; // Queue of containers using this localized resource
+
   private final Lock readLock;
   private final Lock writeLock;
 

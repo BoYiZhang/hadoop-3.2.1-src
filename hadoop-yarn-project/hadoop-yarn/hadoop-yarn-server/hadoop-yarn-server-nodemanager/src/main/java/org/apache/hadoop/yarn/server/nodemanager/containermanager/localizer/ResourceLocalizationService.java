@@ -590,6 +590,7 @@ public class ResourceLocalizationService extends CompositeService
       handleContainerResourcesLocalized((ContainerLocalizationEvent) event);
       break;
     case CACHE_CLEANUP:
+      // 执行清理操作...
       handleCacheCleanup();
       break;
     case CLEANUP_CONTAINER_RESOURCES:
@@ -679,8 +680,9 @@ public class ResourceLocalizationService extends CompositeService
   @VisibleForTesting
   LocalCacheCleanerStats handleCacheCleanup() {
 
-
+    //构建LocalCacheCleaner
     LocalCacheCleaner cleaner = new LocalCacheCleaner(delService, cacheTargetSize);
+
     cleaner.addResources(publicRsrc);
 
 
@@ -874,7 +876,12 @@ public class ResourceLocalizationService extends CompositeService
    */
   class LocalizerTracker extends AbstractService implements EventHandler<LocalizerEvent>  {
 
+
+    // 共有
     private final PublicLocalizer publicLocalizer;
+
+
+    // 私有
     private final Map<String,LocalizerRunner> privLocalizers;
 
     LocalizerTracker(Configuration conf) {
@@ -897,6 +904,7 @@ public class ResourceLocalizationService extends CompositeService
     public LocalizerHeartbeatResponse processHeartbeat(LocalizerStatus status) {
       String locId = status.getLocalizerId();
       synchronized (privLocalizers) {
+        // 获取LocalizerRunner
         LocalizerRunner localizer = privLocalizers.get(locId);
         if (null == localizer) {
           // TODO process resources anyway
@@ -907,6 +915,7 @@ public class ResourceLocalizationService extends CompositeService
           response.setLocalizerAction(LocalizerAction.DIE);
           return response;
         }
+        // 处理心跳数据
         return localizer.processHeartbeat(status.getResources());
       }
     }
@@ -926,8 +935,10 @@ public class ResourceLocalizationService extends CompositeService
       switch (event.getType()) {
       case REQUEST_RESOURCE_LOCALIZATION:
         // 0) find running localizer or start new thread
-        LocalizerResourceRequestEvent req =
-          (LocalizerResourceRequestEvent)event;
+        LocalizerResourceRequestEvent req = (LocalizerResourceRequestEvent)event;
+
+
+        // 根据可见性进行处理
         switch (req.getVisibility()) {
         case PUBLIC:
           publicLocalizer.addResource(req);
@@ -935,10 +946,11 @@ public class ResourceLocalizationService extends CompositeService
         case PRIVATE:
         case APPLICATION:
           synchronized (privLocalizers) {
+            // 获取 LocalizerRunner
             LocalizerRunner localizer = privLocalizers.get(locId);
+
             if (localizer != null && localizer.killContainerLocalizer.get()) {
-              // Old localizer thread has been stopped, remove it and creates
-              // a new localizer thread.
+              // Old localizer thread has been stopped, remove it and creates a new localizer thread.
               LOG.info("New " + event.getType() + " localize request for "
                   + locId + ", remove old private localizer.");
               cleanupPrivLocalizers(locId);
@@ -984,6 +996,8 @@ public class ResourceLocalizationService extends CompositeService
   
 
   private static ExecutorService createLocalizerExecutor(Configuration conf) {
+
+    // yarn.nodemanager.localizer.fetch.thread-count : 4
     int nThreads = conf.getInt(
         YarnConfiguration.NM_LOCALIZER_FETCH_THREAD_COUNT,
         YarnConfiguration.DEFAULT_NM_LOCALIZER_FETCH_THREAD_COUNT);
@@ -997,9 +1011,16 @@ public class ResourceLocalizationService extends CompositeService
   class PublicLocalizer extends Thread {
 
     final FileContext lfs;
+
     final Configuration conf;
+
+    // 线程池
+    // yarn.nodemanager.localizer.fetch.thread-count : 4
     final ExecutorService threadPool;
+
+    // 队列
     final CompletionService<Path> queue;
+
     // Its shared between public localizer and dispatcher thread.
     final Map<Future<Path>,LocalizerResourceRequestEvent> pending;
 
@@ -1009,7 +1030,11 @@ public class ResourceLocalizationService extends CompositeService
       this.conf = conf;
       this.pending = Collections.synchronizedMap(
           new HashMap<Future<Path>, LocalizerResourceRequestEvent>());
+
+      // yarn.nodemanager.localizer.fetch.thread-count : 4
       this.threadPool = createLocalizerExecutor(conf);
+
+      // 创建队列
       this.queue = new ExecutorCompletionService<Path>(threadPool);
     }
 
@@ -1019,6 +1044,12 @@ public class ResourceLocalizationService extends CompositeService
       LocalResourceRequest key = rsrc.getRequest();
       LOG.info("Downloading public resource: " + key);
       /*
+       多个containers或许会请求相同的资源.
+       所以我们在以下情况下启动下载:
+       1.  ResourceState 为DOWNLOADING
+       2.  我们能够获得非阻塞信号量锁。
+       否则，我们将跳过此资源，因为它正在下载或已失败/本地化。
+
        * Here multiple containers may request the same resource. So we need
        * to start downloading only when
        * 1) ResourceState == DOWNLOADING
@@ -1027,20 +1058,31 @@ public class ResourceLocalizationService extends CompositeService
        * or it FAILED / LOCALIZED.
        */
 
+      // 尝试加锁
       if (rsrc.tryAcquire()) {
+        // 状态是否为 DOWNLOADING
         if (rsrc.getState() == ResourceState.DOWNLOADING) {
+          // 获取LocalResource
           LocalResource resource = request.getResource().getRequest();
           try {
+
+            // 获取public 的根目录
             Path publicRootPath =
                 dirsHandler.getLocalPathForWrite("." + Path.SEPARATOR
                     + ContainerLocalizer.FILECACHE,
                   ContainerLocalizer.getEstimatedSize(resource), true);
+
+            // 获取目标 目录
             Path publicDirDestPath =
                 publicRsrc.getPathForLocalization(key, publicRootPath,
                     delService);
+
+
             if (publicDirDestPath == null) {
               return;
             }
+
+            // 验证 & 构架目录
             if (!publicDirDestPath.getParent().equals(publicRootPath)) {
               createParentDirs(publicDirDestPath, publicRootPath);
               if (diskValidator != null) {
@@ -1052,9 +1094,11 @@ public class ResourceLocalizationService extends CompositeService
               }
             }
 
+            // 在此处显式同步挂起，以避免将来的任务在挂起更新之前完成并退出队列
             // explicitly synchronize pending here to avoid future task
             // completing and being dequeued before pending updated
             synchronized (pending) {
+              // 构建FSDownload ?
               pending.put(queue.submit(new FSDownload(lfs, null, conf,
                   publicDirDestPath, resource, request.getContext().getStatCache())),
                   request);
@@ -1117,7 +1161,9 @@ public class ResourceLocalizationService extends CompositeService
         // TODO shutdown, better error handling esp. DU
         while (!Thread.currentThread().isInterrupted()) {
           try {
+            // 获取任务路径
             Future<Path> completed = queue.take();
+            // 从缓存中移除
             LocalizerResourceRequestEvent assoc = pending.remove(completed);
             try {
               if (null == assoc) {
@@ -1125,11 +1171,17 @@ public class ResourceLocalizationService extends CompositeService
                 // TODO delete
                 return;
               }
+              // 获取路径
               Path local = completed.get();
+
+              // 获取请求..
               LocalResourceRequest key = assoc.getResource().getRequest();
-              publicRsrc.handle(new ResourceLocalizedEvent(key, local, FileUtil
-                .getDU(new File(local.toUri()))));
+
+              // 处理缓存任务...
+              publicRsrc.handle(new ResourceLocalizedEvent(key, local, FileUtil.getDU(new File(local.toUri()))));
+
               assoc.getResource().unlock();
+
             } catch (ExecutionException e) {
               String user = assoc.getContext().getUser();
               ApplicationId applicationId = assoc.getContext().getContainerId().getApplicationAttemptId().getApplicationId();
@@ -1167,28 +1219,41 @@ public class ResourceLocalizationService extends CompositeService
    */
   class LocalizerRunner extends Thread {
 
+    // 上下文信息
     final LocalizerContext context;
+
+    //
     final String localizerId;
+
+    // 等待处理的任务.
     final Map<LocalResourceRequest,LocalizerResourceRequestEvent> scheduled;
+
+    // 它是私有本地化程序和调度程序线程之间的共享列表。
     // Its a shared list between Private Localizer and dispatcher thread.
     final List<LocalizerResourceRequestEvent> pending;
+
+
     private AtomicBoolean killContainerLocalizer = new AtomicBoolean(false);
 
     // TODO: threadsafe, use outer?
-    private final RecordFactory recordFactory =
-      RecordFactoryProvider.getRecordFactory(getConfig());
+    private final RecordFactory recordFactory =    RecordFactoryProvider.getRecordFactory(getConfig());
 
     LocalizerRunner(LocalizerContext context, String localizerId) {
       super("LocalizerRunner for " + localizerId);
       this.context = context;
       this.localizerId = localizerId;
+
+      // 同步方法...
       this.pending =
           Collections
             .synchronizedList(new ArrayList<LocalizerResourceRequestEvent>());
+
+      // 待调度程序..
       this.scheduled =
           new HashMap<LocalResourceRequest, LocalizerResourceRequestEvent>();
     }
 
+    // 将请求加入缓存.
     public void addResource(LocalizerResourceRequestEvent request) {
       pending.add(request);
     }
@@ -1198,40 +1263,64 @@ public class ResourceLocalizationService extends CompositeService
     }
 
     /**
+     * 查找 下一个 要提供给派生定位器的资源。
+     *
      * Find next resource to be given to a spawned localizer.
      * 
      * @return the next resource to be localized
      */
     private LocalResource findNextResource() {
       synchronized (pending) {
-        for (Iterator<LocalizerResourceRequestEvent> i = pending.iterator();
-            i.hasNext();) {
+        // 迭代缓存中的数据
+        for (Iterator<LocalizerResourceRequestEvent> i = pending.iterator(); i.hasNext();) {
+
+
+
+         // 获取请求的事件
          LocalizerResourceRequestEvent evt = i.next();
+
+
+
+         // 获取请求的资源
          LocalizedResource nRsrc = evt.getResource();
-         // Resource download should take place ONLY if resource is in
-         // Downloading state
+
+
+
+         // 只有在资源处于下载状态时才应进行资源下载
+         // Resource download should take place ONLY if resource is in Downloading state
          if (nRsrc.getState() != ResourceState.DOWNLOADING) {
            i.remove();
            continue;
          }
          /*
-          * Multiple containers will try to download the same resource. So the
-          * resource download should start only if
+          *
+          * 多个容器将尝试下载同一资源。所以资源下载应该只在
+          *  1） 我们可以在资源上获得一个非阻塞信号量锁
+          *  2） 资源仍处于下载状态
+          *
+          * Multiple containers will try to download the same resource. So the resource download should start only if
           * 1) We can acquire a non blocking semaphore lock on resource
           * 2) Resource is still in DOWNLOADING state
           */
          if (nRsrc.tryAcquire()) {
+
+           // 如果状态处于下载中...
            if (nRsrc.getState() == ResourceState.DOWNLOADING) {
+
+             // 获取请求信息
              LocalResourceRequest nextRsrc = nRsrc.getRequest();
-             LocalResource next =
-                 recordFactory.newRecordInstance(LocalResource.class);
-             next.setResource(URL.fromPath(nextRsrc
-               .getPath()));
+
+             //构建本地资源对象 LocalResource
+             LocalResource next = recordFactory.newRecordInstance(LocalResource.class);
+             next.setResource(URL.fromPath(nextRsrc.getPath()));
              next.setTimestamp(nextRsrc.getTimestamp());
              next.setType(nextRsrc.getType());
              next.setVisibility(evt.getVisibility());
              next.setPattern(evt.getPattern());
+             // 加入调度缓存中...
              scheduled.put(nextRsrc, evt);
+
+             // 返回
              return next;
            } else {
              // Need to release acquired lock
@@ -1243,6 +1332,7 @@ public class ResourceLocalizationService extends CompositeService
       }
     }
 
+    // 处理心跳数据
     LocalizerHeartbeatResponse processHeartbeat(
         List<LocalResourceStatus> remoteResourceStatuses) {
       LocalizerHeartbeatResponse response =
@@ -1358,10 +1448,12 @@ public class ResourceLocalizationService extends CompositeService
     private Path getPathForLocalization(LocalResource rsrc,
         LocalResourcesTracker tracker) throws IOException, URISyntaxException {
       String user = context.getUser();
-      ApplicationId appId =
-          context.getContainerId().getApplicationAttemptId().getApplicationId();
+
+
+      ApplicationId appId = context.getContainerId().getApplicationAttemptId().getApplicationId();
       LocalResourceVisibility vis = rsrc.getVisibility();
       String cacheDirectory = null;
+
       if (vis == LocalResourceVisibility.PRIVATE) {// PRIVATE Only
         cacheDirectory = getUserFileCachePath(user);
       } else {// APPLICATION ONLY
@@ -1370,6 +1462,7 @@ public class ResourceLocalizationService extends CompositeService
       Path dirPath =
           dirsHandler.getLocalPathForWrite(cacheDirectory,
             ContainerLocalizer.getEstimatedSize(rsrc), false);
+
       return tracker.getPathForLocalization(new LocalResourceRequest(rsrc),
           dirPath, delService);
     }

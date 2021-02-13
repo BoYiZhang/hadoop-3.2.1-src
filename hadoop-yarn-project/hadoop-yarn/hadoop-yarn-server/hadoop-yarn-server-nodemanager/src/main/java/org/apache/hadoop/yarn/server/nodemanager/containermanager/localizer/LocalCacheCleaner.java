@@ -29,17 +29,27 @@ import java.util.TreeMap;
 import org.apache.hadoop.yarn.server.nodemanager.DeletionService;
 
 /**
- * A class responsible for cleaning the PUBLIC and PRIVATE local caches on a
- * node manager.
+ *
+ * A class responsible for cleaning the PUBLIC and PRIVATE local caches on a node manager.
+ *
  */
 class LocalCacheCleaner {
 
+  // 当前大小
   private long currentSize;
+
+  // 目标大小
   private final long targetSize;
+
+  // 删除服务...
   private final DeletionService delService;
+
+  // 资源映射  LocalizedResource --> LocalResourcesTracker
   private final SortedMap<LocalizedResource, LocalResourcesTracker> resourceMap;
 
   LocalCacheCleaner(DeletionService delService, long targetSize) {
+    
+    // 使用LRU 缓存...
     this(delService, targetSize, new LRUComparator());
   }
 
@@ -57,19 +67,26 @@ class LocalCacheCleaner {
   }
 
   /**
-   * Adds resources from the passed LocalResourceTracker that are candidates for
-   * deletion from the cache.
+   * 从传递的LocalResourcesTracker中添加要从缓存中删除的资源.
+   *
+   * Adds resources from the passed LocalResourceTracker
+   *  that are candidates for deletion from the cache.
    *
    * @param newTracker add all resources being tracked by the passed
    *          LocalResourcesTracker to the LocalCacheCleaner.
    */
   public void addResources(LocalResourcesTracker newTracker) {
+
     for (LocalizedResource resource : newTracker) {
+      // 累加新增资源,获取当前的资源大小.
       currentSize += resource.getSize();
+
       if (resource.getRefCount() > 0) {
+        // 资源如果被引用, 忽略
         // Do not delete resources that are still in use
         continue;
       }
+      // 将资源添加到对应的缓存中...
       resourceMap.put(resource, newTracker);
     }
   }
@@ -81,26 +98,38 @@ class LocalCacheCleaner {
    * @return stats about what was cleaned up during this call of cleanCache
    */
   public LocalCacheCleanerStats cleanCache() {
+
+    //根据当前的资源大小,构建 状态
     LocalCacheCleanerStats stats = new LocalCacheCleanerStats(currentSize);
-    for (Iterator<Map.Entry<LocalizedResource, LocalResourcesTracker>> i =
-        resourceMap.entrySet().iterator();
-        currentSize - stats.totalDelSize > targetSize && i.hasNext();) {
+
+    // 持续的清理, 直到达到目标缓存的大小.
+    for (Iterator<Map.Entry<LocalizedResource, LocalResourcesTracker>> i = resourceMap.entrySet().iterator(); currentSize - stats.totalDelSize > targetSize && i.hasNext();) {
       Map.Entry<LocalizedResource, LocalResourcesTracker> rsrc = i.next();
       LocalizedResource resource = rsrc.getKey();
       LocalResourcesTracker tracker = rsrc.getValue();
+      // 使用delService服务清理资源
       if (tracker.remove(resource, delService)) {
         stats.incDelSize(tracker.getUser(), resource.getSize());
       }
     }
     this.resourceMap.clear();
     return stats;
+
   }
 
   static class LocalCacheCleanerStats {
+    // 用户删除文件的大小. 用户id ---> delSize
     private final Map<String, Long> userDelSizes = new TreeMap<String, Long>();
+
+    // 清理缓存之前文件的大小.
     private final long cacheSizeBeforeClean;
+    // 总清理资源大小.
     private long totalDelSize;
+
+    // public 清理资源大小.
     private long publicDelSize;
+
+    // private 清理资源大小
     private long privateDelSize;
 
     LocalCacheCleanerStats(long cacheSizeBeforeClean) {
@@ -108,16 +137,24 @@ class LocalCacheCleaner {
     }
 
     void incDelSize(String user, long delSize) {
+
+      // 总资源减少..
       totalDelSize += delSize;
       if (user == null) {
+        // 如果用户为null , 删除public的资源
         publicDelSize += delSize;
       } else {
+        // 用户不为空, 删除private 资源
         privateDelSize += delSize;
+        // 获取用户信息
         Long userDel = userDelSizes.get(user);
         if (userDel != null) {
+          // 删除用户带下的数据..
           userDel += delSize;
+          // 更新缓存
           userDelSizes.put(user, userDel);
         } else {
+          // 新增用户缓存缓存.
           userDelSizes.put(user, delSize);
         }
       }
